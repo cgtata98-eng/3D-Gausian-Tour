@@ -51,19 +51,20 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // 表示する項目は両モード共通。`small` は純粋にパネルの縦サイズのみ変える。
   const sidebarSize = tb.size ?? 'large';
   const sStyles = sidebarSizeStyles(sidebarSize);
-  const showType       = tb.type       !== false;
-  const showOverview   = tb.overview   !== false && !isOther;
-  const showViewpoints = tb.viewpoints !== false;
-  const showColor      = tb.color      !== false && !isOther;
-  const showMap        = tb.map        !== false;
-  const showFullscreen = tb.fullscreen !== false;
-  const showMovement   = tb.movement   !== false && viewMode === 'splat';
-  // デモはツールバー設定で「明示的に ON」のときだけ出す (既定 OFF — 制作者の意思決定)。
-  const showDemo       = tb.demo       === true  && viewMode === 'splat';
-  // 画質プリセット (LOW/MID/HIGH) — 3DGS のみ。既定 ON。
+  // 既定はすべて OFF（顧客向けに最小限の UI を配信したい想定）。制作者が Debug →
+  // ツールバー表示で必要な項目を明示的にチェックして出します。
+  // 例外: `quality` だけは既定 ON — 描画品質はビューア側で見る人の端末性能に応じて
+  // 切り替えたい操作なので、毎回チェックさせると面倒。
+  const showType       = tb.type       === true;
+  const showOverview   = tb.overview   === true && !isOther;
+  const showViewpoints = tb.viewpoints === true;
+  const showColor      = tb.color      === true && !isOther;
+  const showMap        = tb.map        === true;
+  const showFullscreen = tb.fullscreen === true;
+  const showMovement   = tb.movement   === true && viewMode === 'splat';
+  const showDemo       = tb.demo       === true && viewMode === 'splat';
   const showQuality    = tb.quality    !== false && viewMode === 'splat';
-  // AI 画像生成 — 既定 ON。VR/3DGS 両対応 (生成結果は 360° モードで表示)。
-  const showAiGenerate = tb.aiGenerate !== false;
+  const showAiGenerate = tb.aiGenerate === true;
 
   // Collapsed: render only a tiny floating button to bring the sidebar back.
   if (sidebarCollapsed) {
@@ -1480,7 +1481,7 @@ function AmbientAudioToggle() {
   const muted = useUIStore((s) => s.audioMuted);
   const setMuted = useUIStore((s) => s.setAudioMuted);
   const viewMode = useUIStore((s) => s.viewMode);
-  const allowed = useSceneStore((s) => s.manifest?.viewerToolbar?.audio) !== false;
+  const allowed = useSceneStore((s) => s.manifest?.viewerToolbar?.audio) === true;
   if (viewMode === '360' || !allowed) return null;
   return (
     <button

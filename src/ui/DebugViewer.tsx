@@ -2402,18 +2402,18 @@ function ViewerToolbarSection({
       </div>
 
       <div style={S.toolbarGroupHead}>サイドバー</div>
-      <ToolbarRow tb={tb} keyName="type"       label={isOtherProject && !isVRMode ? '場所 (プラン切替)' : 'タイプ (プラン切替)'} onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="overview"   label="間取り概要"               hint={isOtherProject ? '— その他では非対応' : undefined} disabled={isOtherProject} onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="viewpoints" label="シーン" onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="color"      label="カラー (素材バリエーション)" hint={isOtherProject ? '— その他では非対応' : undefined} disabled={isOtherProject} onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="aiGenerate" label="AI 画像生成" onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="map"        label={isOtherProject ? 'MAP' : 'FLOOR MAP'} onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="type"       label={isOtherProject && !isVRMode ? '場所 (プラン切替)' : 'タイプ (プラン切替)'} hint="— 既定 OFF" defaultOff onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="overview"   label="間取り概要"               hint={isOtherProject ? '— その他では非対応' : '— 既定 OFF'} disabled={isOtherProject} defaultOff onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="viewpoints" label="シーン" hint="— 既定 OFF" defaultOff onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="color"      label="カラー (素材バリエーション)" hint={isOtherProject ? '— その他では非対応' : '— 既定 OFF'} disabled={isOtherProject} defaultOff onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="aiGenerate" label="AI 画像生成" hint="— 既定 OFF" defaultOff onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="map"        label={isOtherProject ? 'MAP' : 'FLOOR MAP'} hint="— 既定 OFF" defaultOff onChange={onChange} />
 
       <div style={S.toolbarGroupHead}>オーバーレイ / アイコン</div>
-      <ToolbarRow tb={tb} keyName="audio"      label="環境音アイコン (タイトル右)" hint={isVRMode ? '— 360° では非対応' : undefined} disabled={isVRMode} onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="fullscreen" label="フルスクリーンアイコン" onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="movement"   label="移動モード切替 (歩く / フライ)" hint={isVRMode ? '— 360° では非対応' : undefined} disabled={isVRMode} onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="quality"    label="画質 (LOW / MID / HIGH)" hint={isVRMode ? '— 360° では非対応' : undefined} disabled={isVRMode} onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="audio"      label="環境音アイコン (タイトル右)" hint={isVRMode ? '— 360° では非対応' : '— 既定 OFF'} disabled={isVRMode} defaultOff onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="fullscreen" label="フルスクリーンアイコン" hint="— 既定 OFF" defaultOff onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="movement"   label="移動モード切替 (歩く / フライ)" hint={isVRMode ? '— 360° では非対応' : '— 既定 OFF'} disabled={isVRMode} defaultOff onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="quality"    label="画質 (LOW / MID / HIGH)" hint={isVRMode ? '— 360° では非対応' : '— 既定 ON'} disabled={isVRMode} onChange={onChange} />
       <ToolbarRow tb={tb} keyName="demo"       label="ヘッドトラッキング" hint={isVRMode ? '— 360° では非対応' : '— 既定 OFF'} disabled={isVRMode} defaultOff onChange={onChange} />
 
       {!isOtherProject && (
