@@ -528,20 +528,37 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         return;
       }
 
-      const res = await fetch('/api/gen-collision', {
-        method: 'POST',
-        headers: {
-          'X-Input-Ext': ext,
-          'X-Shape': 'smooth',
-          'Content-Type': 'application/octet-stream',
-        },
-        body,
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`生成失敗 (${res.status}): ${errText.slice(0, 200)}`);
+      // Try the dev-only Vite middleware first (faster, uses splat-transform
+      // CLI). If it isn't there (deployed Worker has no Node), fall through to
+      // a browser-side WASM run.
+      let glb: Blob | null = null;
+      try {
+        const res = await fetch('/api/gen-collision', {
+          method: 'POST',
+          headers: {
+            'X-Input-Ext': ext,
+            'X-Shape': 'smooth',
+            'Content-Type': 'application/octet-stream',
+          },
+          body,
+        });
+        if (res.ok) {
+          glb = await res.blob();
+        } else if (res.status === 404 || res.status === 405) {
+          // No middleware → fall through to browser path.
+        } else {
+          const errText = await res.text();
+          throw new Error(`生成失敗 (${res.status}): ${errText.slice(0, 200)}`);
+        }
+      } catch (e) {
+        // Network error too — try the browser path before giving up.
+        console.warn('[gen-collision] Vite middleware unreachable, falling back to browser:', e);
       }
-      const glb = await res.blob();
+
+      if (!glb) {
+        const { generateCollisionInBrowser } = await import('../utils/gen-collision-browser');
+        glb = await generateCollisionInBrowser(body, ext, { shape: 'smooth' });
+      }
       // Use the same GLB as both walkable + block — rough but matches the user's
       // immediate need ("get something working"). They can replace each side
       // individually with a more refined mesh later.
@@ -550,7 +567,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('collision auto-gen failed:', e);
-      alert('コリジョン自動生成に失敗:\n' + msg + '\n\n本番環境（公開済みサイト）では使えません。ローカル `npm run dev` 中のみ動作します。');
+      alert('コリジョン自動生成に失敗:\n' + msg);
     } finally {
       setColLoading(null);
     }

@@ -273,4 +273,20 @@ export async function publishScene(
   tick('scene.json をアップロード中…');
   const manifestBlob = new Blob([JSON.stringify(publicManifest, null, 2)], { type: 'application/json' });
   await publishFile(sceneId, 'scene.json', manifestBlob);
+
+  // Drop a tiny marker so the project's friendly name shows up as a sub-folder
+  // in the R2 dashboard. Without this every scene is just a random 16-char
+  // bucket prefix and you can't tell `qi8...` apart from `k7m...`.
+  const friendlyName = typeof publicManifest.name === 'string' ? publicManifest.name : '';
+  const safeName = friendlyName
+    .replace(/[\\/:*?"<>|]/g, '')   // strip filesystem-unsafe chars
+    .trim()
+    .slice(0, 60);
+  if (safeName) {
+    try {
+      await publishFile(sceneId, `_name_${safeName}/.placeholder`, new Blob([''], { type: 'text/plain' }));
+    } catch (e) {
+      console.warn('marker folder upload failed (non-fatal):', e);
+    }
+  }
 }
