@@ -18,7 +18,7 @@ export type MovementMode = 'walk' | 'fly';
 export type ProjectType = 'mansion' | 'other';
 
 /** Big sidebar sections that the user can hide / restore individually via the × on each. */
-export type SidebarSection = 'type' | 'color' | 'viewpoints' | 'map' | 'tools' | 'movement' | 'tracking' | 'quality' | 'aiGenerate';
+export type SidebarSection = 'type' | 'color' | 'viewpoints' | 'map' | 'tools' | 'movement' | 'tracking' | 'quality' | 'aiGenerate' | 'mobile';
 
 /**
  * Viewer quality preset. Combines SH bands, render scale (DPR), and radial sort

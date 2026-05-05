@@ -65,6 +65,11 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   const showDemo       = tb.demo       === true && viewMode === 'splat';
   const showQuality    = tb.quality    !== false && viewMode === 'splat';
   const showAiGenerate = tb.aiGenerate === true;
+  // Mobile-only block: only relevant on touch devices, so we gate by
+  // `pointer: coarse` regardless of the toolbar config. The author can still
+  // suppress it explicitly with `tb.mobile === false`.
+  const isTouchDevice = useTouchDevice();
+  const showMobile     = tb.mobile     !== false && viewMode === 'splat' && isTouchDevice;
 
   // Collapsed: render only a tiny floating button to bring the sidebar back.
   if (sidebarCollapsed) {
@@ -112,6 +117,11 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
               <ClosedSectionHandle label="ヘッドトラッキング" onOpen={() => setSectionHidden('tracking', false)} />
             ) : (
               <DemoModeBlock />
+            )) : null,
+            mobile: showMobile ? (hiddenSections.includes('mobile') ? (
+              <ClosedSectionHandle label="モバイル" onOpen={() => setSectionHidden('mobile', false)} />
+            ) : (
+              <MobileToolsBlock onClose={() => setSectionHidden('mobile', true)} />
             )) : null,
             quality: showQuality ? (hiddenSections.includes('quality') ? (
               <ClosedSectionHandle label="画質" onOpen={() => setSectionHidden('quality', false)} />
@@ -1359,6 +1369,93 @@ function QualityBlock() {
           { id: 'high', label: 'HIGH' },
         ]}
       />
+    </div>
+  );
+}
+
+// ── Mobile tools (touch-device-only) ─────────────────────────────
+
+/** True when the page is running on a touch / coarse-pointer device. Mirrors
+ *  the gate `MobileJoystick` uses. */
+function useTouchDevice(): boolean {
+  const [match, setMatch] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(pointer: coarse)');
+    setMatch(mq.matches);
+    const onChange = () => setMatch(mq.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  return match;
+}
+
+/**
+ * Mobile-only sidebar block. Mouse-wheel / keyboard speed controls don't exist
+ * on phones, so we surface preset buttons (slow / normal / fast) for walk
+ * speed. The active SceneManager exposes `setMoveSpeed` via the
+ * `window.__sceneManager` global, which both engines write into the
+ * controller's `options.moveSpeed`.
+ */
+const MOVE_SPEED_PRESETS: Array<{ id: 'slow' | 'normal' | 'fast'; label: string; speed: number }> = [
+  { id: 'slow', label: 'ゆっくり', speed: 1.5 },
+  { id: 'normal', label: 'ふつう', speed: 3 },
+  { id: 'fast', label: 'はやく', speed: 6 },
+];
+
+function MobileToolsBlock({ onClose }: { onClose: () => void }) {
+  const [activeId, setActiveId] = useState<'slow' | 'normal' | 'fast'>('normal');
+
+  const onPick = (preset: typeof MOVE_SPEED_PRESETS[number]) => {
+    setActiveId(preset.id);
+    const sm = (window as unknown as { __sceneManager?: { setMoveSpeed?: (s: number) => void } }).__sceneManager;
+    sm?.setMoveSpeed?.(preset.speed);
+  };
+
+  // Apply the default on mount so the first speed lands on the camera even if
+  // the user never taps a preset.
+  useEffect(() => {
+    onPick(MOVE_SPEED_PRESETS.find((p) => p.id === 'normal')!);
+    // Intentionally run only once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div style={sidebarBlock}>
+      <div style={overviewHeaderRow}>
+        <span style={blockHeading}>移動スピード</span>
+        <div style={{ flex: 1 }} />
+        <button onClick={onClose} style={overviewCloseBtn} title="閉じる">×</button>
+      </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {MOVE_SPEED_PRESETS.map((p) => {
+          const active = p.id === activeId;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onPick(p)}
+              style={{
+                flex: 1,
+                padding: '10px 6px',
+                fontSize: 12,
+                fontWeight: 600,
+                background: active ? 'rgba(59,130,246,0.18)' : 'rgba(255,255,255,0.08)',
+                border: `1px solid ${active ? 'rgba(59,130,246,0.55)' : 'rgba(0,0,0,0.12)'}`,
+                color: active ? '#1d4ed8' : 'rgba(31,41,55,0.85)',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 6, fontSize: 10.5, color: 'rgba(31,41,55,0.55)', lineHeight: 1.5 }}>
+        スマホで歩くスピードを調整できます。
+      </div>
     </div>
   );
 }

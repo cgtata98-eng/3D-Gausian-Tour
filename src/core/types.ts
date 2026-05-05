@@ -391,6 +391,9 @@ export interface ViewerToolbarConfig {
   demo?: boolean;
   /** Quality preset block (画質 LOW/MID/HIGH) — 3DGS only. Default ON. */
   quality?: boolean;
+  /** Mobile-only utility block (移動スピード等) — only renders on touch
+   *  devices regardless of this flag. Default ON; set false to suppress. */
+  mobile?: boolean;
   /** AI image generation block (AI 画像生成). Lets the user generate variant
    *  panoramas via prompt; results are saved to the plan's AI history and can
    *  be browsed / downloaded like manual color variants. Default ON. */
@@ -415,13 +418,15 @@ export type OrderableSidebarBlock =
   | 'viewpoints'
   | 'color'
   | 'aiGenerate'
-  | 'map';
+  | 'map'
+  | 'mobile';
 
 /** Default sidebar block order — used when `viewerToolbar.order` is unset or partial. */
 export const DEFAULT_SIDEBAR_ORDER: OrderableSidebarBlock[] = [
   'type',
   'movement',
   'tracking',
+  'mobile',
   'quality',
   'overview',
   'viewpoints',

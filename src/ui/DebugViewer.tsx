@@ -2571,6 +2571,7 @@ const ORDER_LABELS: Record<OrderableSidebarBlock, string> = {
   type: 'タイプ (プラン切替)',
   movement: '移動モード',
   tracking: 'ヘッドトラッキング',
+  mobile: 'モバイル (移動スピード)',
   quality: '画質',
   overview: '間取り概要',
   viewpoints: 'シーン',
