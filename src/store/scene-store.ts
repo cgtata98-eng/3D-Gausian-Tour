@@ -29,6 +29,7 @@ function synthesizeDefaultPlan(m: SceneManifest): Plan {
     label: 'デフォルト',
     splat: m.splat,
     splatSpz: m.splatSpz,
+    splatSog: m.splatSog,
     panoramas: Object.keys(panoramas).length > 0 ? panoramas : undefined,
     thumbnails: Object.keys(thumbnails).length > 0 ? thumbnails : undefined,
     info: m.info,
@@ -47,6 +48,7 @@ function stripLegacyTopLevelFields(m: SceneManifest): SceneManifest {
   const next: SceneManifest = { ...m };
   delete next.splat;
   delete next.splatSpz;
+  delete next.splatSog;
   delete next.info;
   delete next.collision;
   delete next.floorPlan;

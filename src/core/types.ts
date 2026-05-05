@@ -454,6 +454,8 @@ export interface SceneManifest {
   splat?: string;
   /** @deprecated Migrated into `plans[0].splatSpz`. */
   splatSpz?: string;
+  /** @deprecated Migrated into `plans[0].splatSog`. */
+  splatSog?: string;
   /** @deprecated Migrated into `plans[0].info`. */
   info?: SceneInfo;
   /** @deprecated Migrated into `plans[0].collision`. */
