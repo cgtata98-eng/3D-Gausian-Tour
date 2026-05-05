@@ -118,6 +118,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const setPlanSplatStore = useSceneStore(s => s.setPlanSplat);
   const setPlanSplatSogStore = useSceneStore(s => s.setPlanSplatSog);
   const setPlanCollisionStore = useSceneStore(s => s.setPlanCollision);
+  const setPlanSplatSourceNameStore = useSceneStore(s => s.setPlanSplatSourceName);
   const [showAddPlan, setShowAddPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
   const [editPlanId, setEditPlanId] = useState<string | null>(null);
@@ -726,10 +727,14 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             // `data` is a Uint8Array view; copy via slice to a fresh ArrayBuffer for Blob.
             await idb.saveBlob(`${sogPrefix}${entryName}`, new Blob([data.slice()]));
           }
+          setPlanSplatSourceNameStore(planId, list[0].name);
         } else {
           for (const f of list) {
             await idb.saveBlob(`${sogPrefix}${f.name}`, f);
           }
+          // Multi-file legacy SOG: name comes from the meta.json's parent
+          // folder if available; otherwise fall back to "<count> files".
+          setPlanSplatSourceNameStore(planId, `${list.length} files (legacy SOG)`);
         }
         setPlanSplatSogStore(planId, `sog-idb:${sceneId}:${planId}`);
         // Clear PLY ref so the loader doesn't accidentally fall back to it.
@@ -740,6 +745,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         await idb.saveBlob(blobKey, f);
         setPlanSplatStore(planId, `${idb.IDB_REF_PREFIX}${blobKey}`);
         setPlanSplatSogStore(planId, undefined);
+        setPlanSplatSourceNameStore(planId, f.name);
       }
       if (planId === activePlanId) await smRef.current?.setActivePlan(planId);
     } catch (e) {
@@ -1145,14 +1151,16 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     const isEditing = editPlanId === p.id;
                     const isBusy = planSplatBusy === p.id;
                     const splatLabel = p.splatSog
-                      ? '(SOG)'
+                      ? `(SOG${p.splatSourceName ? ` · ${p.splatSourceName}` : ''})`
                       : !p.splat
                         ? '(未設定)'
                         : p.splat.startsWith('blob:')
-                          ? '(アップロード)'
-                          : p.splat.startsWith('data:')
-                            ? '(data URL)'
-                            : p.splat;
+                          ? `(アップロード${p.splatSourceName ? ` · ${p.splatSourceName}` : ''})`
+                          : p.splat.startsWith(idb.IDB_REF_PREFIX)
+                            ? `(IDB${p.splatSourceName ? ` · ${p.splatSourceName}` : ''})`
+                            : p.splat.startsWith('data:')
+                              ? '(data URL)'
+                              : p.splat;
                     const panoCount = p.panoramas ? Object.keys(p.panoramas).length : 0;
                     const planVpCount = p.viewpoints.length;
                     return (

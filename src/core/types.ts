@@ -266,6 +266,10 @@ export interface Plan {
    * `sog-idb:${sceneId}:${planId}` to mark the bundle as present.
    */
   splatSog?: string;
+  /** Original filename of the uploaded splat (e.g. `kousei_750.sog`). Used by
+   *  the Debug UI's plan card so the author can tell at a glance which source
+   *  is loaded — `(SOG)` alone is ambiguous when multiple plans use SOG. */
+  splatSourceName?: string;
   /**
    * Optional rotation / position override for the 3DGS entity. Mainly used to fix
    * up-axis differences between PLY exports (some come out upside-down, some Z-up vs

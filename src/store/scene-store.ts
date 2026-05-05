@@ -94,6 +94,8 @@ interface SceneState {
   setPlanSplatSog: (id: string, splatSog: string | undefined) => void;
   /** Set / clear a collision GLB reference (IDB ref or relative path) for a plan. */
   setPlanCollision: (id: string, type: 'walkable' | 'block', ref: string | undefined) => void;
+  /** Remember the user-facing filename of the uploaded splat (for Debug UI display). */
+  setPlanSplatSourceName: (id: string, name: string | undefined) => void;
   /** Update the splat transform (rotation / position) for a plan. Pass `null` to clear. */
   setPlanSplatTransform: (id: string, transform: SplatTransform | null) => void;
   setPlanPanorama: (planId: string, viewpointId: string, panorama: string | undefined) => void;
@@ -205,6 +207,21 @@ export const useSceneStore = create<SceneState>((set) => ({
           const next = { ...p };
           if (splatSog === undefined) delete next.splatSog;
           else next.splatSog = splatSog;
+          return next;
+        }),
+      },
+    };
+  }),
+  setPlanSplatSourceName: (id, name) => set((s) => {
+    if (!s.manifest?.plans) return s;
+    return {
+      manifest: {
+        ...s.manifest,
+        plans: s.manifest.plans.map((p) => {
+          if (p.id !== id) return p;
+          const next = { ...p };
+          if (!name) delete next.splatSourceName;
+          else next.splatSourceName = name;
           return next;
         }),
       },
