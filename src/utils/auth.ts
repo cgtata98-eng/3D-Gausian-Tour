@@ -13,8 +13,8 @@
  */
 
 // ── Edit these to rotate the credentials ──
-const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = 'cgtour2026';
+const ADMIN_USERNAME = 'takyu';
+const ADMIN_PASSWORD = '1qaz1833';
 // ──────────────────────────────────────────
 
 const STORAGE_KEY = 'admin-auth-v1';
