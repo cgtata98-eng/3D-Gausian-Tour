@@ -5,7 +5,7 @@
   // any unmatched URL to index.html so client-side routes like
   // `/#/viewer/<id>` keep working when users hit refresh.
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "cg-gaussian-tour",
+  "name": "cg-gausian-tour",
   "compatibility_date": "2026-05-05",
   "assets": {
     "directory": "./dist",
