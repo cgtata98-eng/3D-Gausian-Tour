@@ -22,7 +22,7 @@
   "r2_buckets": [
     {
       "binding": "BUCKET",
-      "bucket_name": "cg-gaussian-assets"
+      "bucket_name": "cggs"
     }
   ]
 }
