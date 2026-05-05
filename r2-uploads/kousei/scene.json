@@ -1,0 +1,26 @@
+{
+  "id": "kousei",
+  "name": "Kousei Mansion",
+  "info": {
+    "type": "実スキャン",
+    "notes": "kousei_750 ベース（750k splats / 高品質）"
+  },
+  "splatSog": "splat.sog",
+  "viewpoints": [
+    {
+      "id": "default",
+      "label": "全景",
+      "position": [0, 1.6, 5],
+      "target": [0, 1.6, 0],
+      "fov": 60
+    }
+  ],
+  "settings": {
+    "cameraHeight": 1.6,
+    "initialHeight": 1.6,
+    "moveSpeed": 3.0,
+    "collisionCapsuleRadius": 0.3,
+    "collisionCapsuleHeight": 1.6,
+    "initialPositionMode": "auto"
+  }
+}
