@@ -5,6 +5,7 @@ import { ProjectScreen } from './ui/ProjectScreen';
 import { MirrorReceive } from './ui/MirrorReceive';
 import { parseRoute, migrateHashToPath } from './utils/url';
 import { useUIStore } from './store/ui-store';
+import { AuthGate } from './ui/AuthGate';
 
 function App() {
   const [route, setRoute] = useState(() => {
@@ -34,13 +35,15 @@ function App() {
     return <MirrorReceive />;
   }
 
-  if (route.mode === 'project') {
-    return <ProjectScreen />;
-  }
+  // Public route: viewer is always reachable so customer URLs keep working.
   if (route.mode === 'viewer') {
     return <Viewer sceneId={route.sceneId} />;
   }
-  return <DebugViewer sceneId={route.sceneId} />;
+  // Admin / debug routes are gated by simple ID + password.
+  if (route.mode === 'project') {
+    return <AuthGate><ProjectScreen /></AuthGate>;
+  }
+  return <AuthGate><DebugViewer sceneId={route.sceneId} /></AuthGate>;
 }
 
 export default App;
