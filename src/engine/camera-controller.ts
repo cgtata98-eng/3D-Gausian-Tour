@@ -116,6 +116,10 @@ export class CameraController {
   private padPitch = 0;
   private padUp = 0;
   private padR2 = 0;
+  // Mobile virtual joystick deltas in the same -1..1 convention as the gamepad.
+  // Set externally by the on-screen joystick component (see ui/MobileJoystick.tsx).
+  private touchFwd = 0;
+  private touchStrafe = 0;
   // Edge-detect state for ✕/□ → moveSpeed step (mirrors wheel handler).
   private prevPadCross = false;
   private prevPadSquare = false;
@@ -247,6 +251,12 @@ export class CameraController {
   getFov(): number { return (this.entity.camera as any)?.fov ?? 60; }
   getMoveSpeed(): number { return this.options.moveSpeed; }
   setMoveSpeed(speed: number) { this.options.moveSpeed = speed; }
+  /** Mobile / touch on-screen joystick input. `x` and `y` are normalised to -1..1
+   *  where +x = right strafe, -y = forward (the screen-up-is-forward convention). */
+  setTouchJoystick(x: number, y: number) {
+    this.touchStrafe = x;
+    this.touchFwd = -y;
+  }
   setFov(fov: number) { if (this.entity.camera) (this.entity.camera as any).fov = fov; }
   /** Demo-mode head-tracking offset (degrees). Render-only. */
   setTrackingOffset(yawDeg: number, pitchDeg: number) {
@@ -435,10 +445,10 @@ export class CameraController {
     // don't outrun straight motion when both keys and stick agree.
     const fwdAmt    = ((this.keys.has('KeyW') || this.keys.has('ArrowUp'))    ? 1 : 0)
                     - ((this.keys.has('KeyS') || this.keys.has('ArrowDown'))  ? 1 : 0)
-                    + this.padFwd;
+                    + this.padFwd + this.touchFwd;
     const strafeAmt = ((this.keys.has('KeyD') || this.keys.has('ArrowRight')) ? 1 : 0)
                     - ((this.keys.has('KeyA') || this.keys.has('ArrowLeft'))  ? 1 : 0)
-                    + this.padStrafe;
+                    + this.padStrafe + this.touchStrafe;
     let mx = fwdX * fwdAmt + rgtX * strafeAmt;
     let mz = fwdZ * fwdAmt + rgtZ * strafeAmt;
     const mag = Math.hypot(mx, mz);
@@ -479,10 +489,10 @@ export class CameraController {
     // to 1 below so diagonals don't outrun straight motion.
     const fwdAmt    = ((this.keys.has('KeyW') || this.keys.has('ArrowUp'))    ? 1 : 0)
                     - ((this.keys.has('KeyS') || this.keys.has('ArrowDown'))  ? 1 : 0)
-                    + this.padFwd;
+                    + this.padFwd + this.touchFwd;
     const strafeAmt = ((this.keys.has('KeyD') || this.keys.has('ArrowRight')) ? 1 : 0)
                     - ((this.keys.has('KeyA') || this.keys.has('ArrowLeft'))  ? 1 : 0)
-                    + this.padStrafe;
+                    + this.padStrafe + this.touchStrafe;
     const upAmt     = ((this.keys.has('KeyQ')) ? 1 : 0)
                     - ((this.keys.has('KeyE')) ? 1 : 0)
                     + this.padUp;

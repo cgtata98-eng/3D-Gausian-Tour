@@ -397,6 +397,7 @@ export class ThreeSceneManager {
   setMovementMode(m: MovementMode) { this.controller.setMovementMode(m); }
   setMoveSpeed(s: number) { this.controller.setMoveSpeed(s); }
   setFov(f: number) { this.controller.setFov(f); }
+  setTouchJoystick(x: number, y: number) { this.controller.setTouchJoystick(x, y); }
 
   /** Snapshot the current camera pose. Used by the Debug 動画タブ. */
   getCurrentPose(): CameraPose | null {

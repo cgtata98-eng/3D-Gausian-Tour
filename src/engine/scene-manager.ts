@@ -726,6 +726,10 @@ export class SceneManager {
     this.cameraController?.setMoveSpeed(speed);
   }
 
+  setTouchJoystick(x: number, y: number) {
+    this.cameraController?.setTouchJoystick(x, y);
+  }
+
   setFov(fov: number) {
     this.cameraController?.setFov(fov);
   }

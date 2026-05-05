@@ -13,6 +13,7 @@ import { AiScreenOverlay, AiGeneratingOverlay } from './LeftPanel';
 import { AmbientAudio } from './AmbientAudio';
 import { FootstepAudio } from './FootstepAudio';
 import { useDemoModeCamera } from './useDemoModeCamera';
+import { MobileJoystick } from './MobileJoystick';
 
 /** Subset of methods Viewer needs, satisfied by both ThreeSceneManager and the
  *  PlayCanvas SceneManager. Lets `sceneManagerRef` hold either implementation. */
@@ -189,6 +190,7 @@ export function Viewer({ sceneId }: ViewerProps) {
             showDebugLink={false}
             onPlanSwitch={(planId) => { void sceneManagerRef.current?.setActivePlan(planId); }}
           />
+          <MobileJoystick onChange={(x, y) => sceneManagerRef.current?.setTouchJoystick?.(x, y)} />
         </>
       )}
     </div>

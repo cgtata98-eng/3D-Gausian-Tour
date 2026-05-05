@@ -94,6 +94,9 @@ export class ThreeCameraController {
   private padPitch = 0;
   private padUp = 0;
   private padR2 = 0;
+  // Mobile virtual joystick deltas (-1..1).
+  private touchFwd = 0;
+  private touchStrafe = 0;
 
   constructor(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement, opts?: Partial<ThreeCameraOptions>) {
     this.camera = camera;
@@ -113,6 +116,10 @@ export class ThreeCameraController {
   // ── Public API (mirror of PlayCanvas CameraController) ──
 
   setMoveSpeed(s: number) { this.opts.moveSpeed = s; }
+  setTouchJoystick(x: number, y: number) {
+    this.touchStrafe = x;
+    this.touchFwd = -y;
+  }
   getMoveSpeed() { return this.opts.moveSpeed; }
   setFov(fov: number) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
   getFov() { return this.camera.fov; }
@@ -400,10 +407,10 @@ export class ThreeCameraController {
     // don't outrun straight motion when both keys and stick agree.
     const fwdAmt    = ((this.keys.has('KeyW') || this.keys.has('ArrowUp'))    ? 1 : 0)
                     - ((this.keys.has('KeyS') || this.keys.has('ArrowDown'))  ? 1 : 0)
-                    + this.padFwd;
+                    + this.padFwd + this.touchFwd;
     const strafeAmt = ((this.keys.has('KeyD') || this.keys.has('ArrowRight')) ? 1 : 0)
                     - ((this.keys.has('KeyA') || this.keys.has('ArrowLeft'))  ? 1 : 0)
-                    + this.padStrafe;
+                    + this.padStrafe + this.touchStrafe;
     let mx = fwdX * fwdAmt + rgtX * strafeAmt;
     let mz = fwdZ * fwdAmt + rgtZ * strafeAmt;
     const mag = Math.hypot(mx, mz);
@@ -436,10 +443,10 @@ export class ThreeCameraController {
     const rgtZ = -Math.sin(yawRad);
     const fwdAmt    = ((this.keys.has('KeyW') || this.keys.has('ArrowUp'))    ? 1 : 0)
                     - ((this.keys.has('KeyS') || this.keys.has('ArrowDown'))  ? 1 : 0)
-                    + this.padFwd;
+                    + this.padFwd + this.touchFwd;
     const strafeAmt = ((this.keys.has('KeyD') || this.keys.has('ArrowRight')) ? 1 : 0)
                     - ((this.keys.has('KeyA') || this.keys.has('ArrowLeft'))  ? 1 : 0)
-                    + this.padStrafe;
+                    + this.padStrafe + this.touchStrafe;
     const upAmt     = ((this.keys.has('KeyQ')) ? 1 : 0)
                     - ((this.keys.has('KeyE')) ? 1 : 0)
                     + this.padUp;
