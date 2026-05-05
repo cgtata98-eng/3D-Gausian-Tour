@@ -32,6 +32,12 @@ public/assets/scenes/sample/splat.*
 public/assets/scenes/**/splat.*
 public/assets/scenes/**/collision/*.glb
 
+# R2 upload staging — large bin assets we hand-upload to object storage
+r2-uploads/**/splat.*
+r2-uploads/**/*.ply
+r2-uploads/**/*.spz
+r2-uploads/**/*.sog
+
 # OS / IDE noise
 Thumbs.db
 ehthumbs.db

@@ -1,5 +1,6 @@
 import { Asset, Entity, SHADERLANGUAGE_GLSL } from 'playcanvas';
 import type { AppBase } from 'playcanvas';
+import { unzipSync } from 'fflate';
 import type { SplatTransform, Vec3 } from '../core/types';
 import * as idb from '../utils/idb';
 
@@ -185,6 +186,72 @@ export function applySplatTransform(entity: Entity, transform: SplatTransform | 
   const pos = transform?.position ?? DEFAULT_SPLAT_POSITION;
   entity.setEulerAngles(rot[0], rot[1], rot[2]);
   entity.setLocalPosition(pos[0], pos[1], pos[2]);
+}
+
+/**
+ * Load a SOG bundle from a single-file `.sog` URL (zip wrapping `meta.json` +
+ * `*.webp` textures, the SuperSplat-export format). Used for R2-hosted assets
+ * — the customer's browser fetches one URL, we unzip in-memory with fflate,
+ * and feed the parts straight to PlayCanvas's SogParser. Mirrors
+ * `loadSogFromIdb` but skips the IDB hop.
+ */
+export async function loadSogFromUrl(
+  app: AppBase,
+  sogUrl: string,
+  name: string = 'gsplat',
+  transform?: SplatTransform,
+): Promise<Entity> {
+  const res = await fetch(sogUrl);
+  if (!res.ok) throw new Error(`SOG fetch failed: ${res.status} ${res.statusText} (${sogUrl})`);
+  const buf = new Uint8Array(await res.arrayBuffer());
+  const entries = unzipSync(buf);
+
+  const urlMap = new Map<string, string>();
+  let meta: unknown = null;
+  for (const [filename, data] of Object.entries(entries)) {
+    const blob = new Blob([data.slice()]);
+    urlMap.set(filename, URL.createObjectURL(blob));
+    if (filename === 'meta.json') {
+      meta = JSON.parse(new TextDecoder().decode(data));
+    }
+  }
+  if (!meta) throw new Error('SOG zip missing meta.json');
+
+  return new Promise((resolve, reject) => {
+    const asset = new Asset(name, 'gsplat', {
+      url: `mem://${name}/meta.json`,
+      filename: 'meta.json',
+    }, meta as object, {
+      mapUrl: (filename: string) => urlMap.get(filename) ?? '',
+    } as unknown as { crossOrigin?: 'anonymous' | 'use-credentials' | null });
+    asset.on('load', () => {
+      const entity = new Entity(name);
+      entity.addComponent('gsplat', { asset });
+      const rot = transform?.rotation ?? DEFAULT_SPLAT_ROTATION;
+      const pos = transform?.position ?? DEFAULT_SPLAT_POSITION;
+      entity.setEulerAngles(rot[0], rot[1], rot[2]);
+      entity.setLocalPosition(pos[0], pos[1], pos[2]);
+      app.root.addChild(entity);
+
+      const mat = (entity.gsplat as unknown as { instance?: { material?: {
+        setDefine: (k: string, v: string) => void;
+        update: () => void;
+        setParameter: (k: string, v: number) => void;
+        getShaderChunks: (lang: typeof SHADERLANGUAGE_GLSL) => { set: (k: string, v: string) => void };
+      } } }).instance?.material;
+      if (mat) {
+        mat.setDefine('SH_BANDS', String(DEFAULT_SH_BANDS));
+        mat.getShaderChunks(SHADERLANGUAGE_GLSL).set('gsplatModifyVS', VIEWER_MODIFY_CHUNK);
+        mat.setParameter('viewerSplatScale', DEFAULT_SPLAT_SCALE);
+        mat.update();
+      }
+
+      resolve(entity);
+    });
+    asset.on('error', (err: string) => reject(new Error(`Failed to load SOG bundle from URL: ${err}`)));
+    app.assets.add(asset);
+    app.assets.load(asset);
+  });
 }
 
 /**

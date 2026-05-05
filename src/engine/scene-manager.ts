@@ -17,7 +17,7 @@ import type { SceneManifest, Viewpoint, CameraPose, CameraKeyframe } from '../co
 import { interpolatePath, totalPathDurationSec } from '../core/viewpoint';
 import { downscaleCanvasToJpeg } from '../utils/video-recorder';
 import { loadSceneManifest, resolveScenePath } from '../core/scene-manifest';
-import { loadGSplat, loadSogFromIdb, applySplatTransform, isSogIdbRef } from './gsplat-loader';
+import { loadGSplat, loadSogFromIdb, loadSogFromUrl, applySplatTransform, isSogIdbRef } from './gsplat-loader';
 import type { RenderMode } from './gsplat-loader';
 import type { SplatTransform, RenderQualityConfig } from '../core/types';
 import { applyRenderConfig, getRenderPreset } from './render-presets';
@@ -158,10 +158,20 @@ export class SceneManager {
 
       // Splat: optional. Prefer SOG bundle when present (smaller / faster), otherwise PLY.
       if (activePlan?.splatSog && isSogIdbRef(activePlan.splatSog)) {
+        // SOG stored in IDB (user uploaded via Debug UI).
         this.splatEntity = await loadSogFromIdb(
           this.app,
           sceneId,
           activePlan.id,
+          `splat-${sceneId}-${activePlan.id}`,
+          activePlan.splatTransform,
+        );
+      } else if (activePlan?.splatSog) {
+        // SOG hosted as a URL (R2 / scene-relative path / data URL).
+        const sogUrl = await resolveAssetUrl(activePlan.splatSog, sceneId);
+        this.splatEntity = await loadSogFromUrl(
+          this.app,
+          sogUrl,
           `splat-${sceneId}-${activePlan.id}`,
           activePlan.splatTransform,
         );
@@ -475,11 +485,15 @@ export class SceneManager {
     // Mirror loadScene's preference: SOG bundle first, fall back to PLY.
     // Wrap with `setLoading` so the LoadingScreen overlay covers plan-switch / reupload time
     // (it can take several seconds for big PLYs / SOGs).
-    const hasSplat = !!(plan.splatSog && isSogIdbRef(plan.splatSog)) || !!plan.splat;
+    const hasSplat = !!plan.splatSog || !!plan.splat;
     if (hasSplat) useSceneStore.getState().setLoading(true);
     try {
       if (plan.splatSog && isSogIdbRef(plan.splatSog)) {
         this.splatEntity = await loadSogFromIdb(this.app, m.id, planId, `splat-${m.id}-${planId}`, plan.splatTransform);
+        if (this.viewMode === '360') this.splatEntity.enabled = false;
+      } else if (plan.splatSog) {
+        const sogUrl = await resolveAssetUrl(plan.splatSog, m.id);
+        this.splatEntity = await loadSogFromUrl(this.app, sogUrl, `splat-${m.id}-${planId}`, plan.splatTransform);
         if (this.viewMode === '360') this.splatEntity.enabled = false;
       } else if (plan.splat) {
         const newUrl = await resolveAssetUrl(plan.splat, m.id);

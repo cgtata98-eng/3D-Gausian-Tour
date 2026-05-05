@@ -2,7 +2,13 @@ import type { SceneManifest } from './types';
 import { useProjectStore } from '../store/project-store';
 import * as idb from '../utils/idb';
 
-const SCENES_BASE = '/assets/scenes';
+/**
+ * Base URL for scene assets. Falls back to a Vite-served local path during dev.
+ * Production deploys set `VITE_R2_BASE` to a public R2 URL like
+ * `https://pub-xxxxx.r2.dev` so the same `/<sceneId>/<file>` paths resolve to
+ * the object storage instead of the bundled static folder.
+ */
+const SCENES_BASE = (import.meta.env.VITE_R2_BASE as string | undefined) ?? '/assets/scenes';
 
 /** Build a minimal manifest from a Project entry — used when no scene.json exists on disk yet. */
 function buildVirtualManifest(sceneId: string): SceneManifest | null {
