@@ -25,6 +25,9 @@ export default {
     if (url.pathname.startsWith('/api/publish/')) {
       return handlePublish(request, env, url);
     }
+    if (url.pathname === '/api/debug/list') {
+      return handleListDebug(request, env);
+    }
     // Anything else: serve from the static-asset bundle. The asset handler
     // honours `not_found_handling: "single-page-application"` so SPA routes
     // (e.g. `/viewer/<id>`) still resolve to index.html.
@@ -73,6 +76,19 @@ async function handlePublish(request: Request, env: Env, url: URL): Promise<Resp
   }
 
   return new Response('Method Not Allowed', { status: 405 });
+}
+
+/** Lists keys in the bound R2 bucket. Auth-gated debug helper to verify the
+ *  Worker really is talking to the bucket the public R2 URL serves. */
+async function handleListDebug(request: Request, env: Env): Promise<Response> {
+  const auth = request.headers.get('Authorization') ?? '';
+  const expected = 'Basic ' + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`);
+  if (auth !== expected) return new Response('Unauthorized', { status: 401 });
+  const list = await env.BUCKET.list({ limit: 30 });
+  return jsonResponse({
+    bucket_keys: list.objects.map((o) => ({ key: o.key, size: o.size })),
+    truncated: list.truncated,
+  });
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
