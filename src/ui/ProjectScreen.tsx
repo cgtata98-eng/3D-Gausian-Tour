@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useProjectStore, type Project } from '../store/project-store';
 import { useUIStore, type ProjectType, type ViewMode } from '../store/ui-store';
+import { navigate } from '../utils/url';
 
 /**
  * Generate an opaque, hard-to-guess project ID for the share URL. 16 lowercase
@@ -44,7 +45,7 @@ export function ProjectScreen() {
     // Sync the global UI state from this project's metadata so the engine renders correctly.
     setUiViewMode(p.viewMode);
     setUiProjectType(p.type);
-    window.location.hash = mode === 'viewer' ? `#/viewer/${p.id}` : `#/scene/${p.id}`;
+    navigate(mode === 'viewer' ? `/viewer/${p.id}` : `/scene/${p.id}`);
   };
 
   const handleDelete = (p: Project) => {

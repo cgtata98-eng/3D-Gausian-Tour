@@ -3,17 +3,22 @@ import { Viewer } from './ui/Viewer';
 import { DebugViewer } from './ui/DebugViewer';
 import { ProjectScreen } from './ui/ProjectScreen';
 import { MirrorReceive } from './ui/MirrorReceive';
-import { parseRoute } from './utils/url';
+import { parseRoute, migrateHashToPath } from './utils/url';
 import { useUIStore } from './store/ui-store';
 
 function App() {
-  const [route, setRoute] = useState(() => parseRoute());
+  const [route, setRoute] = useState(() => {
+    // Old shared URLs use `#/...`; rewrite them to the new path-based form
+    // before the first parse so the user lands on the same page.
+    migrateHashToPath();
+    return parseRoute();
+  });
   const [mirrorParam] = useState(() => new URLSearchParams(window.location.search).get('mirror'));
 
   useEffect(() => {
-    const onHashChange = () => setRoute(parseRoute());
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
+    const onPopState = () => setRoute(parseRoute());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   // Mirror handshake: ProjectScreen の「📡 ミラーリング開始」ボタンが受信タブを

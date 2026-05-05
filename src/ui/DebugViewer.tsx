@@ -5,6 +5,7 @@ import { pickSupportedMime, CanvasRecorder, downloadBlob } from '../utils/video-
 import { interpolatePath, totalPathDurationSec } from '../core/viewpoint';
 import * as clipLib from '../utils/clip-library';
 import type { ClipMeta } from '../utils/clip-library';
+import { navigate } from '../utils/url';
 import { ThreeSceneManager } from '../engine/three/three-scene-manager';
 import { SceneManager } from '../engine/scene-manager';
 import { initApp } from '../engine/app-init';
@@ -712,14 +713,22 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     <div style={S.root}>
       {/* Header */}
       <div style={S.header}>
-        <a href="#/project" style={{ ...S.viewerBtn, background: 'transparent', color: COLOR.textDim, border: `1px solid ${COLOR.border}` }}>← Project</a>
+        <a
+          href="/"
+          onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate('/'); }}
+          style={{ ...S.viewerBtn, background: 'transparent', color: COLOR.textDim, border: `1px solid ${COLOR.border}` }}
+        >← Project</a>
         <div style={S.logo}>
           <span style={S.badge}>DEV</span>
           <span style={S.sceneName}>{manifest?.name || sceneId}</span>
         </div>
         <div style={{ flex: 1 }} />
         <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} onClick={saveNow} />
-        <a href={`#/viewer/${sceneId}`} style={S.viewerBtn}>Viewer →</a>
+        <a
+          href={`/viewer/${sceneId}`}
+          onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(`/viewer/${sceneId}`); }}
+          style={S.viewerBtn}
+        >Viewer →</a>
       </div>
 
       <div style={S.body}>
