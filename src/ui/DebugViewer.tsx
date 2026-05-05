@@ -2002,6 +2002,69 @@ function PlanCameraLinkToggle() {
 }
 
 /**
+ * Multi-channel publish notification: desktop notification (if granted) +
+ * tab-title prefix + a short beep. The user wanted to walk away while a
+ * 100MB+ upload runs and come back to a clear "done" signal.
+ */
+const ORIGINAL_TITLE = typeof document !== 'undefined' ? document.title : '';
+
+function setTitlePrefix(prefix: string) {
+  if (typeof document === 'undefined') return;
+  document.title = prefix ? `${prefix} ${ORIGINAL_TITLE}` : ORIGINAL_TITLE;
+}
+
+function focusListener() {
+  // Restore the title once the user comes back to the tab.
+  setTitlePrefix('');
+  window.removeEventListener('focus', focusListener);
+}
+
+function beep(durationMs = 200, freq = 880) {
+  try {
+    const W = window as unknown as { webkitAudioContext?: typeof AudioContext };
+    const Ctx = window.AudioContext ?? W.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = freq;
+    osc.type = 'sine';
+    gain.gain.value = 0.05;
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    setTimeout(() => { osc.stop(); ctx.close(); }, durationMs);
+  } catch { /* ignore — sound is best-effort */ }
+}
+
+function notifyPublishDone(sceneId: string, url: string, elapsedMs: number) {
+  const sec = (elapsedMs / 1000).toFixed(1);
+  const title = '✓ 公開完了';
+  const body = `${sceneId} を ${sec}s で公開しました\n${url}`;
+  setTitlePrefix('(✓ 公開完了)');
+  window.addEventListener('focus', focusListener);
+  beep(180, 880);
+  setTimeout(() => beep(180, 1320), 220);
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    try {
+      const n = new Notification(title, { body, tag: `publish-${sceneId}` });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch { /* ignore — notification is best-effort */ }
+  }
+}
+
+function notifyPublishError(sceneId: string, msg: string) {
+  setTitlePrefix('(× 公開失敗)');
+  window.addEventListener('focus', focusListener);
+  beep(120, 220);
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    try {
+      const n = new Notification('× 公開失敗', { body: `${sceneId}: ${msg}`, tag: `publish-error-${sceneId}` });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch { /* ignore */ }
+  }
+}
+
+/**
  * "公開する" button — uploads the current scene + assets to R2 via the
  * Worker's /api/publish/* endpoint. Opens a small status overlay during the
  * upload and shows the customer-facing URL when done.
@@ -2017,12 +2080,22 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
     setError(null);
     setDoneUrl(null);
     setBusy(true);
+    // Ask for desktop-notification permission proactively. Browsers ignore the
+    // request if the user already decided (granted / denied), so it's safe to
+    // call every time.
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      void Notification.requestPermission();
+    }
+    const startedAt = Date.now();
     try {
       await publishScene(manifest as never, (p) => setProgress(p));
       const url = `${window.location.origin}/viewer/${sceneId}`;
       setDoneUrl(url);
+      notifyPublishDone(sceneId, url, Date.now() - startedAt);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      notifyPublishError(sceneId, msg);
     } finally {
       setBusy(false);
       setProgress(null);
