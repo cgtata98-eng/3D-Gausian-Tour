@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3DRoomTour プロジェクト概要</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a21;
+    --panel-2: #1c2128;
+    --border: #2a313c;
+    --text: #e6e9ef;
+    --muted: #8a93a3;
+    --accent: #6aa9ff;
+    --accent-2: #9b8cff;
+    --ok: #5cd6a2;
+    --warn: #f0b86e;
+    --code: #c9d4e6;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    line-height: 1.65;
+    font-size: 14.5px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 28px 80px; }
+  header.hero {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  header.hero h1 {
+    margin: 0 0 8px;
+    font-size: 26px;
+    letter-spacing: 0.02em;
+  }
+  header.hero p.lead {
+    margin: 0;
+    color: var(--muted);
+    max-width: 720px;
+  }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .tag {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--code);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  section { margin: 28px 0; }
+  h2 {
+    font-size: 17px;
+    margin: 0 0 14px;
+    padding-left: 10px;
+    border-left: 3px solid var(--accent);
+  }
+  h3 {
+    font-size: 14.5px;
+    margin: 18px 0 8px;
+    color: var(--code);
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .card + .card { margin-top: 12px; }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  td.num { text-align: right; color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-size: 13px; color: var(--code); }
+  code.inline {
+    background: var(--panel-2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  pre {
+    margin: 0;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--code);
+    line-height: 1.55;
+  }
+  ul.tight { margin: 6px 0; padding-left: 20px; }
+  ul.tight li { margin: 3px 0; }
+  .route {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 10px;
+    align-items: baseline;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .route:last-child { border-bottom: none; }
+  .route .path {
+    font-family: var(--mono);
+    color: var(--accent);
+  }
+  .pill {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    font-family: var(--mono);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .pill.ok { color: var(--ok); border-color: rgba(92,214,162,0.3); }
+  .pill.warn { color: var(--warn); border-color: rgba(240,184,110,0.3); }
+  .pill.accent { color: var(--accent); border-color: rgba(106,169,255,0.3); }
+  .tree {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--code);
+    white-space: pre;
+    line-height: 1.7;
+  }
+  .tree .dim { color: var(--muted); }
+  .tree .num { color: var(--accent); }
+  .kv {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 6px 14px;
+    font-size: 13.5px;
+  }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+  footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>3DRoomTour <span style="color:var(--muted); font-size: 15px; font-weight: normal;">— プロジェクト概要</span></h1>
+  <p class="lead">
+    3ds Max → Vantage で書き出したマンション CG を 3D Gaussian Splatting (3DGS) として軽量化し、
+    PlayCanvas Engine 上で回遊できるルームツアーとして配信するアプリケーション。
+    Project / Debug / Viewer の 3 画面構成で、開発者は編集 UI、閲覧者は URL 共有でアクセスする。
+  </p>
+  <div class="tag-row">
+    <span class="tag">Vite 8</span>
+    <span class="tag">React 19</span>
+    <span class="tag">TypeScript 6</span>
+    <span class="tag">PlayCanvas 2.17</span>
+    <span class="tag">Zustand 5</span>
+    <span class="tag">three.js 0.183</span>
+    <span class="tag">IndexedDB</span>
+  </div>
+</header>
+
+<section>
+  <h2>画面 / ルーティング</h2>
+  <div class="card">
+    <div class="route">
+      <span class="path">#/project</span>
+      <span>プロジェクト選択画面（デフォルト着地）。<code class="inline">ProjectScreen.tsx</code></span>
+    </div>
+    <div class="route">
+      <span class="path">#/scene/{id}</span>
+      <span>デバッグモード — 編集 UI、視点・図面・コリジョン編集。<code class="inline">DebugViewer.tsx</code></span>
+    </div>
+    <div class="route">
+      <span class="path">#/viewer/{id}</span>
+      <span>閲覧者モード — シンプル UI、URL 共有用。<code class="inline">Viewer.tsx</code></span>
+    </div>
+    <p style="margin: 12px 0 0; color: var(--muted); font-size: 13px;">
+      ハッシュルーター実装は <code class="inline">src/utils/url.ts</code>（<code class="inline">parseRoute()</code>）。
+      <code class="inline">?mode=dev</code> で開発者 UI を有効化（<code class="inline">ui-store.isDeveloper</code>）。
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>ディレクトリ構成（src 計 6,328 行）</h2>
+  <div class="card">
+    <div class="tree">src/
+├── <span class="dim">core/</span>            <span class="dim"># 型定義 / マニフェスト読込 / 視点ユーティリティ</span>
+│   ├── types.ts              <span class="num">192</span>
+│   ├── scene-manifest.ts     <span class="num"> 64</span>
+│   └── viewpoint.ts          <span class="num"> 20</span>
+├── <span class="dim">store/</span>           <span class="dim"># Zustand ストア (4 種)</span>
+│   ├── project-store.ts      <span class="num"> 78</span>
+│   ├── scene-store.ts        <span class="num">267</span>
+│   ├── ui-store.ts           <span class="num"> 70</span>
+│   └── camera-store.ts       <span class="num"> 27</span>
+├── <span class="dim">engine/</span>          <span class="dim"># PlayCanvas Engine ラッパ</span>
+│   ├── scene-manager.ts      <span class="num">633</span>
+│   ├── camera-controller.ts  <span class="num">302</span>
+│   ├── app-init.ts           <span class="num">109</span>
+│   ├── collision-loader.ts   <span class="num"> 72</span>
+│   ├── gsplat-loader.ts      <span class="num"> 39</span>
+│   └── hdri-loader.ts        <span class="num"> 58</span>
+├── <span class="dim">ui/</span>              <span class="dim"># React コンポーネント</span>
+│   ├── DebugViewer.tsx       <span class="num">2088</span>  <span class="dim">← 最大</span>
+│   ├── LeftPanel.tsx         <span class="num">677</span>
+│   ├── ProjectScreen.tsx     <span class="num">569</span>
+│   ├── FloorPlanMiniMap.tsx  <span class="num">293</span>
+│   ├── ViewerOverlay.tsx     <span class="num">247</span>
+│   ├── ViewpointPanel.tsx    <span class="num">126</span>
+│   ├── Viewer.tsx            <span class="num">121</span>
+│   ├── DebugPanel.tsx        <span class="num"> 62</span>
+│   ├── RenderModePanel.tsx   <span class="num"> 48</span>
+│   └── LoadingScreen.tsx     <span class="num"> 38</span>
+├── <span class="dim">utils/</span>
+│   ├── idb.ts                <span class="num"> 98</span>
+│   └── url.ts                <span class="num"> 30</span>
+├── App.tsx
+├── main.tsx
+└── index.css</div>
+  </div>
+</section>
+
+<section>
+  <h2>データモデル（2 階層分離）</h2>
+  <div class="card">
+    <p style="margin-top:0;">
+      <strong style="color: var(--accent);">SceneManifest</strong>(全体: 物件 ID / 名前 / 設定) ×
+      <strong style="color: var(--accent-2);">Plan[]</strong>(間取りプラン: splat / 視点 / 図面 / コリジョン / info)
+      の 2 階層に厳密に分離。
+    </p>
+<pre>SceneManifest {
+  id, name                       <span class="dim">// 物件アイデンティティ</span>
+  settings: SceneSettings        <span class="dim">// カメラ高さ・速度・コリジョン径・FOV/Pitch 上限</span>
+  plans: Plan[]                  <span class="dim">// プラン配列 (空でない保証あり)</span>
+}
+
+Plan {
+  id, label
+  splat?                         <span class="dim">// 3DGS ファイル (path / data: / blob: / idb:)</span>
+  panoramas?: Record&lt;vpId, str&gt;  <span class="dim">// 360° モード用</span>
+  thumbnails?: Record&lt;vpId, str&gt; <span class="dim">// 手動サムネ (auto はランタイムのみ)</span>
+  info?: SceneInfo               <span class="dim">// type / roomType / area / floor / location / notes</span>
+  floorPlan?: FloorPlanConfig    <span class="dim">// 図面画像 + worldToImage 変換</span>
+  collision?: CollisionConfig    <span class="dim">// walkable / block GLB</span>
+  viewpoints: Viewpoint[]        <span class="dim">// 視点配列 (空可)</span>
+  fixedPosition?: FixedPosition  <span class="dim">// initialPositionMode='fixed' 時の初期姿勢</span>
+}
+
+Viewpoint {
+  id, label, position, target, fov
+  mapPosition?  <span class="dim">// 図面ドット位置 (camera と分離 — 撮影位置を維持)</span>
+  mapYaw?       <span class="dim">// 図面コーン向き (camera と分離 — 手動調整を維持)</span>
+}</pre>
+    <p style="margin: 12px 0 0; color: var(--muted); font-size: 13px;">
+      旧トップレベル (<code class="inline">splat</code>/<code class="inline">info</code>/<code class="inline">collision</code>/<code class="inline">floorPlan</code>/<code class="inline">viewpoints</code>) を持つ scene.json は、
+      ストア読込時に <code class="inline">synthesizeDefaultPlan()</code> → <code class="inline">stripLegacyTopLevelFields()</code> で
+      <code class="inline">plans[0]</code> に自動マイグレーションされる。
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>ストア (Zustand)</h2>
+  <div class="grid-2">
+    <div class="card">
+      <h3>project-store</h3>
+      <p style="margin:0 0 8px; color:var(--muted); font-size:13px;">プロジェクト一覧 (Project[])</p>
+      <ul class="tight">
+        <li>永続化: <code class="inline">localStorage</code> / <code class="inline">3droomtour:projects:v1</code></li>
+        <li>SEED: <code class="inline">modern</code> / <code class="inline">nordic</code> / <code class="inline">showroom</code></li>
+        <li>API: <code class="inline">add / remove / update / get / resetSeed</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>scene-store</h3>
+      <p style="margin:0 0 8px; color:var(--muted); font-size:13px;">アクティブシーン + マニフェスト</p>
+      <ul class="tight">
+        <li><code class="inline">manifest</code> / <code class="inline">activePlanId</code> / <code class="inline">viewpointThumbnails</code> (auto)</li>
+        <li>プラン操作: <code class="inline">addPlan / removePlan / setPlanSplat</code></li>
+        <li>アクティブプランへの書込: <code class="inline">addViewpoint / updateInfo / setFloorPlanImage</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>ui-store</h3>
+      <p style="margin:0 0 8px; color:var(--muted); font-size:13px;">UI モード / フラグ</p>
+      <ul class="tight">
+        <li>ViewMode: <span class="pill accent">splat</span> / <span class="pill">360</span></li>
+        <li>PerspectiveMode: <span class="pill accent">first</span> / <span class="pill">third</span></li>
+        <li>ProjectType: <span class="pill accent">mansion</span> / <span class="pill">other</span></li>
+        <li>RenderMode / FurnitureMode (on/off) / LightingMode (day/night)</li>
+        <li>activePanel: <code class="inline">map</code> / <code class="inline">viewpoints</code> / <code class="inline">furniture</code> / <code class="inline">lighting</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>camera-store</h3>
+      <p style="margin:0 0 8px; color:var(--muted); font-size:13px;">ライブカメラ状態</p>
+      <ul class="tight">
+        <li><code class="inline">activeViewpoint</code> / <code class="inline">position</code> / <code class="inline">pitch</code> / <code class="inline">yaw</code> / <code class="inline">fov</code></li>
+        <li>エンジン側 camera-controller と双方向同期</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>ストレージ / 解決順序</h2>
+  <div class="card">
+<pre>loadSceneManifest(sceneId):
+  1. <span style="color:var(--ok);">IndexedDB</span>  → manifests ストアの編集済みコピー (最優先)
+  2. <span style="color:var(--accent);">fetch</span>       → /assets/scenes/{id}/scene.json (出荷ベースライン)
+  3. <span style="color:var(--warn);">virtual</span>     → project-store から最小マニフェストを合成</pre>
+    <dl class="kv" style="margin-top: 14px;">
+      <dt>localStorage</dt>
+      <dd><code class="inline">3droomtour:projects:v1</code> — Project リストのみ</dd>
+      <dt>IndexedDB</dt>
+      <dd>DB <code class="inline">3droomtour</code> / Stores: <code class="inline">manifests</code> + <code class="inline">blobs</code></dd>
+      <dt>Blob 参照</dt>
+      <dd><code class="inline">idb:&lt;key&gt;</code> プレフィックスで manifest 内に保存 → <code class="inline">resolveBlobRef()</code> で <code class="inline">URL.createObjectURL</code> 化</dd>
+      <dt>同梱アセット</dt>
+      <dd><code class="inline">public/assets/scenes/</code>: <span class="pill">modern</span> <span class="pill">nordic</span> <span class="pill">sample</span> <span class="pill">showroom</span></dd>
+    </dl>
+  </div>
+</section>
+
+<section>
+  <h2>エンジン (PlayCanvas)</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>モジュール</th><th>役割</th><th class="num">行</th></tr></thead>
+      <tbody>
+        <tr><td>scene-manager.ts</td><td>シーン全体の構築・プラン切替・エンティティライフサイクル</td><td class="num">633</td></tr>
+        <tr><td>camera-controller.ts</td><td>FPS 操作・コリジョン適用・視点ジャンプ補間</td><td class="num">302</td></tr>
+        <tr><td>app-init.ts</td><td>PlayCanvas Application のブートストラップ</td><td class="num">109</td></tr>
+        <tr><td>collision-loader.ts</td><td>walkable / block GLB のロード + レイキャスト</td><td class="num">72</td></tr>
+        <tr><td>hdri-loader.ts</td><td>環境マップ (HDRI) ロード</td><td class="num">58</td></tr>
+        <tr><td>gsplat-loader.ts</td><td>3DGS .ply / .splat ロード + RenderMode 切替</td><td class="num">39</td></tr>
+      </tbody>
+    </table>
+    <p style="margin: 12px 0 0; color: var(--muted); font-size: 13px;">
+      コリジョンは物理シミュレーションではなくレイキャスト方式。<code class="inline">collision_walkable</code>(床) と
+      <code class="inline">collision_block</code>(壁・大型家具) の 2 メッシュで構成。
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>実装フェーズ（design.md より）</h2>
+  <div class="card">
+    <ol style="margin:0; padding-left: 22px;">
+      <li>Splat Viewer + カメラ</li>
+      <li>視点ジャンプ + URL 共有</li>
+      <li>コリジョンシステム</li>
+      <li>図面 + デバッグモード</li>
+      <li>ポリッシュ + デプロイ</li>
+      <li>マテリアル変更プレビュー（将来）</li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <h2>配布 (将来)</h2>
+  <div class="card">
+    <ul class="tight">
+      <li>Cloudflare R2 で URL 共有配信</li>
+      <li>Tauri で EXE 書き出し（同梱版）</li>
+      <li>同梱／URL 起動の両対応想定</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  生成: <span class="mono">docs/project-overview.html</span> ・
+  ソース読込みベース: <span class="mono">src/ (6,328 行)</span> + <span class="mono">docs/design.md</span>
+</footer>
+
+</div>
+</body>
+</html>

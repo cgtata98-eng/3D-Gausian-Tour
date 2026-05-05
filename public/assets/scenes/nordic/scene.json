@@ -1,0 +1,12 @@
+{
+  "id": "nordic",
+  "name": "北欧スタイルマンション",
+  "settings": {
+    "cameraHeight": 1.6,
+    "initialHeight": 1.6,
+    "moveSpeed": 3.0,
+    "collisionCapsuleRadius": 0.3,
+    "collisionCapsuleHeight": 1.6,
+    "initialPositionMode": "auto"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "id": "sample",
+  "name": "Sample Mansion",
+  "info": {
+    "type": "新築マンション",
+    "roomType": "1LDK",
+    "area": "42.5㎡",
+    "floor": "3F / RC造 5階建",
+    "location": "東京都サンプル区",
+    "notes": "モデルルーム（サンプル）"
+  },
+  "splat": "splat.ply",
+  "splatSpz": "splat.spz",
+  "collision": {
+    "walkable": "collision_walkable.glb",
+    "block": "collision_block.glb"
+  },
+  "floorPlan": {
+    "image": "floorplan.png",
+    "bounds": {
+      "min": [-12, -8],
+      "max": [12, 8]
+    },
+    "worldToImage": {
+      "offsetX": 0,
+      "offsetZ": 0,
+      "scaleX": 1,
+      "scaleZ": 1,
+      "rotation": 0
+    }
+  },
+  "viewpoints": [
+    {
+      "id": "entrance",
+      "label": "玄関",
+      "position": [0, 1.6, 5],
+      "target": [0, 1.6, 0],
+      "fov": 60
+    },
+    {
+      "id": "living",
+      "label": "リビング",
+      "position": [3, 1.6, 0],
+      "target": [0, 1.6, -2],
+      "fov": 60
+    },
+    {
+      "id": "kitchen",
+      "label": "キッチン",
+      "position": [-3, 1.6, -2],
+      "target": [-3, 1.6, -5],
+      "fov": 60
+    },
+    {
+      "id": "bedroom",
+      "label": "寝室",
+      "position": [5, 1.6, -4],
+      "target": [3, 1.6, -6],
+      "fov": 60
+    },
+    {
+      "id": "washroom",
+      "label": "洗面",
+      "position": [-5, 1.6, 3],
+      "target": [-5, 1.6, 1],
+      "fov": 60
+    }
+  ],
+  "settings": {
+    "cameraHeight": 1.6,
+    "initialHeight": 1.6,
+    "moveSpeed": 3.0,
+    "collisionCapsuleRadius": 0.3,
+    "collisionCapsuleHeight": 1.6,
+    "initialPositionMode": "auto",
+    "fixedPosition": {
+      "position": [0, 1.6, 5],
+      "target": [0, 1.6, 0],
+      "fov": 60
+    }
+  }
+}
