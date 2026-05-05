@@ -528,31 +528,30 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         return;
       }
 
-      // Try the dev-only Vite middleware first (faster, uses splat-transform
-      // CLI). If it isn't there (deployed Worker has no Node), fall through to
-      // a browser-side WASM run.
+      // Production builds skip the dev-only Vite middleware entirely (it isn't
+      // there, and Cloudflare's edge would reject the upload with 413 anyway).
+      // In dev we try it first since the Node CLI is faster than the WASM
+      // pipeline; any error falls through to the browser path.
       let glb: Blob | null = null;
-      try {
-        const res = await fetch('/api/gen-collision', {
-          method: 'POST',
-          headers: {
-            'X-Input-Ext': ext,
-            'X-Shape': 'smooth',
-            'Content-Type': 'application/octet-stream',
-          },
-          body,
-        });
-        if (res.ok) {
-          glb = await res.blob();
-        } else if (res.status === 404 || res.status === 405) {
-          // No middleware → fall through to browser path.
-        } else {
-          const errText = await res.text();
-          throw new Error(`生成失敗 (${res.status}): ${errText.slice(0, 200)}`);
+      if (import.meta.env.DEV) {
+        try {
+          const res = await fetch('/api/gen-collision', {
+            method: 'POST',
+            headers: {
+              'X-Input-Ext': ext,
+              'X-Shape': 'smooth',
+              'Content-Type': 'application/octet-stream',
+            },
+            body,
+          });
+          if (res.ok) {
+            glb = await res.blob();
+          } else {
+            console.warn(`[gen-collision] middleware returned ${res.status}; using browser fallback`);
+          }
+        } catch (e) {
+          console.warn('[gen-collision] middleware unreachable, using browser fallback:', e);
         }
-      } catch (e) {
-        // Network error too — try the browser path before giving up.
-        console.warn('[gen-collision] Vite middleware unreachable, falling back to browser:', e);
       }
 
       if (!glb) {
