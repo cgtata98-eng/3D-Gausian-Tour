@@ -1,14 +1,28 @@
 {
-  // Cloudflare Workers + Static Assets config.
-  // Used by `npx wrangler deploy` to ship the Vite build output (./dist) as a
-  // static site backed by Workers' built-in asset handler. SPA fallback sends
-  // any unmatched URL to index.html so client-side routes like
-  // `/#/viewer/<id>` keep working when users hit refresh.
+  // Cloudflare Workers + Static Assets + R2.
+  //
+  // - `assets` ships the Vite build (./dist) as the public site. SPA fallback
+  //   sends unmatched paths to index.html so `/viewer/<id>` etc. resolve
+  //   client-side.
+  // - `main` runs Worker code on every request; the Worker first matches
+  //   `/api/*` for the publish endpoint, otherwise hands off to the asset
+  //   handler via the `ASSETS` binding.
+  // - `r2_buckets` exposes the existing `cg-gaussian-assets` bucket as the
+  //   `BUCKET` binding so the Worker can `put` / `delete` directly without
+  //   needing R2 API tokens.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cg-gaussian",
   "compatibility_date": "2026-05-05",
+  "main": "src/worker/index.ts",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS"
+  },
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "cg-gaussian-assets"
+    }
+  ]
 }

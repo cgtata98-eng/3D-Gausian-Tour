@@ -6,6 +6,7 @@ import { interpolatePath, totalPathDurationSec } from '../core/viewpoint';
 import * as clipLib from '../utils/clip-library';
 import type { ClipMeta } from '../utils/clip-library';
 import { navigate } from '../utils/url';
+import { publishScene } from '../utils/publish';
 import { ThreeSceneManager } from '../engine/three/three-scene-manager';
 import { SceneManager } from '../engine/scene-manager';
 import { initApp } from '../engine/app-init';
@@ -724,6 +725,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         </div>
         <div style={{ flex: 1 }} />
         <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} onClick={saveNow} />
+        <PublishButton sceneId={sceneId} manifest={manifest} />
         <a
           href={`/viewer/${sceneId}`}
           onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(`/viewer/${sceneId}`); }}
@@ -1996,6 +1998,122 @@ function PlanCameraLinkToggle() {
     >
       {linkPlanCamera ? '🔗' : '⛓'}
     </button>
+  );
+}
+
+/**
+ * "公開する" button — uploads the current scene + assets to R2 via the
+ * Worker's /api/publish/* endpoint. Opens a small status overlay during the
+ * upload and shows the customer-facing URL when done.
+ */
+function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?: string; plans?: unknown[] } | null }) {
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ message: string; current: number; total: number } | null>(null);
+  const [doneUrl, setDoneUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const onClick = async () => {
+    if (!manifest?.id) { setError('シーンが読み込まれていません'); return; }
+    setError(null);
+    setDoneUrl(null);
+    setBusy(true);
+    try {
+      await publishScene(manifest as never, (p) => setProgress(p));
+      const url = `${window.location.origin}/viewer/${sceneId}`;
+      setDoneUrl(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={busy}
+        title="現在のシーンを R2 に公開して、顧客が URL でアクセスできるようにする"
+        style={{
+          padding: '6px 12px',
+          fontSize: 12,
+          fontWeight: 700,
+          color: '#fff',
+          background: busy ? '#94a3b8' : '#16a34a',
+          border: 'none',
+          borderRadius: 6,
+          cursor: busy ? 'not-allowed' : 'pointer',
+          marginRight: 6,
+        }}
+      >
+        {busy ? '公開中…' : '🚀 公開'}
+      </button>
+      {(busy || doneUrl || error) && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 16, right: 16,
+            zIndex: 9999,
+            width: 360,
+            padding: 14,
+            background: '#fff',
+            borderRadius: 10,
+            boxShadow: '0 12px 32px rgba(15,23,42,0.18), 0 2px 6px rgba(15,23,42,0.08)',
+            fontFamily: 'system-ui, sans-serif',
+          }}
+        >
+          {busy && progress && (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2937', marginBottom: 6 }}>公開中…</div>
+              <div style={{ fontSize: 11.5, color: 'rgba(0,0,0,0.7)', marginBottom: 6 }}>
+                {progress.message}
+                <span style={{ marginLeft: 6, color: 'rgba(0,0,0,0.5)' }}>{progress.current}/{progress.total}</span>
+              </div>
+              <div style={{ height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.round((progress.current / Math.max(1, progress.total)) * 100)}%`, background: '#3b82f6', transition: 'width 120ms linear' }} />
+              </div>
+            </>
+          )}
+          {!busy && doneUrl && (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#15803d', marginBottom: 8 }}>✓ 公開完了</div>
+              <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.6)', marginBottom: 6 }}>顧客に送る URL:</div>
+              <input
+                readOnly
+                value={doneUrl}
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                style={{ width: '100%', padding: '6px 8px', fontSize: 11, border: '1px solid #d1d5db', borderRadius: 4, fontFamily: 'monospace', boxSizing: 'border-box' }}
+              />
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(doneUrl)}
+                  style={{ flex: 1, padding: '5px 8px', fontSize: 11, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                >コピー</button>
+                <button
+                  type="button"
+                  onClick={() => setDoneUrl(null)}
+                  style={{ padding: '5px 10px', fontSize: 11, background: '#fff', color: 'rgba(0,0,0,0.6)', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
+                >閉じる</button>
+              </div>
+            </>
+          )}
+          {!busy && error && (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>公開失敗</div>
+              <div style={{ fontSize: 11, color: '#7f1d1d', marginBottom: 8, wordBreak: 'break-word' }}>{error}</div>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                style={{ padding: '5px 10px', fontSize: 11, background: '#fff', color: 'rgba(0,0,0,0.6)', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
+              >閉じる</button>
+            </>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

@@ -12,10 +12,9 @@
  *   or until you bump `STORAGE_KEY`.
  */
 
-// ── Edit these to rotate the credentials ──
-const ADMIN_USERNAME = 'takyu';
-const ADMIN_PASSWORD = '1qaz1833';
-// ──────────────────────────────────────────
+// Credentials live in `src/shared/admin-credentials.ts` so the frontend gate
+// and the Worker share a single source of truth.
+import { ADMIN_USERNAME, ADMIN_PASSWORD } from '../shared/admin-credentials';
 
 const STORAGE_KEY = 'admin-auth-v1';
 /** Session expires after this many ms unless re-authenticated. 7 days. */
