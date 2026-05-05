@@ -1963,24 +1963,6 @@ const overviewCloseBtn: React.CSSProperties = {
   fontFamily: 'inherit',
 };
 
-const planLinkBtn = (active: boolean): React.CSSProperties => ({
-  width: 22,
-  height: 22,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: active ? 'rgba(59,130,246,0.14)' : 'transparent',
-  border: `1px solid ${active ? 'rgba(59,130,246,0.5)' : 'rgba(0,0,0,0.1)'}`,
-  borderRadius: 4,
-  color: active ? '#1d4ed8' : 'rgba(31,41,55,0.65)',
-  cursor: 'pointer',
-  fontSize: 11,
-  lineHeight: 1,
-  padding: 0,
-  marginRight: 4,
-  fontFamily: 'inherit',
-});
-
 const overviewRestoreBtn: React.CSSProperties = {
   background: 'rgba(59,130,246,0.1)',
   border: '1px solid rgba(59,130,246,0.35)',

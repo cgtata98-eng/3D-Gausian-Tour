@@ -2,7 +2,12 @@ import { useEffect } from 'react';
 import { useUIStore } from '../store/ui-store';
 import { useTrackingStore } from '../store/tracking-store';
 import { startHeadTracker, stopHeadTracker } from '../utils/head-tracker';
-import type { ThreeSceneManager } from '../engine/three/three-scene-manager';
+
+/** Anything that exposes `setTrackingOffset(yaw, pitch)` — both `ThreeSceneManager`
+ *  and the PlayCanvas `SceneManager` qualify. */
+interface TrackingTarget {
+  setTrackingOffset: (yawDeg: number, pitchDeg: number) => void;
+}
 
 /**
  * Demo mode plumbing for the 3DGS viewer:
@@ -19,7 +24,7 @@ import type { ThreeSceneManager } from '../engine/three/three-scene-manager';
  * The PoC defaults (`gain=3`, `invertPitch=true`) live in `tracking-store.ts` and
  * mirror the Xrealtracking PoC behaviour 1:1.
  */
-export function useDemoModeCamera(sceneManager: ThreeSceneManager | null) {
+export function useDemoModeCamera(sceneManager: TrackingTarget | null) {
   const demoMode = useUIStore((s) => s.demoMode);
   const viewMode = useUIStore((s) => s.viewMode);
   const enabled = demoMode && viewMode !== '360' && !!sceneManager;

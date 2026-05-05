@@ -2816,8 +2816,6 @@ function PathRecordingPanel({
       return next;
     });
   };
-  const setSegmentDuration = (idx: number, sec: number) =>
-    setKeyframes((kfs) => kfs.map((kf, i) => i === idx ? { ...kf, durationSec: Math.max(1, Math.min(60, Math.round(sec))) } : kf));
   const adjustSegmentDuration = (idx: number, delta: number) =>
     setKeyframes((kfs) => kfs.map((kf, i) => i === idx ? { ...kf, durationSec: Math.max(1, Math.min(60, Math.round(kf.durationSec + delta))) } : kf));
   const togglePassThrough = (idx: number) =>

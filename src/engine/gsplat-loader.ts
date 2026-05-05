@@ -145,8 +145,10 @@ export async function loadSogFromIdb(
       url: `mem://${sceneId}/${planId}/meta.json`,
       filename: 'meta.json',
     }, meta as object, {
+      // mapUrl is a SOG parser hook — present at runtime in PlayCanvas v2 but
+      // missing from the public Asset options type, so we cast.
       mapUrl: (filename: string) => urlMap.get(filename) ?? '',
-    });
+    } as unknown as { crossOrigin?: 'anonymous' | 'use-credentials' | null });
     asset.on('load', () => {
       const entity = new Entity(name);
       entity.addComponent('gsplat', { asset });

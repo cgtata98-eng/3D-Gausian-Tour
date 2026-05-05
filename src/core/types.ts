@@ -113,6 +113,10 @@ export type ViewerEngine = 'mkkellogg' | 'spark' | 'playcanvas';
  * to their built-in tonemap and ignore those knobs.
  */
 export interface RenderQualityConfig {
+  /** WebGL multisample antialiasing samples (0/2/4/8). PlayCanvas-only and must be
+   *  set at app init since the framebuffer sample count is fixed for the lifetime
+   *  of the GL context. Default 4. */
+  msaaSamples?: number;
   /** Exposure in stops (-3..+3). PlayCanvas: scene.exposure → CameraFrame tonemap.
    *  Spark: applies as splat `recolor`. mkkellogg: cube + bg only. */
   exposureEV?: number;

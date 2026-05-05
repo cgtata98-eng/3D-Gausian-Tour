@@ -245,57 +245,6 @@ const mirrorBadge: React.CSSProperties = {
   zIndex: 10,
 };
 
-/**
- * Cycling toggle: OFF → 送信 → 受信 → OFF.
- * - 送信: this tab broadcasts its camera pose
- * - 受信: this tab is slaved to the broadcaster (local input disabled)
- * Same browser only (BroadcastChannel). Open the same scene URL in another tab,
- * set this one to 送信 and the other to 受信 → the second tab mirrors the first.
- */
-function MirrorButton() {
-  const mode = useUIStore((s) => s.mirrorMode);
-  const setMode = useUIStore((s) => s.setMirrorMode);
-  const next = mode === 'off' ? 'send' : mode === 'send' ? 'receive' : 'off';
-  const label = mode === 'off' ? 'OFF' : mode === 'send' ? '送信' : '受信';
-  const tone = mode === 'off' ? '#1f2937' : mode === 'send' ? '#1d4ed8' : '#9333ea';
-  const bg = mode === 'off' ? 'rgba(255,255,255,0.78)'
-            : mode === 'send' ? 'rgba(59,130,246,0.18)'
-            : 'rgba(147,51,234,0.18)';
-  const border = mode === 'off' ? 'rgba(0,0,0,0.06)'
-            : mode === 'send' ? 'rgba(59,130,246,0.5)'
-            : 'rgba(147,51,234,0.5)';
-  return (
-    <button
-      onClick={() => setMode(next)}
-      style={{ ...mirrorBtn, background: bg, color: tone, border: `1px solid ${border}` }}
-      title={
-        mode === 'off' ? 'ミラー OFF (クリックで送信モード) — 同じ PC の別タブにこの画面を共有'
-        : mode === 'send' ? 'このタブを送信中 (クリックで受信モード)'
-        : 'このタブは受信中 — 操作は無効、送信側の画面を映す (クリックで OFF)'
-      }
-      aria-label={`Mirror ${label}`}
-    >
-      <span style={{ fontSize: 14, lineHeight: 1 }}>📡</span>
-      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5 }}>{label}</span>
-    </button>
-  );
-}
-
-const mirrorBtn: React.CSSProperties = {
-  position: 'absolute',
-  bottom: 200, left: 16,
-  width: 40, minHeight: 44,
-  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-  gap: 2,
-  borderRadius: 10,
-  backdropFilter: 'blur(16px)',
-  boxShadow: '0 8px 32px rgba(15,23,42,0.1)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  padding: '4px 0',
-  zIndex: 5,
-};
-
 const debugBtn: React.CSSProperties = {
   position: 'absolute',
   bottom: 144, left: 16,
