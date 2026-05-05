@@ -182,6 +182,16 @@ export class SceneManager {
       // Apply the user's saved quality preset now that the splat material exists.
       this.applyQualityMode(useUIStore.getState().qualityMode);
 
+      // Auto-load collision GLBs (walkable / block) if the active plan declares
+      // them. References can be IDB blobs (Debug-side authoring) or relative
+      // paths resolved against R2 (customer viewer).
+      if (activePlan?.collision?.walkable) {
+        void this.loadCollisionFromManifestRef(activePlan.collision.walkable, 'walkable');
+      }
+      if (activePlan?.collision?.block) {
+        void this.loadCollisionFromManifestRef(activePlan.collision.block, 'block');
+      }
+
       this.cameraController = new CameraController(this.app, this.camera, {
         moveSpeed: manifest.settings.moveSpeed,
         cameraHeight: manifest.settings.initialHeight ?? manifest.settings.cameraHeight,
@@ -833,6 +843,23 @@ export class SceneManager {
       requestAnimationFrame(() => this.syncCollisionTrianglesToController(type));
       return true;
     } catch (e) { console.error(`Failed to load ${type} collision:`, e); return false; }
+  }
+
+  /** Resolve a manifest collision ref (`idb:<key>` or scene-relative path) and
+   *  call the underlying loader. Used by both the Debug "auto-load on plan load"
+   *  path and the customer viewer fetching from R2. */
+  async loadCollisionFromManifestRef(ref: string, type: 'walkable' | 'block'): Promise<boolean> {
+    try {
+      const url = await resolveAssetUrl(ref, this.manifest?.id ?? '');
+      const color = type === 'walkable' ? '#00ff00' : '#ff0000';
+      const col = await loadCollisionGlb(this.app, url, `collision-${type}`, color, 0.15);
+      col.entity.enabled = true;
+      this.app.root.addChild(col.entity);
+      if (type === 'walkable') { this.collisionWalkable?.entity.destroy(); this.collisionWalkable = col; }
+      else { this.collisionBlock?.entity.destroy(); this.collisionBlock = col; }
+      requestAnimationFrame(() => this.syncCollisionTrianglesToController(type));
+      return true;
+    } catch (e) { console.error(`Failed to load ${type} collision from ${ref}:`, e); return false; }
   }
 
   /** Re-extract triangles from one or both collision entities and push to the camera controller. */

@@ -6,7 +6,7 @@ import { interpolatePath, totalPathDurationSec } from '../core/viewpoint';
 import * as clipLib from '../utils/clip-library';
 import type { ClipMeta } from '../utils/clip-library';
 import { navigate } from '../utils/url';
-import { publishScene } from '../utils/publish';
+import { publishScene, repackSogBundle } from '../utils/publish';
 import { ThreeSceneManager } from '../engine/three/three-scene-manager';
 import { SceneManager } from '../engine/scene-manager';
 import { initApp } from '../engine/app-init';
@@ -117,6 +117,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const updatePlanLabelStore = useSceneStore(s => s.updatePlanLabel);
   const setPlanSplatStore = useSceneStore(s => s.setPlanSplat);
   const setPlanSplatSogStore = useSceneStore(s => s.setPlanSplatSog);
+  const setPlanCollisionStore = useSceneStore(s => s.setPlanCollision);
   const [showAddPlan, setShowAddPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
   const [editPlanId, setEditPlanId] = useState<string | null>(null);
@@ -469,16 +470,90 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 
 
 
-  const handleColFile = (file: File, type: 'walkable' | 'block') => {
+  const handleColFile = async (file: File | Blob, type: 'walkable' | 'block') => {
     const sm = smRef.current; if (!sm) return;
+    const sceneId = manifest?.id;
+    const planId = activePlanId;
+    if (!sceneId || !planId) return;
     setColLoading(type);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const d = e.target?.result as string;
-      if (d) { await sm.loadCollisionFromDataUrl(d, type); sm.setCollisionVisible(true); if (!showCollision) toggleCollision(); }
+    try {
+      // Persist to IDB so reloads keep it AND the publish flow can find it.
+      const blobKey = `collision:${sceneId}:${planId}:${type}`;
+      const blob = file instanceof File ? file : new Blob([await file.arrayBuffer()], { type: 'model/gltf-binary' });
+      await idb.saveBlob(blobKey, blob);
+      setPlanCollisionStore(planId, type, `${idb.IDB_REF_PREFIX}${blobKey}`);
+      // Engine-side load via the IDB ref (resolves to a fresh blob: URL each time).
+      await sm.loadCollisionFromManifestRef(`${idb.IDB_REF_PREFIX}${blobKey}`, type);
+      sm.setCollisionVisible(true);
+      if (!showCollision) toggleCollision();
+    } catch (e) {
+      console.error(`collision ${type} upload failed:`, e);
+      alert('コリジョン読込失敗: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
       setColLoading(null);
-    };
-    reader.readAsDataURL(file);
+    }
+  };
+
+  /** Auto-generate a collision GLB from the active plan's splat by calling the
+   *  Vite middleware (`/api/gen-collision`) which spawns `splat-transform` on
+   *  the dev host. Only available during local development; in production the
+   *  middleware doesn't exist and the request returns 404. */
+  const handleAutoGenCollision = async () => {
+    const sm = smRef.current; if (!sm) return;
+    const sceneId = manifest?.id;
+    const planId = activePlanId;
+    if (!sceneId || !planId) return;
+    const plan = manifest?.plans?.find((p) => p.id === planId);
+    if (!plan) { alert('プランが見つかりません'); return; }
+
+    setColLoading('autogen');
+    try {
+      // Pick a splat source — prefer SOG (already chunked), then PLY, then SPZ.
+      let body: Blob | null = null;
+      let ext: 'sog' | 'ply' | 'spz' | null = null;
+      if (plan.splatSog && plan.splatSog.startsWith('sog-idb:')) {
+        body = await repackSogBundle(sceneId, planId);
+        ext = 'sog';
+      } else if (plan.splat && plan.splat.startsWith(idb.IDB_REF_PREFIX)) {
+        const key = plan.splat.slice(idb.IDB_REF_PREFIX.length);
+        body = await idb.loadBlob(key);
+        ext = 'ply';
+      } else if (plan.splatSpz && plan.splatSpz.startsWith(idb.IDB_REF_PREFIX)) {
+        const key = plan.splatSpz.slice(idb.IDB_REF_PREFIX.length);
+        body = await idb.loadBlob(key);
+        ext = 'spz';
+      }
+      if (!body || !ext) {
+        alert('スプラットファイルがアップロードされていません。先に PLY / SPZ / SOG をアップロードしてください。');
+        return;
+      }
+
+      const res = await fetch('/api/gen-collision', {
+        method: 'POST',
+        headers: {
+          'X-Input-Ext': ext,
+          'X-Shape': 'smooth',
+          'Content-Type': 'application/octet-stream',
+        },
+        body,
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`生成失敗 (${res.status}): ${errText.slice(0, 200)}`);
+      }
+      const glb = await res.blob();
+      // Use the same GLB as both walkable + block — rough but matches the user's
+      // immediate need ("get something working"). They can replace each side
+      // individually with a more refined mesh later.
+      await handleColFile(new File([glb], 'auto-collision.glb', { type: 'model/gltf-binary' }), 'walkable');
+      await handleColFile(new File([glb], 'auto-collision.glb', { type: 'model/gltf-binary' }), 'block');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('collision auto-gen failed:', e);
+      alert('コリジョン自動生成に失敗:\n' + msg + '\n\n本番環境（公開済みサイト）では使えません。ローカル `npm run dev` 中のみ動作します。');
+    } finally {
+      setColLoading(null);
+    }
   };
 
   const handleHdriFile = (file: File) => {
@@ -1661,7 +1736,31 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               {showCollision && (
                 <Slider label="不透明度" min={0} max={1} step={0.05} value={collisionOpacity} onChange={setCollisionOpacity} />
               )}
-              <div style={S.subTitle}><span style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
+              {/* Auto-generate via splat-transform (dev only — Vite middleware) */}
+              <button
+                type="button"
+                onClick={handleAutoGenCollision}
+                disabled={colLoading !== null}
+                style={{
+                  marginTop: 10,
+                  width: '100%',
+                  padding: '10px 12px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: '#fff',
+                  background: colLoading === 'autogen' ? '#94a3b8' : '#7c3aed',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: colLoading !== null ? 'not-allowed' : 'pointer',
+                }}
+                title="splat-transform を使ってスプラットからコリジョン GLB を自動生成（ローカル npm run dev 中のみ）"
+              >
+                {colLoading === 'autogen' ? '🤖 生成中…（数十秒〜）' : '🤖 コリジョン自動生成'}
+              </button>
+              <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.5)', marginTop: 4, lineHeight: 1.5 }}>
+                splat-transform で生成。walkable / block 両方に同じ GLB を割当。下から個別アップロードで上書き可。
+              </div>
+              <div style={{ ...S.subTitle, marginTop: 14 }}><span style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
               <button onClick={() => walkableRef.current?.click()} style={S.fileBtn}>
                 {colLoading === 'walkable' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>

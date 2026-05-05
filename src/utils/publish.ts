@@ -172,6 +172,7 @@ interface SceneLike {
     splatSpz?: string;
     splatSog?: string;
     floorPlan?: { image?: string; [k: string]: unknown };
+    collision?: { walkable?: string; block?: string };
     [k: string]: unknown;
   }>;
   [k: string]: unknown;
@@ -201,6 +202,8 @@ export async function publishScene(
     if (plan.splat && plan.splat.startsWith(idb.IDB_REF_PREFIX)) total++;
     if (plan.splatSpz && plan.splatSpz.startsWith(idb.IDB_REF_PREFIX)) total++;
     if (plan.floorPlan?.image && plan.floorPlan.image.startsWith('data:')) total++;
+    if (plan.collision?.walkable?.startsWith(idb.IDB_REF_PREFIX)) total++;
+    if (plan.collision?.block?.startsWith(idb.IDB_REF_PREFIX)) total++;
   }
   let current = 0;
   const tick = (message: string) => onProgress({ message, current: ++current, total });
@@ -246,6 +249,22 @@ export async function publishScene(
       const blob = await dataUrlToBlob(plan.floorPlan.image);
       await publishFile(sceneId, filename, blob);
       (plan.floorPlan as { image: string }).image = filename;
+    }
+
+    // Collision GLBs (walkable / block) — upload from IDB and rewrite refs.
+    if (plan.collision) {
+      for (const type of ['walkable', 'block'] as const) {
+        const ref = plan.collision[type];
+        if (!ref || !ref.startsWith(idb.IDB_REF_PREFIX)) continue;
+        const blob = await idb.loadBlob(ref.slice(idb.IDB_REF_PREFIX.length));
+        if (!blob) continue;
+        const filename = plans.length > 1
+          ? `collision-${type}-${planId}.glb`
+          : `collision-${type}.glb`;
+        tick(`コリジョンをアップロード: ${filename}`);
+        await publishFile(sceneId, filename, blob);
+        plan.collision[type] = filename;
+      }
     }
   }
 

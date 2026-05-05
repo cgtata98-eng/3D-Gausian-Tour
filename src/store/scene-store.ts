@@ -92,6 +92,8 @@ interface SceneState {
   /** Set / clear the SOG bundle marker for a plan. The actual files live in IDB
    *  under the prefix `splat:<sceneId>:<planId>:sog/<filename>`. */
   setPlanSplatSog: (id: string, splatSog: string | undefined) => void;
+  /** Set / clear a collision GLB reference (IDB ref or relative path) for a plan. */
+  setPlanCollision: (id: string, type: 'walkable' | 'block', ref: string | undefined) => void;
   /** Update the splat transform (rotation / position) for a plan. Pass `null` to clear. */
   setPlanSplatTransform: (id: string, transform: SplatTransform | null) => void;
   setPlanPanorama: (planId: string, viewpointId: string, panorama: string | undefined) => void;
@@ -204,6 +206,27 @@ export const useSceneStore = create<SceneState>((set) => ({
           if (splatSog === undefined) delete next.splatSog;
           else next.splatSog = splatSog;
           return next;
+        }),
+      },
+    };
+  }),
+  setPlanCollision: (id, type, ref) => set((s) => {
+    if (!s.manifest?.plans) return s;
+    return {
+      manifest: {
+        ...s.manifest,
+        plans: s.manifest.plans.map((p) => {
+          if (p.id !== id) return p;
+          const cur = p.collision ?? { walkable: '', block: '' };
+          const next = { ...cur, [type]: ref ?? '' };
+          // Drop the field entirely if both sides are empty so the plan stays
+          // clean rather than carrying stub paths.
+          if (!next.walkable && !next.block) {
+            const np = { ...p };
+            delete np.collision;
+            return np;
+          }
+          return { ...p, collision: next };
         }),
       },
     };

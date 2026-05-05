@@ -558,6 +558,14 @@ export class ThreeSceneManager {
   async loadCollisionFromDataUrl(dataUrl: string, type: 'walkable' | 'block'): Promise<boolean> {
     return this.loadCollisionFromUrl(dataUrl, type);
   }
+  /** PlayCanvas-side parity. Three's `loadCollisionFromUrl` already accepts
+   *  data: / blob: / http URLs, so just resolve the manifest ref via the same
+   *  resolver and forward. */
+  async loadCollisionFromManifestRef(ref: string, type: 'walkable' | 'block'): Promise<boolean> {
+    const sceneId = useSceneStore.getState().manifest?.id ?? '';
+    const url = await resolveSplatUrl(ref, sceneId);
+    return this.loadCollisionFromUrl(url, type);
+  }
 
   setCollisionVisible(v: boolean) {
     if (this.collisionWalkable) this.collisionWalkable.visible = v;
