@@ -51,14 +51,52 @@ async function handlePublish(request: Request, env: Env, url: URL): Promise<Resp
   if (!match) return new Response('Bad Request', { status: 400 });
   const [, rawSceneId, rawFilename] = match;
 
-  // Reject anything that isn't a friendly slug / nested-but-safe path.
-  // Lowercase alnum + hyphen / underscore for sceneId; strip `..` and
-  // leading slashes from filename to stay inside the bucket prefix.
   const sceneId = rawSceneId.replace(/[^a-zA-Z0-9_-]/g, '');
   const filename = rawFilename.replace(/\.\.+/g, '').replace(/^\/+/, '');
   if (!sceneId || !filename) return new Response('Bad path', { status: 400 });
   const r2Key = `${sceneId}/${filename}`;
+  const action = url.searchParams.get('action');
 
+  // ── Multipart upload (for files larger than the Worker body limit) ──
+  // Flow: client POSTs ?action=create → uploadId, PUTs parts as
+  // ?action=part&uploadId=X&part=N (each ≤ ~50MB), POSTs ?action=complete with
+  // the parts list. Mirrors S3 multipart conventions; R2's binding handles it
+  // natively.
+  if (action === 'create' && request.method === 'POST') {
+    const contentType = url.searchParams.get('contentType') ?? 'application/octet-stream';
+    const upload = await env.BUCKET.createMultipartUpload(r2Key, { httpMetadata: { contentType } });
+    return jsonResponse({ uploadId: upload.uploadId });
+  }
+
+  if (action === 'part' && (request.method === 'PUT' || request.method === 'POST')) {
+    const uploadId = url.searchParams.get('uploadId');
+    const partNum = Number(url.searchParams.get('part'));
+    if (!uploadId || !partNum || partNum < 1) return new Response('Bad part params', { status: 400 });
+    if (!request.body) return new Response('Empty body', { status: 400 });
+    const upload = env.BUCKET.resumeMultipartUpload(r2Key, uploadId);
+    const part = await upload.uploadPart(partNum, request.body);
+    return jsonResponse({ partNumber: part.partNumber, etag: part.etag });
+  }
+
+  if (action === 'complete' && request.method === 'POST') {
+    const uploadId = url.searchParams.get('uploadId');
+    if (!uploadId) return new Response('Missing uploadId', { status: 400 });
+    const body = await request.json<{ parts: Array<{ partNumber: number; etag: string }> }>();
+    if (!Array.isArray(body?.parts)) return new Response('Bad parts list', { status: 400 });
+    const upload = env.BUCKET.resumeMultipartUpload(r2Key, uploadId);
+    await upload.complete(body.parts);
+    return jsonResponse({ ok: true, key: r2Key });
+  }
+
+  if (action === 'abort' && request.method === 'POST') {
+    const uploadId = url.searchParams.get('uploadId');
+    if (!uploadId) return new Response('Missing uploadId', { status: 400 });
+    const upload = env.BUCKET.resumeMultipartUpload(r2Key, uploadId);
+    await upload.abort();
+    return jsonResponse({ ok: true });
+  }
+
+  // ── Single-shot upload (under the body limit, simpler) ──
   if (request.method === 'PUT' || request.method === 'POST') {
     const contentLength = Number(request.headers.get('Content-Length') ?? 0);
     if (contentLength > MAX_UPLOAD_BYTES) {

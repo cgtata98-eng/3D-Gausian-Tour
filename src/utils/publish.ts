@@ -16,8 +16,22 @@ function authHeader(): string {
   return 'Basic ' + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`);
 }
 
-/** Upload a single file to R2 under `<sceneId>/<filename>`. Throws on non-2xx. */
+/** Cloudflare Workers free-plan body limit is 100MB. Our chunk size leaves
+ *  headroom for HTTP framing and matches R2 multipart's 5MB-minimum-per-part
+ *  rule (everything except the last must be ≥ 5MB). */
+const SINGLE_PUT_MAX = 90 * 1024 * 1024; // < 100MB Worker body limit
+const CHUNK_SIZE = 50 * 1024 * 1024;     // 50MB parts
+
+/** Upload a file to R2. Picks single-PUT for small files, R2 multipart for
+ *  anything over ~90MB so we don't hit the Workers body limit. */
 export async function publishFile(sceneId: string, filename: string, body: Blob): Promise<void> {
+  if (body.size <= SINGLE_PUT_MAX) {
+    return publishFileSingle(sceneId, filename, body);
+  }
+  return publishFileMultipart(sceneId, filename, body);
+}
+
+async function publishFileSingle(sceneId: string, filename: string, body: Blob): Promise<void> {
   const res = await fetch(`/api/publish/${encodeURIComponent(sceneId)}/${encodeURIComponent(filename)}`, {
     method: 'PUT',
     headers: {
@@ -26,9 +40,55 @@ export async function publishFile(sceneId: string, filename: string, body: Blob)
     },
     body,
   });
-  if (!res.ok) {
-    throw new Error(`publish failed: ${res.status} ${res.statusText} (${filename})`);
+  if (!res.ok) throw new Error(`publish failed: ${res.status} ${res.statusText} (${filename})`);
+}
+
+async function publishFileMultipart(sceneId: string, filename: string, body: Blob): Promise<void> {
+  const baseUrl = `/api/publish/${encodeURIComponent(sceneId)}/${encodeURIComponent(filename)}`;
+  const contentType = body.type || 'application/octet-stream';
+
+  // 1. Create multipart upload, get an uploadId.
+  const createRes = await fetch(`${baseUrl}?action=create&contentType=${encodeURIComponent(contentType)}`, {
+    method: 'POST',
+    headers: { 'Authorization': authHeader() },
+  });
+  if (!createRes.ok) throw new Error(`multipart create failed: ${createRes.status}`);
+  const { uploadId } = await createRes.json() as { uploadId: string };
+
+  // 2. Upload parts sequentially. (Could parallelise but home-internet uplink
+  //    is the bottleneck anyway, and serial keeps memory usage flat.)
+  const parts: Array<{ partNumber: number; etag: string }> = [];
+  try {
+    for (let offset = 0, partNumber = 1; offset < body.size; offset += CHUNK_SIZE, partNumber++) {
+      const chunk = body.slice(offset, Math.min(offset + CHUNK_SIZE, body.size));
+      const partRes = await fetch(`${baseUrl}?action=part&uploadId=${encodeURIComponent(uploadId)}&part=${partNumber}`, {
+        method: 'PUT',
+        headers: { 'Authorization': authHeader(), 'Content-Type': contentType },
+        body: chunk,
+      });
+      if (!partRes.ok) throw new Error(`part ${partNumber} failed: ${partRes.status}`);
+      const { etag } = await partRes.json() as { etag: string };
+      parts.push({ partNumber, etag });
+    }
+  } catch (e) {
+    // Try to clean up so we don't leave a half-finished upload sitting on R2
+    // (R2 charges for orphaned multipart uploads after the lifecycle window).
+    try {
+      await fetch(`${baseUrl}?action=abort&uploadId=${encodeURIComponent(uploadId)}`, {
+        method: 'POST',
+        headers: { 'Authorization': authHeader() },
+      });
+    } catch { /* ignore */ }
+    throw e;
   }
+
+  // 3. Tell R2 to stitch the parts into the final object.
+  const completeRes = await fetch(`${baseUrl}?action=complete&uploadId=${encodeURIComponent(uploadId)}`, {
+    method: 'POST',
+    headers: { 'Authorization': authHeader(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parts }),
+  });
+  if (!completeRes.ok) throw new Error(`multipart complete failed: ${completeRes.status}`);
 }
 
 /** Delete one object from R2. */
