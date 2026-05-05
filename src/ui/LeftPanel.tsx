@@ -1392,31 +1392,27 @@ function useTouchDevice(): boolean {
 
 /**
  * Mobile-only sidebar block. Mouse-wheel / keyboard speed controls don't exist
- * on phones, so we surface preset buttons (slow / normal / fast) for walk
- * speed. The active SceneManager exposes `setMoveSpeed` via the
- * `window.__sceneManager` global, which both engines write into the
- * controller's `options.moveSpeed`.
+ * on phones, so we surface a continuous slider for walk speed. The active
+ * SceneManager exposes `setMoveSpeed` via the `window.__sceneManager` global,
+ * which both engines write into the controller's `options.moveSpeed`.
  */
-const MOVE_SPEED_PRESETS: Array<{ id: 'slow' | 'normal' | 'fast'; label: string; speed: number }> = [
-  { id: 'slow', label: 'ゆっくり', speed: 1.5 },
-  { id: 'normal', label: 'ふつう', speed: 3 },
-  { id: 'fast', label: 'はやく', speed: 6 },
-];
+const MOBILE_SPEED_MIN = 0.5;
+const MOBILE_SPEED_MAX = 10;
+const MOBILE_SPEED_DEFAULT = 3;
 
 function MobileToolsBlock({ onClose }: { onClose: () => void }) {
-  const [activeId, setActiveId] = useState<'slow' | 'normal' | 'fast'>('normal');
+  const [speed, setSpeed] = useState(MOBILE_SPEED_DEFAULT);
 
-  const onPick = (preset: typeof MOVE_SPEED_PRESETS[number]) => {
-    setActiveId(preset.id);
+  const apply = (s: number) => {
+    setSpeed(s);
     const sm = (window as unknown as { __sceneManager?: { setMoveSpeed?: (s: number) => void } }).__sceneManager;
-    sm?.setMoveSpeed?.(preset.speed);
+    sm?.setMoveSpeed?.(s);
   };
 
-  // Apply the default on mount so the first speed lands on the camera even if
-  // the user never taps a preset.
+  // Push the default into the engine on first render so the first move uses
+  // a known speed regardless of whatever the manifest had.
   useEffect(() => {
-    onPick(MOVE_SPEED_PRESETS.find((p) => p.id === 'normal')!);
-    // Intentionally run only once on mount.
+    apply(MOBILE_SPEED_DEFAULT);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1427,34 +1423,23 @@ function MobileToolsBlock({ onClose }: { onClose: () => void }) {
         <div style={{ flex: 1 }} />
         <button onClick={onClose} style={overviewCloseBtn} title="閉じる">×</button>
       </div>
-      <div style={{ display: 'flex', gap: 4 }}>
-        {MOVE_SPEED_PRESETS.map((p) => {
-          const active = p.id === activeId;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => onPick(p)}
-              style={{
-                flex: 1,
-                padding: '10px 6px',
-                fontSize: 12,
-                fontWeight: 600,
-                background: active ? 'rgba(59,130,246,0.18)' : 'rgba(255,255,255,0.08)',
-                border: `1px solid ${active ? 'rgba(59,130,246,0.55)' : 'rgba(0,0,0,0.12)'}`,
-                color: active ? '#1d4ed8' : 'rgba(31,41,55,0.85)',
-                borderRadius: 6,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
-              {p.label}
-            </button>
-          );
-        })}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+        <span style={{ fontSize: 10.5, color: 'rgba(31,41,55,0.55)' }}>遅</span>
+        <input
+          type="range"
+          min={MOBILE_SPEED_MIN}
+          max={MOBILE_SPEED_MAX}
+          step={0.5}
+          value={speed}
+          onChange={(e) => apply(parseFloat(e.target.value))}
+          style={{ flex: 1, accentColor: '#3b82f6' }}
+        />
+        <span style={{ fontSize: 10.5, color: 'rgba(31,41,55,0.55)' }}>速</span>
       </div>
-      <div style={{ marginTop: 6, fontSize: 10.5, color: 'rgba(31,41,55,0.55)', lineHeight: 1.5 }}>
-        スマホで歩くスピードを調整できます。
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, fontSize: 11, color: 'rgba(31,41,55,0.7)', fontFamily: 'monospace' }}>
+        <span>{MOBILE_SPEED_MIN.toFixed(1)} m/s</span>
+        <span style={{ fontWeight: 700, color: '#1d4ed8' }}>{speed.toFixed(1)} m/s</span>
+        <span>{MOBILE_SPEED_MAX.toFixed(1)} m/s</span>
       </div>
     </div>
   );
