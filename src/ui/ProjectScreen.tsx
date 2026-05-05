@@ -3,6 +3,27 @@ import { useProjectStore, type Project } from '../store/project-store';
 import { useUIStore, type ProjectType, type ViewMode } from '../store/ui-store';
 
 /**
+ * Generate an opaque, hard-to-guess project ID for the share URL. 16 lowercase
+ * alphanumeric chars from a CSPRNG — small enough to type / scan, large enough
+ * (~10²⁵ space) that customers can't enumerate other properties.
+ */
+function generateShareId(): string {
+  const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const len = 16;
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = new Uint8Array(len);
+    crypto.getRandomValues(bytes);
+    let out = '';
+    for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
+    return out;
+  }
+  // Fallback (insecure; should never run on modern browsers).
+  let out = '';
+  for (let i = 0; i < len; i++) out += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+  return out;
+}
+
+/**
  * Top-level landing screen. Lists all projects with their per-project type / view mode,
  * lets the user create new projects (picking type + view mode at creation time)
  * and delete existing ones.
@@ -106,7 +127,7 @@ export function ProjectScreen() {
           mode="create"
           onCancel={() => setShowCreate(false)}
           onSubmit={(payload) => {
-            const id = `proj_${(typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : Date.now()}`;
+            const id = generateShareId();
             addProject({ id, ...payload });
             setShowCreate(false);
           }}
