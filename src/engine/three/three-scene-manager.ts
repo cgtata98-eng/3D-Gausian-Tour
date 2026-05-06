@@ -345,11 +345,13 @@ export class ThreeSceneManager {
       if (type === 'walkable') {
         this.removeCollision('walkable');
         this.collisionWalkable = group;
-        this.controller.setWalkableTriangles(tris);
+        // Honor the live per-channel toggle — newly-loaded GLBs shouldn't
+        // silently re-arm physics if the user has it disabled.
+        this.controller.setWalkableTriangles(this.walkableEnabled ? tris : null);
       } else {
         this.removeCollision('block');
         this.collisionBlock = group;
-        this.controller.setBlockTriangles(tris);
+        this.controller.setBlockTriangles(this.blockEnabled ? tris : null);
       }
       return true;
     } catch (err) {
@@ -570,6 +572,23 @@ export class ThreeSceneManager {
   setCollisionVisible(v: boolean) {
     if (this.collisionWalkable) this.collisionWalkable.visible = v;
     if (this.collisionBlock) this.collisionBlock.visible = v;
+  }
+
+  /** Per-channel toggles — match PlayCanvas-side
+   *  `SceneManager.setCollisionWalkable/BlockEnabled`. */
+  private walkableEnabled = true;
+  private blockEnabled = true;
+  setCollisionWalkableEnabled(enabled: boolean) {
+    this.walkableEnabled = enabled;
+    this.controller.setWalkableTriangles(
+      (enabled && this.collisionWalkable) ? extractThreeTriangles(this.collisionWalkable) : null,
+    );
+  }
+  setCollisionBlockEnabled(enabled: boolean) {
+    this.blockEnabled = enabled;
+    this.controller.setBlockTriangles(
+      (enabled && this.collisionBlock) ? extractThreeTriangles(this.collisionBlock) : null,
+    );
   }
 
   /** Debug XZ-plane grid (matches the PlayCanvas-side `setGridVisible`). 20×20 m. */

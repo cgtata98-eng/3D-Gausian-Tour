@@ -475,12 +475,15 @@ export class ThreeCameraController {
     return { x: dir.x * safe, y: dir.y * safe, z: dir.z * safe };
   }
 
+  /** Cast DOWN from the player, capped at 3 m — see PlayCanvas-side
+   *  comment in `camera-controller.ts:raycastFloor` for the rationale.
+   *  The carve volume is too irregular to trust long-range rays. */
   private raycastFloor(x: number, z: number): number | null {
     if (!this.walkableTris) return null;
-    const start = (this.playerPos.y > 0 ? this.playerPos.y : 0) + 50;
+    const start = this.playerPos.y;
     const origin = new THREE.Vector3(x, start, z);
     const down = new THREE.Vector3(0, -1, 0);
-    const hit = raycastThreeTriangles(origin, down, this.walkableTris, 100);
+    const hit = raycastThreeTriangles(origin, down, this.walkableTris, 3);
     return hit ? hit.point.y : null;
   }
 

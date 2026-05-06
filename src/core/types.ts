@@ -76,10 +76,25 @@ export interface FloorPlanConfig {
   };
 }
 
-/** Collision model paths */
+/** Collision model paths.
+ *
+ * `walkable` / `block` always point at the **currently active** GLB — the
+ * loader / publish path never reads anything else. Authors can keep both a
+ * hand-crafted ("manual") set and an auto-generated ("auto") set on the same
+ * plan; the inactive set lives in the matching `manual*` / `auto*` stash so
+ * flipping `source` doesn't lose work or trigger a slow re-gen.
+ *
+ * Legacy scenes only have `walkable` / `block` and no `source` — they are
+ * implicitly treated as `'manual'` and migrated lazily on first edit.
+ */
 export interface CollisionConfig {
   walkable: string;
   block: string;
+  source?: 'manual' | 'auto';
+  manualWalkable?: string;
+  manualBlock?: string;
+  autoWalkable?: string;
+  autoBlock?: string;
 }
 
 /** Initial camera position mode */
@@ -398,7 +413,8 @@ export interface ViewerToolbarConfig {
    *  panoramas via prompt; results are saved to the plan's AI history and can
    *  be browsed / downloaded like manual color variants. Default ON. */
   aiGenerate?: boolean;
-  /** Sidebar size preset. Default 'large'. */
+  /** Sidebar size preset. Default 'small' (compact). Set 'large' to make
+   *  the sidebar fill the viewport top-to-bottom. */
   size?: SidebarSize;
   /**
    * Display order of sidebar blocks. Items not present fall back to their default

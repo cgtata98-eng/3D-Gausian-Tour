@@ -64,10 +64,30 @@ function stripLegacyTopLevelFields(m: SceneManifest): SceneManifest {
 
 type SceneSettingsLike = SceneManifest['settings'] & { fixedPosition?: unknown };
 
+/** Lift legacy `collision: { walkable, block }` into the manual stash so the
+ *  source selector has something to show / restore even before the user
+ *  re-uploads. Existing scenes pre-date the manual / auto split. */
+function migrateCollisionShape(m: SceneManifest): SceneManifest {
+  if (!m.plans) return m;
+  return {
+    ...m,
+    plans: m.plans.map((p) => {
+      const c = p.collision;
+      if (!c || c.source) return p; // already migrated or no collision
+      const next = { ...c, source: 'manual' as const };
+      if (c.walkable && !c.manualWalkable) next.manualWalkable = c.walkable;
+      if (c.block && !c.manualBlock) next.manualBlock = c.block;
+      return { ...p, collision: next };
+    }),
+  };
+}
+
 /** Ensure manifest.plans is populated (synthesising one entry from legacy fields if needed). */
 function ensurePlans(m: SceneManifest): SceneManifest {
-  if (m.plans && m.plans.length > 0) return stripLegacyTopLevelFields(m);
-  return stripLegacyTopLevelFields({ ...m, plans: [synthesizeDefaultPlan(m)] });
+  const withPlans = m.plans && m.plans.length > 0
+    ? stripLegacyTopLevelFields(m)
+    : stripLegacyTopLevelFields({ ...m, plans: [synthesizeDefaultPlan(m)] });
+  return migrateCollisionShape(withPlans);
 }
 
 interface SceneState {
@@ -92,8 +112,18 @@ interface SceneState {
   /** Set / clear the SOG bundle marker for a plan. The actual files live in IDB
    *  under the prefix `splat:<sceneId>:<planId>:sog/<filename>`. */
   setPlanSplatSog: (id: string, splatSog: string | undefined) => void;
-  /** Set / clear a collision GLB reference (IDB ref or relative path) for a plan. */
-  setPlanCollision: (id: string, type: 'walkable' | 'block', ref: string | undefined) => void;
+  /** Set / clear a collision GLB reference (IDB ref or relative path) for a plan.
+   *  `source` decides which stash field is updated (`manualWalkable` /
+   *  `autoWalkable` etc). The active `walkable` / `block` is also rewritten
+   *  if the plan's currently selected source matches — so uploading a manual
+   *  GLB while `source === 'auto'` only fills the manual stash and leaves
+   *  the active mesh untouched. */
+  setPlanCollision: (id: string, source: 'manual' | 'auto', type: 'walkable' | 'block', ref: string | undefined) => void;
+  /** Switch which collision set (manual vs auto) is currently active. The
+   *  walkable / block fields get repointed at whatever the chosen stash
+   *  holds; missing stash entries are cleared so the loader doesn't get
+   *  half-state. No-op if the matching stash is empty. */
+  setPlanCollisionSource: (id: string, source: 'manual' | 'auto') => void;
   /** Remember the user-facing filename of the uploaded splat (for Debug UI display). */
   setPlanSplatSourceName: (id: string, name: string | undefined) => void;
   /** Update the splat transform (rotation / position) for a plan. Pass `null` to clear. */
@@ -227,23 +257,62 @@ export const useSceneStore = create<SceneState>((set) => ({
       },
     };
   }),
-  setPlanCollision: (id, type, ref) => set((s) => {
+  setPlanCollision: (id, source, type, ref) => set((s) => {
     if (!s.manifest?.plans) return s;
+    const stashKey = `${source}${type === 'walkable' ? 'Walkable' : 'Block'}` as
+      'manualWalkable' | 'manualBlock' | 'autoWalkable' | 'autoBlock';
     return {
       manifest: {
         ...s.manifest,
         plans: s.manifest.plans.map((p) => {
           if (p.id !== id) return p;
           const cur = p.collision ?? { walkable: '', block: '' };
-          const next = { ...cur, [type]: ref ?? '' };
-          // Drop the field entirely if both sides are empty so the plan stays
-          // clean rather than carrying stub paths.
-          if (!next.walkable && !next.block) {
+          // Default a missing source to 'manual' so legacy scenes keep
+          // behaving as before — first edit migrates them.
+          const activeSource = cur.source ?? 'manual';
+          const next: typeof cur = { ...cur, [stashKey]: ref ?? '' };
+          // Mirror the stash to the active field only if this source is the
+          // one currently in use. Otherwise the active mesh stays put.
+          if (source === activeSource) next[type] = ref ?? '';
+          // Persist source so downstream readers see a consistent state.
+          next.source = activeSource;
+          // Drop the whole config if every slot ends up empty.
+          const empty = !next.walkable && !next.block && !next.manualWalkable
+            && !next.manualBlock && !next.autoWalkable && !next.autoBlock;
+          if (empty) {
             const np = { ...p };
             delete np.collision;
             return np;
           }
           return { ...p, collision: next };
+        }),
+      },
+    };
+  }),
+  setPlanCollisionSource: (id, source) => set((s) => {
+    if (!s.manifest?.plans) return s;
+    return {
+      manifest: {
+        ...s.manifest,
+        plans: s.manifest.plans.map((p) => {
+          if (p.id !== id) return p;
+          const cur = p.collision;
+          if (!cur) return p;
+          const w = source === 'manual' ? cur.manualWalkable : cur.autoWalkable;
+          const b = source === 'manual' ? cur.manualBlock : cur.autoBlock;
+          // Stash empty for that source → leave active fields alone, just
+          // record the user's intent so future uploads land in the right
+          // bucket.
+          if (!w && !b) return { ...p, collision: { ...cur, source } };
+          return {
+            ...p,
+            collision: {
+              ...cur,
+              source,
+              walkable: w ?? '',
+              block: b ?? '',
+            },
+          };
         }),
       },
     };

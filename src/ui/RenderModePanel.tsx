@@ -2,6 +2,7 @@ import { useUIStore } from '../store/ui-store';
 import { useSceneStore } from '../store/scene-store';
 import { RENDER_PRESETS } from '../engine/render-presets';
 import type { RenderMode } from '../engine/gsplat-loader';
+import { tokens } from './design-tokens';
 
 const MODES: { id: RenderMode; label: string }[] = [
   { id: 'default', label: 'Default' },
@@ -25,38 +26,58 @@ export function RenderModePanel() {
   };
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: '10px',
-      left: '10px',
-      display: 'flex',
-      gap: '4px',
-      padding: '6px 8px',
-      background: 'rgba(0, 0, 0, 0.6)',
-      borderRadius: '8px',
-      backdropFilter: 'blur(10px)',
-    }}>
-      {MODES.map((m) => (
-        <button
-          key={m.id}
-          onClick={() => apply(m.id)}
-          style={{
-            padding: '6px 12px',
-            border: 'none',
-            borderRadius: '6px',
-            background: renderMode === m.id
-              ? 'rgba(255, 255, 255, 0.3)'
-              : 'rgba(255, 255, 255, 0.08)',
-            color: '#fff',
-            cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: renderMode === m.id ? 'bold' : 'normal',
-            transition: 'background 0.2s',
-          }}
-        >
-          {m.label}
-        </button>
-      ))}
+    <div style={panel}>
+      {MODES.map((m) => {
+        const active = renderMode === m.id;
+        return (
+          <button
+            key={m.id}
+            onClick={() => apply(m.id)}
+            style={{ ...seg, ...(active ? segActive : null) }}
+          >
+            {m.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
+
+const panel: React.CSSProperties = {
+  position: 'absolute',
+  top: 12,
+  left: 12,
+  display: 'flex',
+  gap: 4,
+  padding: 5,
+  background: tokens.glass.surfaceStrong,
+  backdropFilter: tokens.backdrop,
+  WebkitBackdropFilter: tokens.backdrop,
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.pill,
+  boxShadow: tokens.shadow.glass,
+  fontFamily: tokens.font.family,
+  zIndex: 5,
+};
+
+const seg: React.CSSProperties = {
+  padding: '7px 14px',
+  border: '1px solid transparent',
+  borderRadius: tokens.radius.pill,
+  background: 'transparent',
+  color: tokens.color.textMute,
+  cursor: 'pointer',
+  fontSize: 11.5,
+  fontWeight: 600,
+  fontFamily: tokens.font.family,
+  outline: 'none',
+  transition: `background ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
+};
+
+const segActive: React.CSSProperties = {
+  background: tokens.gradient.accent,
+  borderColor: tokens.color.accentBorder,
+  color: tokens.color.text,
+  boxShadow: tokens.shadow.glassAccent,
+  fontWeight: 700,
+};

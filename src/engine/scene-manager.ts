@@ -61,6 +61,13 @@ export class SceneManager {
   private vpSyncTimer: number | null = null;
   private collisionWalkable: CollisionEntity | null = null;
   private collisionBlock: CollisionEntity | null = null;
+  /** Per-channel toggles for whether the loaded collision GLBs are pushed
+   *  to the camera controller. Driven from `useUIStore.useCollisionWalkable
+   *  / useCollisionBlock` via {@link setCollisionWalkableEnabled} /
+   *  {@link setCollisionBlockEnabled}. Default true so existing flows keep
+   *  working without any UI wiring. */
+  private walkableEnabled = true;
+  private blockEnabled = true;
   private viewMode: ViewMode = 'splat';
   /** Snapshot of skybox state captured when entering 360 mode, restored on exit. */
   private savedSkybox: SkyboxSnapshot | null = null;
@@ -862,15 +869,18 @@ export class SceneManager {
     } catch (e) { console.error(`Failed to load ${type} collision from ${ref}:`, e); return false; }
   }
 
-  /** Re-extract triangles from one or both collision entities and push to the camera controller. */
+  /** Re-extract triangles from one or both collision entities and push to the camera controller.
+   *  Honors per-channel toggles — pushes `null` when physics is disabled
+   *  even if the GLB is loaded, so newly-loaded meshes don't silently
+   *  re-arm collision behind the user's back. */
   private syncCollisionTrianglesToController(only?: 'walkable' | 'block') {
     if (!this.cameraController) return;
     if (!only || only === 'walkable') {
-      const tris = this.collisionWalkable ? extractTrianglesFromEntity(this.collisionWalkable.entity) : null;
+      const tris = (this.walkableEnabled && this.collisionWalkable) ? extractTrianglesFromEntity(this.collisionWalkable.entity) : null;
       this.cameraController.setWalkableTriangles(tris);
     }
     if (!only || only === 'block') {
-      const tris = this.collisionBlock ? extractTrianglesFromEntity(this.collisionBlock.entity) : null;
+      const tris = (this.blockEnabled && this.collisionBlock) ? extractTrianglesFromEntity(this.collisionBlock.entity) : null;
       this.cameraController.setBlockTriangles(tris);
     }
   }
@@ -878,6 +888,21 @@ export class SceneManager {
   setCollisionVisible(visible: boolean) {
     if (this.collisionWalkable) setColVis(this.collisionWalkable, visible);
     if (this.collisionBlock) setColVis(this.collisionBlock, visible);
+  }
+
+  /** Toggle whether the walkable GLB drives floor-snap (gravity). Off →
+   *  the player keeps their current Y instead of being raycast onto the
+   *  walkable surface. */
+  setCollisionWalkableEnabled(enabled: boolean) {
+    this.walkableEnabled = enabled;
+    this.syncCollisionTrianglesToController('walkable');
+  }
+  /** Toggle whether the block GLB blocks movement (walls). Off → walls are
+   *  ignored; the player passes straight through them. Independent of
+   *  walkable so you can disable just the walls while keeping gravity. */
+  setCollisionBlockEnabled(enabled: boolean) {
+    this.blockEnabled = enabled;
+    this.syncCollisionTrianglesToController('block');
   }
 
   setCollisionOpacity(opacity: number) {

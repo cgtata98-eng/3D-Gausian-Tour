@@ -14,6 +14,7 @@ import { AmbientAudio } from './AmbientAudio';
 import { FootstepAudio } from './FootstepAudio';
 import { useDemoModeCamera } from './useDemoModeCamera';
 import { MobileJoystick } from './MobileJoystick';
+import { tokens } from './design-tokens';
 
 /** Subset of methods Viewer needs, satisfied by both ThreeSceneManager and the
  *  PlayCanvas SceneManager. Lets `sceneManagerRef` hold either implementation. */
@@ -202,9 +203,9 @@ const wrap: React.CSSProperties = {
   width: '100vw',
   height: '100vh',
   overflow: 'hidden',
-  background: '#f7f8fa',
-  color: '#1f2937',
-  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+  background: tokens.color.bg,
+  color: tokens.color.text,
+  fontFamily: tokens.font.family,
 };
 
 const canvasStyle: React.CSSProperties = { width: '100%', height: '100%', display: 'block' };
@@ -212,13 +213,15 @@ const canvasStyle: React.CSSProperties = { width: '100%', height: '100%', displa
 const errorBox: React.CSSProperties = {
   position: 'absolute', top: '50%', left: '50%',
   transform: 'translate(-50%, -50%)',
-  background: 'rgba(255, 255, 255, 0.95)',
-  border: '1px solid rgba(220, 38, 38, 0.3)',
-  color: '#b91c1c',
-  padding: '18px 24px',
-  borderRadius: 10,
+  background: tokens.glass.surfaceStrong,
+  border: `1px solid ${tokens.color.dangerBorder}`,
+  color: tokens.color.text,
+  padding: '20px 26px',
+  borderRadius: tokens.radius.card,
   textAlign: 'center',
   maxWidth: 360,
-  backdropFilter: 'blur(12px)',
-  boxShadow: '0 8px 32px rgba(15,23,42,0.12)',
+  backdropFilter: tokens.backdrop,
+  WebkitBackdropFilter: tokens.backdrop,
+  boxShadow: tokens.shadow.dialog,
+  fontFamily: tokens.font.family,
 };

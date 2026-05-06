@@ -4,7 +4,8 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { spawn } from 'child_process';
 import { mkdtemp, writeFile, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
+import { createRequire } from 'module';
 
 /**
  * Dev-time middleware that proxies AI image-edit requests to OpenAI.
@@ -91,10 +92,30 @@ function aiImageProxy(env: Record<string, string>) {
 
 /**
  * Dev-time middleware that runs `splat-transform` as a child process to extract
- * a collision GLB from a splat file. The browser POSTs the splat (PLY / SPZ /
- * SOG bytes) and an `X-Input-Ext` header indicating the format; the middleware
- * writes a temp file, runs the CLI, reads back the generated `.collision.glb`,
- * and pipes it back as `model/gltf-binary`.
+ * a collision GLB from a splat file. The browser POSTs splat bytes plus headers
+ * describing the recipe (`X-Recipe: walkable | block`), input format, and a
+ * seed position inside the room (`X-Seed: x,y,z`). The middleware writes a
+ * temp file, runs the CLI with recipe-specific voxel-pipeline flags, reads
+ * back the generated `.collision.glb`, and pipes it back as
+ * `model/gltf-binary`.
+ *
+ * Two recipes — both follow the official splat-transform v2.0 voxel pipeline.
+ * Three knobs balance precision vs the well-known `RangeError: Set maximum
+ * size exceeded` (V8 caps Set at ~16.7 M entries):
+ *   `-D` (filter-cluster)        — keeps only the connected gaussian
+ *                                  cluster around the seed; deletes far
+ *                                  floaters that bloat the bbox.
+ *   `--voxel-params 0.10,0.1`    — 10 cm voxels. Default 5 cm produces
+ *                                  excessively detailed walls; 15 cm was
+ *                                  too coarse around door frames / steps.
+ *   `-F 100000`                  — cap working set at 100 K gaussians.
+ * 10 cm + filter-cluster keeps voxel count comfortably under the Set
+ * limit on typical room scans while keeping doors and steps recognisable.
+ *
+ * | recipe   | flags                                                   | output |
+ * |----------|---------------------------------------------------------|--------|
+ * | walkable | `--voxel-params 0.10,0.1 --seed-pos S --voxel-floor-fill 1.6 --voxel-carve 1.6,0.2 -K input -D -F 100000 output` | mesh of the carved capsule-swept navigable volume |
+ * | block    | `--voxel-params 0.10,0.1 --seed-pos S --voxel-external-fill 0.3 --voxel-floor-fill 1.6 -K input -D -F 100000 output` | mesh of the exterior-filled solid (walls + outside) |
  *
  * Production deploy doesn't carry the CLI — the customer-facing Worker has no
  * Node runtime, so this is dev-only. Authors generate collision in dev, then
@@ -117,12 +138,22 @@ function collisionGen() {
           res.end('Bad X-Input-Ext (expected ply/spz/sog/splat)');
           return;
         }
-        const shape = String(req.headers['x-shape'] ?? 'smooth').toLowerCase();
-        if (!['smooth', 'faces'].includes(shape)) {
+        const recipe = String(req.headers['x-recipe'] ?? '').toLowerCase();
+        if (!['walkable', 'block'].includes(recipe)) {
           res.statusCode = 400;
-          res.end('Bad X-Shape (expected smooth/faces)');
+          res.end('Bad X-Recipe (expected walkable/block)');
           return;
         }
+        const seedRaw = String(req.headers['x-seed'] ?? '0,0,0');
+        // Reject anything that isn't three comma-separated finite numbers.
+        // The seed becomes a CLI arg so we don't want shell-injection bait.
+        const seedParts = seedRaw.split(',').map((s) => Number(s.trim()));
+        if (seedParts.length !== 3 || seedParts.some((n) => !Number.isFinite(n))) {
+          res.statusCode = 400;
+          res.end('Bad X-Seed (expected "x,y,z" with finite numbers)');
+          return;
+        }
+        const seed = seedParts.join(',');
 
         // Stream the request body to a temp file so we don't buffer huge splats
         // in memory.
@@ -138,23 +169,91 @@ function collisionGen() {
           const collisionFile = join(tmp, 'out.collision.glb');
           await writeFile(inFile, body);
 
-          // npx for cross-platform: pulls the locally-installed splat-transform.
-          // -K <shape> turns on collision-mesh generation.
+          // Recipe-specific voxel-pipeline flags. See the table in the JSDoc
+          // above for what each recipe produces. `--voxel-params / --seed-pos
+          // / --voxel-* / -K` are GLOBAL options (go before the input file).
+          // `-D` (filter-cluster) and `-F` (decimate) are ACTIONS applied
+          // to the working set after input is read.
+          //
+          // Order matters: `-D` first to drop floaters and shrink the bbox,
+          // THEN `-F` to thin to 100 K. Doing -F first would decimate
+          // floaters proportionally and the bbox would still be huge.
+          const globalArgs = recipe === 'walkable'
+            ? ['--voxel-params', '0.10,0.1', '--seed-pos', seed, '--voxel-floor-fill', '1.6', '--voxel-carve', '1.6,0.2', '-K']
+            // Default --voxel-external-fill 1.6 dilates the exterior 1.6 m
+            // (≈16 voxels at 0.10 m). On scans with thin walls that dilation
+            // punches through and seals shut the navigable interior, leaving
+            // the player trapped in a solid block. 0.3 m (3 voxels at 10 cm)
+            // is just enough to bridge sub-decimeter scan gaps without
+            // eating room.
+            : ['--voxel-params', '0.10,0.1', '--seed-pos', seed, '--voxel-external-fill', '0.3', '--voxel-floor-fill', '1.6', '-K'];
+          const inputActions = ['-D', '-F', '100000'];
+
+          // Resolve the locally-installed CLI script and invoke it via the
+          // current Node binary. Avoids `npx`, which on a clean cache will
+          // hit the npm registry for an unscoped `splat-transform` package
+          // that doesn't exist (the real package is `@playcanvas/...`) and
+          // 404 within ~1s — which is the bug the user was seeing.
+          // The package's `exports` field hides ./package.json, so resolve
+          // the main entry (dist/index.{c,m}js) and walk up to bin/cli.mjs.
+          const require = createRequire(import.meta.url);
+          const mainPath = require.resolve('@playcanvas/splat-transform');
+          const cliPath = join(dirname(dirname(mainPath)), 'bin', 'cli.mjs');
+          const cliArgs = [cliPath, ...globalArgs, inFile, ...inputActions, outBase];
           const proc = spawn(
-            process.platform === 'win32' ? 'npx.cmd' : 'npx',
-            ['splat-transform', '-K', shape, inFile, outBase],
+            process.execPath,
+            cliArgs,
             { stdio: ['ignore', 'pipe', 'pipe'], shell: false },
           );
+
+          // If the browser aborts mid-flight (page reload, click again,
+          // navigate away) the child process otherwise keeps running, eats
+          // 1 GB+ of RAM, and we have no way to reach it from elsewhere.
+          // Hook the request lifecycle and reap the process explicitly.
+          let aborted = false;
+          const cleanup = () => {
+            if (proc.exitCode !== null) return;
+            aborted = true;
+            try { proc.kill('SIGTERM'); } catch { /* already dead */ }
+            // Win32 SIGTERM doesn't always propagate; force after a beat.
+            setTimeout(() => { try { proc.kill('SIGKILL'); } catch { /* ignore */ } }, 500);
+          };
+          req.on('close', cleanup);
+          res.on('close', cleanup);
+          // Mirror progress to the Vite console so the developer can see
+          // BVH-build / voxelize phases — voxelization is the long step
+          // (multiple minutes for ~1M-gaussian splats) and otherwise looks
+          // like the request is hung.
+          // eslint-disable-next-line no-console
+          console.log(`[gen-collision] ${recipe} ${ext} ${(body.length / 1024 / 1024).toFixed(1)}MB seed=${seed} → splat-transform ${globalArgs.join(' ')} <input> ${inputActions.join(' ')} <output>`);
           let stderr = '';
-          proc.stderr.on('data', (c) => { stderr += c.toString(); });
+          proc.stderr.on('data', (c) => {
+            const s = c.toString();
+            stderr += s;
+            process.stderr.write(s);
+          });
+          // The CLI prints progress to stdout (▸ Build voxels, etc).
+          let stdout = '';
+          proc.stdout.on('data', (c) => {
+            const s = c.toString();
+            stdout += s;
+            process.stdout.write(s);
+          });
           const code: number = await new Promise((resolve) => {
             proc.on('close', resolve);
             proc.on('error', () => resolve(1));
           });
+          // Client gave up — don't bother responding (socket is gone anyway).
+          if (aborted) return;
           if (code !== 0) {
             res.statusCode = 500;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: 'splat-transform failed', stderr: stderr.slice(-2000), code }));
+            res.end(JSON.stringify({
+              error: 'splat-transform failed',
+              code,
+              stderr: stderr.slice(-2000),
+              stdout: stdout.slice(-2000),
+            }));
             return;
           }
 

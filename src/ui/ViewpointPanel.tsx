@@ -1,10 +1,17 @@
+import { useState } from 'react';
 import { useSceneStore } from '../store/scene-store';
 import { useCameraStore } from '../store/camera-store';
+import { tokens } from './design-tokens';
 
 interface ViewpointPanelProps {
   onViewpointClick: (id: string) => void;
 }
 
+/**
+ * Floating viewpoint thumbnail strip — bottom-center of the viewer canvas.
+ * Glass pill panel with mini cards inside; active card uses the accent
+ * gradient + glow recipe to match the rest of the design system.
+ */
 export function ViewpointPanel({ onViewpointClick }: ViewpointPanelProps) {
   const manifest = useSceneStore((s) => s.manifest);
   const activePlanId = useSceneStore((s) => s.activePlanId);
@@ -20,30 +27,42 @@ export function ViewpointPanel({ onViewpointClick }: ViewpointPanelProps) {
 
   return (
     <div style={panel}>
-      {viewpoints.map((vp) => {
-        const active = activeViewpoint === vp.id;
-        // Manual (Plan.thumbnails) wins over the auto capture for this plan.
-        const thumb = planThumbs[vp.id] ?? autoThumbs[vp.id];
-        return (
-          <button
-            key={vp.id}
-            onClick={() => onViewpointClick(vp.id)}
-            style={{ ...card, ...(active ? cardActive : null) }}
-            onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(0,0,0,0.06)'; }}
-            onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.55)'; }}
-          >
-            <div style={thumbWrap}>
-              {thumb ? (
-                <img src={thumb} alt="" style={thumbImg} />
-              ) : (
-                <div style={thumbPlaceholder}>…</div>
-              )}
-            </div>
-            <span style={{ ...label, ...(active ? labelActive : null) }}>{vp.label}</span>
-          </button>
-        );
-      })}
+      {viewpoints.map((vp) => (
+        <ViewpointCard
+          key={vp.id}
+          label={vp.label}
+          thumb={planThumbs[vp.id] ?? autoThumbs[vp.id]}
+          active={activeViewpoint === vp.id}
+          onClick={() => onViewpointClick(vp.id)}
+        />
+      ))}
     </div>
+  );
+}
+
+function ViewpointCard({ label, thumb, active, onClick }: {
+  label: string;
+  thumb?: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        ...card,
+        ...(active ? cardActive : null),
+        ...(hover && !active ? cardHover : null),
+      }}
+    >
+      <div style={thumbWrap}>
+        {thumb ? <img src={thumb} alt="" style={thumbImg} /> : <div style={thumbPlaceholder}>…</div>}
+      </div>
+      <span style={{ ...labelStyle, ...(active ? labelActive : null) }}>{label}</span>
+    </button>
   );
 }
 
@@ -55,15 +74,16 @@ const panel: React.CSSProperties = {
   display: 'flex',
   gap: 6,
   padding: 8,
-  // Translucent white panel — 視点 list with subtle backdrop see-through.
-  background: 'rgba(255, 255, 255, 0.78)',
-  border: '1px solid rgba(0,0,0,0.06)',
-  borderRadius: 14,
-  backdropFilter: 'blur(16px)',
-  boxShadow: '0 8px 32px rgba(15,23,42,0.1)',
+  background: tokens.glass.surfaceStrong,
+  backdropFilter: tokens.backdrop,
+  WebkitBackdropFilter: tokens.backdrop,
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.lg,
+  boxShadow: tokens.shadow.glass,
   zIndex: 5,
   maxWidth: 'calc(100vw - 48px)',
   overflowX: 'auto',
+  fontFamily: tokens.font.family,
 };
 
 const card: React.CSSProperties = {
@@ -73,28 +93,35 @@ const card: React.CSSProperties = {
   gap: 6,
   width: 104,
   padding: 6,
-  border: '1px solid rgba(0,0,0,0.06)',
-  borderRadius: 10,
-  background: 'rgba(255,255,255,0.55)',
-  color: 'rgba(31,41,55,0.85)',
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.md,
+  background: tokens.gradient.surface,
+  color: tokens.color.text,
   cursor: 'pointer',
-  transition: 'background 0.15s, border-color 0.15s',
-  fontFamily: 'inherit',
+  fontFamily: tokens.font.family,
   flex: '0 0 auto',
+  outline: 'none',
+  transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}, transform ${tokens.transition}`,
+};
+
+const cardHover: React.CSSProperties = {
+  transform: 'translateY(-1px)',
+  boxShadow: tokens.shadow.glass,
 };
 
 const cardActive: React.CSSProperties = {
-  background: 'rgba(59,130,246,0.14)',
-  borderColor: 'rgba(59,130,246,0.5)',
+  background: tokens.gradient.accent,
+  borderColor: tokens.color.accentBorder,
+  boxShadow: tokens.shadow.glassAccent,
 };
 
 const thumbWrap: React.CSSProperties = {
   width: '100%',
   aspectRatio: '4 / 3',
-  borderRadius: 6,
+  borderRadius: tokens.radius.sm,
   overflow: 'hidden',
-  background: 'rgba(0,0,0,0.06)',
-  border: '1px solid rgba(0,0,0,0.06)',
+  background: tokens.color.surfaceSoft,
+  border: `1px solid ${tokens.color.border}`,
 };
 
 const thumbImg: React.CSSProperties = {
@@ -110,18 +137,17 @@ const thumbPlaceholder: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  color: 'rgba(31,41,55,0.35)',
+  color: tokens.color.textFaint,
   fontSize: 12,
 };
 
-const label: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
+const labelStyle: React.CSSProperties = {
+  fontSize: 11.5,
+  fontWeight: 600,
   letterSpacing: 0.3,
-  color: 'rgba(31,41,55,0.78)',
+  color: tokens.color.text,
 };
 
 const labelActive: React.CSSProperties = {
-  color: '#1d4ed8',
-  fontWeight: 600,
+  fontWeight: 700,
 };

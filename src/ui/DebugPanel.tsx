@@ -1,6 +1,12 @@
 import { useUIStore } from '../store/ui-store';
 import { useCameraStore } from '../store/camera-store';
+import { tokens } from './design-tokens';
 
+/**
+ * Floating dev overlay shown only when dev mode is on. Sits on top of the
+ * 3D canvas, so the surface is a translucent glass pill — the underlying
+ * scene shows through faintly without losing legibility.
+ */
 export function DebugPanel() {
   const {
     showCollision,
@@ -13,33 +19,20 @@ export function DebugPanel() {
   const position = useCameraStore((s) => s.position);
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: '10px',
-      right: '10px',
-      padding: '12px',
-      background: 'rgba(0, 0, 0, 0.7)',
-      borderRadius: '8px',
-      color: '#fff',
-      fontSize: '12px',
-      minWidth: '180px',
-      backdropFilter: 'blur(10px)',
-    }}>
-      <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#fff' }}>
-        DEV MODE
+    <div style={panel}>
+      <div style={title}>DEV MODE</div>
+
+      <div style={row}>
+        Pos: <span style={mono}>{position.map((v) => v.toFixed(2)).join(', ')}</span>
       </div>
 
-      <div style={{ marginBottom: '6px' }}>
-        Pos: {position.map((v) => v.toFixed(2)).join(', ')}
-      </div>
-
-      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', cursor: 'pointer' }}>
+      <label style={check}>
         <input type="checkbox" checked={showCollision} onChange={toggleCollision} />
         Collision
       </label>
 
       {showCollision && (
-        <div style={{ marginBottom: '6px', paddingLeft: '20px' }}>
+        <div style={{ paddingLeft: 22 }}>
           <input
             type="range"
             min="0"
@@ -47,16 +40,65 @@ export function DebugPanel() {
             step="0.05"
             value={collisionOpacity}
             onChange={(e) => setCollisionOpacity(parseFloat(e.target.value))}
-            style={{ width: '100%' }}
+            style={{ width: '100%', accentColor: tokens.color.accent }}
           />
-          <span>Opacity: {collisionOpacity.toFixed(2)}</span>
+          <div style={{ fontSize: 10.5, color: tokens.color.textMute, fontFamily: tokens.font.mono }}>
+            Opacity: {collisionOpacity.toFixed(2)}
+          </div>
         </div>
       )}
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+      <label style={check}>
         <input type="checkbox" checked={showDebugStats} onChange={toggleDebugStats} />
         Stats
       </label>
     </div>
   );
 }
+
+const panel: React.CSSProperties = {
+  position: 'absolute',
+  top: 12,
+  right: 12,
+  padding: '12px 14px',
+  background: tokens.glass.surfaceStrong,
+  backdropFilter: tokens.backdrop,
+  WebkitBackdropFilter: tokens.backdrop,
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.md,
+  boxShadow: tokens.shadow.glass,
+  color: tokens.color.text,
+  fontSize: 12,
+  fontFamily: tokens.font.family,
+  minWidth: 200,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+};
+const title: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 700,
+  letterSpacing: 1.0,
+  color: tokens.color.textMute,
+  textTransform: 'uppercase',
+};
+const row: React.CSSProperties = {
+  fontSize: 11,
+  color: tokens.color.textMute,
+  display: 'flex',
+  gap: 6,
+  alignItems: 'baseline',
+};
+const mono: React.CSSProperties = {
+  color: tokens.color.text,
+  fontFamily: tokens.font.mono,
+};
+const check: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  cursor: 'pointer',
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: tokens.color.text,
+};

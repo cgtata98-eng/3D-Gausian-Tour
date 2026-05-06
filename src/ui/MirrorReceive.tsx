@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { MirrorReceiver } from '../utils/mirror-rtc';
+import { tokens } from './design-tokens';
 
 /**
  * Receive-only mirror page. Mounted when the URL contains `?mirror=receive`.
@@ -17,8 +18,6 @@ export function MirrorReceive() {
       const v = videoRef.current;
       if (!v) return;
       v.srcObject = stream;
-      // Some browsers need an explicit play() after srcObject is assigned even
-      // with `autoPlay`; ignore the AbortError that fires if we're already playing.
       void v.play().catch(() => {});
       setConnected(true);
     });
@@ -31,7 +30,7 @@ export function MirrorReceive() {
       {!connected && (
         <div style={waiting}>
           <div style={spinner} />
-          <div>送信側を待っています…</div>
+          <div style={waitingTitle}>送信側を待っています…</div>
           <div style={waitingSub}>送信側のタブでシーンに入ると、ここに同じ画面が映ります</div>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
@@ -63,20 +62,26 @@ const waiting: React.CSSProperties = {
   justifyContent: 'center',
   gap: 14,
   color: '#fff',
-  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+  fontFamily: tokens.font.family,
   fontSize: 14,
   letterSpacing: 0.5,
 };
+const waitingTitle: React.CSSProperties = {
+  fontWeight: 600,
+};
 const waitingSub: React.CSSProperties = {
-  fontSize: 11,
-  color: 'rgba(255,255,255,0.6)',
-  marginTop: -8,
+  fontSize: 11.5,
+  color: 'rgba(255,255,255,0.55)',
+  marginTop: -6,
+  fontWeight: 500,
 };
 const spinner: React.CSSProperties = {
   width: 36,
   height: 36,
   border: '2px solid rgba(255,255,255,0.15)',
-  borderTopColor: '#3b82f6',
+  // Use the same accent hue as the rest of the design — keeps the loading
+  // visual identifiable as part of this app even on the black mirror canvas.
+  borderTopColor: tokens.color.accent,
   borderRadius: '50%',
   animation: 'spin 0.9s linear infinite',
 };

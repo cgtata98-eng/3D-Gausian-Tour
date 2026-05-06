@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCameraStore } from '../store/camera-store';
 import { useSceneStore } from '../store/scene-store';
 import { resolveScenePath } from '../core/scene-manifest';
+import { tokens } from './design-tokens';
 
 const PADDING = 20;
 
@@ -152,12 +153,15 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
 
   const defStyle: React.CSSProperties = {
     position: 'absolute', bottom: 24, left: 24, width: dW, height: dH,
-    background: 'rgba(255, 255, 255, 0.78)', borderRadius: 12,
-    backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(0,0,0,0.06)',
-    boxShadow: '0 8px 32px rgba(15,23,42,0.1)',
+    background: tokens.glass.surfaceStrong,
+    borderRadius: tokens.radius.card,
+    backdropFilter: tokens.backdrop,
+    WebkitBackdropFilter: tokens.backdrop,
+    border: `1px solid ${tokens.color.border}`,
+    boxShadow: tokens.shadow.glass,
     overflow: 'hidden', userSelect: 'none',
     zIndex: 4,
+    fontFamily: tokens.font.family,
   };
 
   if (collapsible && collapsed) {
@@ -171,14 +175,16 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
           position: 'absolute', bottom: baseBottom, left: baseLeft,
           width: 44, height: 44,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(255, 255, 255, 0.78)',
-          border: '1px solid rgba(0,0,0,0.06)',
-          borderRadius: 10,
-          backdropFilter: 'blur(16px)',
-          color: 'rgba(31,41,55,0.78)',
+          background: tokens.glass.surfaceStrong,
+          border: `1px solid ${tokens.color.border}`,
+          borderRadius: tokens.radius.pill,
+          backdropFilter: tokens.backdrop,
+          WebkitBackdropFilter: tokens.backdrop,
+          color: tokens.color.text,
           cursor: 'pointer',
-          boxShadow: '0 8px 32px rgba(15,23,42,0.1)',
+          boxShadow: tokens.shadow.glass,
           zIndex: 4,
+          outline: 'none',
         }}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -200,15 +206,20 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
             position: 'absolute', top: 8, right: 8,
             width: 26, height: 26,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(255,255,255,0.7)',
-            border: '1px solid rgba(0,0,0,0.08)',
-            borderRadius: 6,
-            color: 'rgba(31,41,55,0.85)',
+            background: tokens.glass.surfaceStrong,
+            border: `1px solid ${tokens.color.border}`,
+            borderRadius: tokens.radius.pill,
+            color: tokens.color.text,
             cursor: 'pointer',
-            fontSize: 14,
+            fontSize: 13,
             lineHeight: 1,
             padding: 0,
             zIndex: 2,
+            backdropFilter: tokens.backdrop,
+            WebkitBackdropFilter: tokens.backdrop,
+            boxShadow: tokens.shadow.glass,
+            outline: 'none',
+            fontFamily: tokens.font.family,
           }}
         >×</button>
       )}

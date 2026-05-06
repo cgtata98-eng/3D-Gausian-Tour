@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useProjectStore, type Project } from '../store/project-store';
 import { useUIStore, type ProjectType, type ViewMode } from '../store/ui-store';
 import { navigate } from '../utils/url';
+import { tokens } from './design-tokens';
 
 /**
  * Generate an opaque, hard-to-guess project ID for the share URL. 16 lowercase
@@ -18,7 +19,6 @@ function generateShareId(): string {
     for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
     return out;
   }
-  // Fallback (insecure; should never run on modern browsers).
   let out = '';
   for (let i = 0; i < len; i++) out += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
   return out;
@@ -28,6 +28,11 @@ function generateShareId(): string {
  * Top-level landing screen. Lists all projects with their per-project type / view mode,
  * lets the user create new projects (picking type + view mode at creation time)
  * and delete existing ones.
+ *
+ * Visual: glass-pill aesthetic — see `design-tokens.ts` for colour, gradient
+ * and shadow scale. Every interactive surface uses the standard pill recipe
+ * (white gradient + 1.5 px hairline border + inset top highlight + multi-
+ * layered drop shadow).
  */
 export function ProjectScreen() {
   const projects = useProjectStore((s) => s.projects);
@@ -42,7 +47,6 @@ export function ProjectScreen() {
   const editing = editingId ? projects.find((p) => p.id === editingId) : null;
 
   const handleOpen = (p: Project, mode: 'viewer' | 'debug') => {
-    // Sync the global UI state from this project's metadata so the engine renders correctly.
     setUiViewMode(p.viewMode);
     setUiProjectType(p.type);
     navigate(mode === 'viewer' ? `/viewer/${p.id}` : `/scene/${p.id}`);
@@ -53,11 +57,6 @@ export function ProjectScreen() {
     removeProject(p.id);
   };
 
-  /**
-   * ワンクリックでミラーリング開始: このタブを送信モードに切り替えつつ、別ウィンドウで
-   * 受信専用タブを開く。受信側は URL に `?mirror=receive` を付けて起動するので、
-   * App.tsx 側で URL パラメータを見て setMirrorMode を呼ぶ。再クリックで停止。
-   */
   const mirrorMode = useUIStore((s) => s.mirrorMode);
   const setMirrorMode = useUIStore((s) => s.setMirrorMode);
   const isMirroring = mirrorMode === 'send';
@@ -74,39 +73,46 @@ export function ProjectScreen() {
 
   return (
     <div style={S.root}>
-      <div style={S.header}>
-        <img src="/icon_GS.png" alt="" style={S.brandIcon} />
-        <span style={S.brand}>3D Gaussian Tour</span>
-        <div style={{ flex: 1 }} />
-        <button type="button" onClick={() => setShowCreate(true)} style={S.btnNew}>
-          + 新規プロジェクト
-        </button>
-      </div>
-
-      <div style={S.body}>
-        <div style={{ ...S.heading, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <div style={S.headingTitle}>プロジェクト一覧 ({projects.length})</div>
-            <div style={S.headingSub}>
-              種別と表示モードはプロジェクトごとに設定されます。各カードを開いて中身を編集してください。
-            </div>
-          </div>
-          <button
-            type="button"
+      {/* Floating header pill — brand left, primary action right. The wrap
+          fades the bg out so when the user scrolls, content disappears
+          "under" the pill rather than under a hard bar. */}
+      <div style={S.headerWrap}>
+        <div style={S.headerPill}>
+          <img src="/icon_GS.png" alt="" style={S.brandIcon} />
+          <span style={S.brand}>3D Gaussian Tour</span>
+          <div style={{ flex: 1 }} />
+          <PillButton
+            variant={isMirroring ? 'danger' : 'plain'}
             onClick={startMirroring}
-            style={isMirroring ? { ...S.btnMirror, ...S.btnMirrorActive } : S.btnMirror}
             title={isMirroring
               ? 'ミラーリング送信中 (クリックで停止)'
               : '自分のタブが送信モードに / 別ウィンドウで受信用ビューアが開く'}
           >
-            {isMirroring ? '⏹ ミラーリング停止' : '📡 ミラーリング開始'}
-          </button>
+            {isMirroring ? '⏹  ミラーリング停止' : '📡  ミラーリング'}
+          </PillButton>
+          <PillButton variant="accent" onClick={() => setShowCreate(true)}>
+            <span style={{ fontSize: 16, lineHeight: 1, marginRight: 2 }}>＋</span>
+            <span>新規プロジェクト</span>
+          </PillButton>
+        </div>
+      </div>
+
+      <div style={S.body}>
+        <div style={S.heading}>
+          <div style={S.headingTitle}>
+            プロジェクト一覧
+            <span style={S.headingCount}>{projects.length}</span>
+          </div>
+          <div style={S.headingSub}>
+            種別と表示モードはプロジェクトごとに設定されます。各カードを開いて中身を編集してください。
+          </div>
         </div>
 
         {projects.length === 0 ? (
           <div style={S.empty}>
-            プロジェクトがまだありません。<br />
-            右上の「+ 新規プロジェクト」から追加してください。
+            <div style={S.emptyIcon}>📦</div>
+            <div style={S.emptyTitle}>プロジェクトがまだありません</div>
+            <div style={S.emptySub}>右上の「＋ 新規プロジェクト」から追加してください。</div>
           </div>
         ) : (
           <div style={S.grid}>
@@ -150,6 +156,110 @@ export function ProjectScreen() {
   );
 }
 
+// ── Pill button primitive ─────────────────────────────────────────
+
+type PillVariant = 'plain' | 'accent' | 'success' | 'processing' | 'danger';
+
+function PillButton({
+  variant = 'plain',
+  onClick, disabled, title, children, fullWidth, style,
+}: {
+  variant?: PillVariant;
+  onClick?: () => void;
+  disabled?: boolean;
+  title?: string;
+  children: React.ReactNode;
+  fullWidth?: boolean;
+  /** Inline overrides — applied last, e.g. recolour text or tint a
+   *  shadow without spinning up a whole new variant. */
+  style?: React.CSSProperties;
+}) {
+  const [hover, setHover] = useState(false);
+  const [active, setActive] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => { setHover(false); setActive(false); }}
+      onMouseDown={() => setActive(true)}
+      onMouseUp={() => setActive(false)}
+      style={{
+        ...S.pillBase,
+        // `fullWidth` in a flex container = `flex: 1` (share row width).
+        // Standalone, fall back to `width: 100%` so it still spans.
+        ...(fullWidth ? { flex: 1, minWidth: 0 } : null),
+        ...VARIANT[variant].base,
+        ...(hover && !disabled ? VARIANT[variant].hover : null),
+        ...(active && !disabled ? VARIANT[variant].active : null),
+        ...(disabled ? S.disabled : null),
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// PillButton variants. All variants use the same dark-gray text colour
+// (`tokens.color.text`) — the pill *background* tint is what carries the
+// state semantics, not the text. This keeps every label legible against
+// every variant bg.
+const VARIANT: Record<PillVariant, { base: React.CSSProperties; hover: React.CSSProperties; active: React.CSSProperties }> = {
+  plain: {
+    base: {
+      background: tokens.gradient.surface,
+      borderColor: tokens.color.border,
+      color: tokens.color.text,
+      boxShadow: tokens.shadow.glass,
+    },
+    hover: { transform: 'translateY(-1px)', filter: 'brightness(1.02)' },
+    active: { transform: 'translateY(0)', filter: 'brightness(0.98)' },
+  },
+  accent: {
+    base: {
+      background: tokens.gradient.accent,
+      borderColor: tokens.color.accentBorder,
+      color: tokens.color.text,
+      boxShadow: tokens.shadow.glassAccent,
+    },
+    hover: { transform: 'translateY(-1px)', filter: 'brightness(1.03) saturate(1.05)' },
+    active: { transform: 'translateY(0)', filter: 'brightness(0.97)' },
+  },
+  success: {
+    base: {
+      background: tokens.gradient.success,
+      borderColor: tokens.color.successBorder,
+      color: tokens.color.text,
+      boxShadow: tokens.shadow.glassSuccess,
+    },
+    hover: { transform: 'translateY(-1px)', filter: 'brightness(1.03)' },
+    active: { transform: 'translateY(0)', filter: 'brightness(0.97)' },
+  },
+  processing: {
+    base: {
+      background: tokens.gradient.processing,
+      borderColor: tokens.color.processingBorder,
+      color: tokens.color.text,
+      boxShadow: tokens.shadow.glassProcessing,
+    },
+    hover: { transform: 'translateY(-1px)' },
+    active: { transform: 'translateY(0)' },
+  },
+  danger: {
+    base: {
+      background: tokens.gradient.danger,
+      borderColor: tokens.color.dangerBorder,
+      color: tokens.color.text,
+      boxShadow: tokens.shadow.glass,
+    },
+    hover: { transform: 'translateY(-1px)', filter: 'brightness(1.03)' },
+    active: { transform: 'translateY(0)' },
+  },
+};
+
 // ── Card ──────────────────────────────────────────────────────────
 
 function ProjectCard({ project, onOpen, onDelete, onEdit }: {
@@ -162,6 +272,7 @@ function ProjectCard({ project, onOpen, onDelete, onEdit }: {
   const modeLabel = project.viewMode === 'splat' ? '3DGS' : '360VR';
   const isMansion = project.type === 'mansion';
   const [copied, setCopied] = useState(false);
+  const [hover, setHover] = useState(false);
 
   const copyShareLink = async () => {
     const url = `${window.location.origin}${window.location.pathname}#/viewer/${project.id}`;
@@ -175,7 +286,11 @@ function ProjectCard({ project, onOpen, onDelete, onEdit }: {
   };
 
   return (
-    <div style={S.card}>
+    <div
+      style={{ ...S.card, ...(hover ? S.cardHover : null) }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
       <div style={{ ...S.thumb, background: isMansion ? THUMB_GRAD_MANSION : THUMB_GRAD_OTHER }}>
         {project.thumbnail ? (
           <img src={project.thumbnail} alt={project.name} style={S.thumbImg} />
@@ -191,23 +306,9 @@ function ProjectCard({ project, onOpen, onDelete, onEdit }: {
           >
             {copied ? '✓ コピー済' : '🔗 リンク'}
           </button>
-          <div style={{ display: 'flex', gap: 6, pointerEvents: 'none' }}>
-            <button
-              type="button"
-              onClick={onEdit}
-              title="プロジェクト情報を編集"
-              style={S.editBtn}
-            >
-              ✎
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              title="このプロジェクトを削除"
-              style={S.deleteBtn}
-            >
-              ✕
-            </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button type="button" onClick={onEdit} title="プロジェクト情報を編集" style={S.iconBtn}>✎</button>
+            <button type="button" onClick={onDelete} title="このプロジェクトを削除" style={{ ...S.iconBtn, ...S.iconBtnDanger }}>✕</button>
           </div>
         </div>
       </div>
@@ -216,16 +317,45 @@ function ProjectCard({ project, onOpen, onDelete, onEdit }: {
         <div style={S.cardName}>{project.name}</div>
         {project.subtitle && <div style={S.cardSub}>{project.subtitle}</div>}
         <div style={S.tagRow}>
-          <span style={{ ...S.tag, ...(isMansion ? S.tagMansion : S.tagOther) }}>{typeLabel}</span>
-          <span style={{ ...S.tag, ...(project.viewMode === 'splat' ? S.tagSplat : S.tag360) }}>{modeLabel}</span>
+          <Tag variant={isMansion ? 'accent' : 'warn'}>{typeLabel}</Tag>
+          <Tag variant={project.viewMode === 'splat' ? 'success' : 'processing'}>{modeLabel}</Tag>
         </div>
       </div>
 
       <div style={S.cardActions}>
-        <button type="button" onClick={() => onOpen('debug')} style={S.btnSecondary}>編集</button>
-        <button type="button" onClick={() => onOpen('viewer')} style={S.btnPrimary}>開く →</button>
+        {/* Both card actions use a neutral light-gray pill — colour
+            accents on this screen are reserved for the global
+            "create / mirror" header buttons, not per-card actions. */}
+        <PillButton variant="plain" fullWidth onClick={() => onOpen('debug')} style={S.pillNeutral}>編集</PillButton>
+        <PillButton variant="plain" fullWidth onClick={() => onOpen('viewer')} style={S.pillNeutral}>開く</PillButton>
       </div>
     </div>
+  );
+}
+
+// ── Tag (mini pill) ───────────────────────────────────────────────
+
+function Tag({ variant, children }: { variant: 'accent' | 'success' | 'processing' | 'warn'; children: React.ReactNode }) {
+  // Same rule as PillButton: bg colour carries the state, text stays dark
+  // gray so every tag is readable regardless of variant.
+  const palette = {
+    accent:     { bg: tokens.gradient.accent,     border: tokens.color.accentBorder,     text: tokens.color.text },
+    success:    { bg: tokens.gradient.success,    border: tokens.color.successBorder,    text: tokens.color.text },
+    processing: { bg: tokens.gradient.processing, border: tokens.color.processingBorder, text: tokens.color.text },
+    warn:       { bg: tokens.gradient.warn,       border: tokens.color.warnBorder,       text: tokens.color.text },
+  }[variant];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center',
+      fontSize: 10.5, fontWeight: 700, letterSpacing: 0.7,
+      padding: '3px 11px',
+      borderRadius: tokens.radius.pill,
+      background: palette.bg,
+      border: `1px solid ${palette.border}`,
+      color: palette.text,
+      fontFamily: tokens.font.mono,
+      boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.9)',
+    }}>{children}</span>
   );
 }
 
@@ -284,53 +414,33 @@ function ProjectDialog({ mode, initial, onCancel, onSubmit }: {
           </Field>
 
           <Field label="種別">
-            <div style={S.segment}>
-              <button
-                type="button"
-                style={{ ...S.segBtn, ...(type === 'mansion' ? S.segBtnActive : null) }}
-                onClick={() => setType('mansion')}
-              >
-                <span style={S.segTitle}>住居・店舗</span>
-                <span style={S.segSub}>住宅 / マンション / 店舗</span>
-              </button>
-              <button
-                type="button"
-                style={{ ...S.segBtn, ...(type === 'other' ? S.segBtnActive : null) }}
-                onClick={() => setType('other')}
-              >
-                <span style={S.segTitle}>その他</span>
-                <span style={S.segSub}>展示 / 屋外 / 任意の空間</span>
-              </button>
-            </div>
+            <PillToggle
+              value={type}
+              onChange={setType}
+              options={[
+                { value: 'mansion', title: '住居・店舗', sub: '住宅 / マンション / 店舗' },
+                { value: 'other',   title: 'その他',     sub: '展示 / 屋外 / 任意の空間' },
+              ]}
+            />
           </Field>
 
           <Field label="表示モード">
-            <div style={S.segment}>
-              <button
-                type="button"
-                style={{ ...S.segBtn, ...(viewMode === 'splat' ? S.segBtnActive : null) }}
-                onClick={() => setViewMode('splat')}
-              >
-                <span style={S.segTitle}>3DGS</span>
-                <span style={S.segSub}>Gaussian Splat 回遊</span>
-              </button>
-              <button
-                type="button"
-                style={{ ...S.segBtn, ...(viewMode === '360' ? S.segBtnActive : null) }}
-                onClick={() => setViewMode('360')}
-              >
-                <span style={S.segTitle}>360VR</span>
-                <span style={S.segSub}>視点ごとのパノラマ</span>
-              </button>
-            </div>
+            <PillToggle
+              value={viewMode}
+              onChange={setViewMode}
+              options={[
+                { value: 'splat', title: '3DGS',  sub: 'Gaussian Splat 回遊' },
+                { value: '360',   title: '360VR', sub: '視点ごとのパノラマ' },
+              ]}
+            />
           </Field>
         </div>
 
         <div style={S.dialogFooter}>
-          <button type="button" onClick={onCancel} style={S.btnCancel}>キャンセル</button>
-          <button type="button" onClick={submit} disabled={!name.trim()} style={{ ...S.btnPrimary, opacity: name.trim() ? 1 : 0.4, cursor: name.trim() ? 'pointer' : 'not-allowed' }}>
+          <PillButton variant="plain" onClick={onCancel}>キャンセル</PillButton>
+          <PillButton variant="accent" disabled={!name.trim()} onClick={submit}>
             {submitLabel}
-          </button>
+          </PillButton>
         </div>
       </div>
     </div>
@@ -339,10 +449,41 @@ function ProjectDialog({ mode, initial, onCancel, onSubmit }: {
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <span style={S.fieldLabel}>{label}{required && <span style={S.required}> *</span>}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * Pill segmented control. Outer "gutter" uses an inset shadow (sunken
+ * channel) and the active inner pill rises out of it with the standard
+ * accent glow recipe — the exact pattern from the "Create Project /
+ * My Projects" reference.
+ */
+function PillToggle<T extends string>({ value, onChange, options }: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; title: string; sub?: string }[];
+}) {
+  return (
+    <div style={S.pillToggle}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            style={{ ...S.pillToggleSeg, ...(active ? S.pillToggleSegActive : null) }}
+          >
+            <span style={S.pillToggleTitle}>{o.title}</span>
+            {o.sub && <span style={S.pillToggleSub}>{o.sub}</span>}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -352,109 +493,138 @@ function ThumbPlaceholder({ type }: { type: ProjectType }) {
   if (type === 'mansion') {
     return (
       <svg viewBox="0 0 64 64" width="56" height="56" style={S.thumbIcon}>
-        <path d="M8 32 L32 12 L56 32 V52 H40 V36 H24 V52 H8 Z" fill="none" stroke="#bfdbfe" strokeWidth="2.5" strokeLinejoin="round" />
-        <path d="M28 22 H36" stroke="#bfdbfe" strokeWidth="2" strokeLinecap="round" />
+        <path d="M8 32 L32 12 L56 32 V52 H40 V36 H24 V52 H8 Z" fill="none" stroke="#c8d3e8" strokeWidth="2.5" strokeLinejoin="round" />
+        <path d="M28 22 H36" stroke="#c8d3e8" strokeWidth="2" strokeLinecap="round" />
       </svg>
     );
   }
   return (
     <svg viewBox="0 0 64 64" width="56" height="56" style={S.thumbIcon}>
-      <rect x="10" y="14" width="44" height="40" rx="2" fill="none" stroke="#fcd34d" strokeWidth="2.5" />
-      <path d="M10 24 H54" stroke="#fcd34d" strokeWidth="2" />
-      <rect x="18" y="32" width="8" height="14" fill="#fcd34d" opacity="0.35" />
-      <rect x="32" y="32" width="14" height="8" fill="#fcd34d" opacity="0.35" />
+      <rect x="10" y="14" width="44" height="40" rx="2" fill="none" stroke="#e2cda3" strokeWidth="2.5" />
+      <path d="M10 24 H54" stroke="#e2cda3" strokeWidth="2" />
+      <rect x="18" y="32" width="8" height="14" fill="#e2cda3" opacity="0.45" />
+      <rect x="32" y="32" width="14" height="8" fill="#e2cda3" opacity="0.45" />
     </svg>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────
 
-const COLOR = {
-  bg: '#f7f8fa',
-  panel: '#ffffff',
-  panel2: '#f1f3f6',
-  border: '#dde1e8',
-  borderSoft: '#e8ebf0',
-  text: '#1f2937',
-  textDim: '#374151',
-  textMute: '#6b7280',
-  accent: '#3b82f6',
-  accentText: '#1d4ed8',
-  warn: '#d97706',
-  danger: '#dc2626',
-};
-
-const THUMB_GRAD_MANSION = 'linear-gradient(135deg, rgba(96,165,250,0.22), rgba(96,165,250,0.06))';
-const THUMB_GRAD_OTHER = 'linear-gradient(135deg, rgba(251,191,36,0.22), rgba(251,191,36,0.06))';
+const THUMB_GRAD_MANSION = 'linear-gradient(135deg, rgba(86,112,168,0.14), rgba(86,112,168,0.03))';
+const THUMB_GRAD_OTHER = 'linear-gradient(135deg, rgba(160,122,62,0.14), rgba(160,122,62,0.03))';
 
 const S: Record<string, React.CSSProperties> = {
   root: {
-    width: '100vw', height: '100vh', background: COLOR.bg, color: COLOR.text,
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
-    fontSize: 13, overflow: 'auto',
+    width: '100vw', minHeight: '100vh',
+    // Calm light-gray canvas — visible enough to ground the white pills
+    // but plain so the active-pill coloured glows are the only colour
+    // accents. Reference image is essentially the same: clean light
+    // backdrop, drama from the pills themselves.
+    background: tokens.color.bg,
+    color: tokens.color.text,
+    fontFamily: tokens.font.family,
+    fontSize: 13,
+    overflow: 'auto',
   },
-  header: {
+
+  // ── Header ─────────────────────────────────────────────────
+  headerWrap: {
+    position: 'sticky' as const,
+    top: 0,
+    zIndex: 10,
+    padding: '20px 32px 12px',
+    // Wrap stays transparent so the glass header sees the canvas underneath
+    // it as the user scrolls — that's where the "liquid" comes from.
+    background: 'transparent',
+  },
+  // Header pill — same neutral light-gray as the project cards and
+  // their action buttons, so every framing surface on this screen
+  // reads as one consistent gray gradient rather than a mix of
+  // white-and-gray planes. Slight backdrop blur keeps the glass
+  // feel where the page scrolls under the sticky header.
+  headerPill: {
     display: 'flex', alignItems: 'center', gap: 12,
-    padding: '20px 32px',
-    borderBottom: `1px solid ${COLOR.border}`,
-    background: COLOR.panel,
+    maxWidth: 1080, margin: '0 auto',
+    padding: '10px 12px 10px 18px',
+    background: tokens.gradient.neutral,
+    backdropFilter: tokens.backdrop,
+    WebkitBackdropFilter: tokens.backdrop,
+    border: '1px solid #d8d8d8',
+    borderRadius: tokens.radius.pill,
+    boxShadow: tokens.shadow.glass,
   },
-  brandIcon: { width: 28, height: 28, display: 'block', objectFit: 'contain' },
-  brand: { fontSize: 16, fontWeight: 600, letterSpacing: 0.3 },
-  btnMirror: {
-    padding: '8px 14px',
-    background: '#ffffff',
-    color: '#1d4ed8',
-    border: '1px solid rgba(59,130,246,0.5)',
-    borderRadius: 7,
-    fontSize: 12,
-    fontWeight: 700,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    letterSpacing: 0.4,
-    flexShrink: 0,
-    height: 36,
-  } as React.CSSProperties,
-  btnMirrorActive: {
-    background: 'rgba(220,38,38,0.08)',
-    color: '#dc2626',
-    borderColor: 'rgba(220,38,38,0.5)',
-  } as React.CSSProperties,
-  btnNew: {
-    padding: '8px 16px',
-    background: COLOR.accent, color: '#ffffff',
-    border: `1px solid ${COLOR.accent}`,
-    borderRadius: 7, fontSize: 13, fontWeight: 700,
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
+  brandIcon: { width: 26, height: 26, display: 'block', objectFit: 'contain' as const },
+  brand: { fontSize: 14.5, fontWeight: 700, letterSpacing: 0.4, color: tokens.color.text },
+
+  // ── Body ──────────────────────────────────────────────────
   body: {
     maxWidth: 1080, margin: '0 auto',
-    padding: '32px 24px',
+    padding: '28px 32px 96px',
   },
-  heading: { marginBottom: 20 },
-  headingTitle: { fontSize: 18, fontWeight: 700, letterSpacing: 0.3, marginBottom: 6 },
-  headingSub: { fontSize: 12, color: COLOR.textMute, lineHeight: 1.55 },
+  heading: {
+    marginBottom: 28,
+    paddingLeft: 4,
+  },
+  headingTitle: {
+    fontSize: 22, fontWeight: 700, letterSpacing: 0.2,
+    marginBottom: 8, color: tokens.color.text,
+    display: 'flex', alignItems: 'center', gap: 12,
+  },
+  headingCount: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    minWidth: 30, height: 24, padding: '0 11px',
+    fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4,
+    color: tokens.color.text,
+    background: tokens.gradient.accent,
+    border: `1px solid ${tokens.color.accentBorder}`,
+    borderRadius: tokens.radius.pill,
+    boxShadow: tokens.shadow.glassAccent,
+    fontFamily: tokens.font.mono,
+  },
+  headingSub: { fontSize: 13, color: tokens.color.textMute, lineHeight: 1.6 },
+
   empty: {
-    padding: '40px 20px',
-    background: COLOR.panel,
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 12,
+    padding: '72px 24px',
+    background: tokens.gradient.surface,
+    border: `1px solid ${tokens.color.border}`,
+    borderRadius: tokens.radius.lg,
+    boxShadow: tokens.shadow.glass,
     textAlign: 'center' as const,
-    color: COLOR.textMute,
-    fontSize: 13, lineHeight: 1.7,
+    color: tokens.color.textMute,
+    display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 10,
   },
+  emptyIcon: { fontSize: 44, opacity: 0.5, marginBottom: 4 },
+  emptyTitle: { fontSize: 15, fontWeight: 700, color: tokens.color.text },
+  emptySub: { fontSize: 12.5, lineHeight: 1.6 },
+
   grid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: 16,
+    gap: 18,
   },
+
+  // ── Card ──────────────────────────────────────────────────
+  // Light-gray surface — matches the `pillNeutral` action buttons inside
+  // it, so the card and its actions read as one unified gray panel
+  // rather than "white card with gray buttons".
   card: {
     display: 'flex', flexDirection: 'column' as const,
-    background: COLOR.panel,
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 12,
+    background: tokens.gradient.neutral,
+    border: '1px solid #d8d8d8',
+    borderRadius: tokens.radius.card,
+    boxShadow: tokens.shadow.glass,
     overflow: 'hidden' as const,
-    transition: 'border-color 0.15s, transform 0.15s',
+    transition: `box-shadow ${tokens.transition}, transform ${tokens.transition}`,
+  },
+  cardHover: {
+    boxShadow: [
+      'inset 0 1px 0.5px rgba(255,255,255,0.9)',
+      'inset 0 -1px 0.5px rgba(40,48,80,0.06)',
+      '0 2px 4px rgba(40,48,80,0.06)',
+      '0 16px 36px rgba(40,48,80,0.14)',
+      '0 36px 72px rgba(40,48,80,0.10)',
+    ].join(', '),
+    transform: 'translateY(-2px)',
   },
   thumb: {
     width: '100%',
@@ -464,177 +634,201 @@ const S: Record<string, React.CSSProperties> = {
     overflow: 'hidden' as const,
   },
   thumbImg: { width: '100%', height: '100%', objectFit: 'cover' as const, display: 'block' },
-  thumbIcon: { opacity: 0.85 },
+  thumbIcon: { opacity: 0.9 },
   thumbOverlay: {
     position: 'absolute' as const,
-    top: 8, left: 8, right: 8,
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    gap: 6,
-    pointerEvents: 'none' as const, // children opt back in
+    top: 10, left: 10, right: 10,
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6,
   },
-  // The thumb-overlay buttons keep a dark backdrop because they sit on top of the photo
-  // thumbnail and need to stay legible regardless of the picture's content. Text stays
-  // white here, not COLOR.text (which is dark for the rest of the white theme).
   thumbAction: {
     display: 'inline-flex', alignItems: 'center', gap: 4,
-    padding: '5px 10px',
-    background: 'rgba(0,0,0,0.55)',
-    border: '1px solid rgba(255,255,255,0.18)',
-    borderRadius: 6,
-    color: '#ffffff',
+    padding: '6px 12px',
+    background: 'rgba(255,255,255,0.88)',
+    color: tokens.color.text,
+    borderRadius: tokens.radius.pill,
+    border: `1px solid ${tokens.color.border}`,
     fontSize: 11, fontWeight: 600,
-    fontFamily: 'inherit',
+    fontFamily: tokens.font.family,
     cursor: 'pointer',
-    backdropFilter: 'blur(4px)',
-    pointerEvents: 'auto' as const,
-    transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    boxShadow: `${tokens.shadow.innerHighlight}, ${tokens.shadow.soft}`,
+    transition: `background ${tokens.transition}`,
   },
   thumbActionCopied: {
-    background: 'rgba(34,197,94,0.85)',
-    border: '1px solid rgba(34,197,94,0.9)',
-    color: '#ffffff',
+    background: 'rgba(231,241,231,0.95)',
+    color: tokens.color.success,
+    borderColor: tokens.color.successBorder,
   },
-  editBtn: {
-    width: 26, height: 26,
+  iconBtn: {
+    width: 30, height: 30,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(0,0,0,0.55)',
-    border: '1px solid rgba(255,255,255,0.18)',
-    borderRadius: 6,
-    color: '#ffffff',
+    background: 'rgba(255,255,255,0.88)',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    color: tokens.color.text,
+    border: `1px solid ${tokens.color.border}`,
+    borderRadius: tokens.radius.pill,
     cursor: 'pointer',
-    fontSize: 12, fontWeight: 700,
-    fontFamily: 'inherit',
+    fontSize: 13, fontWeight: 600,
+    fontFamily: tokens.font.family,
+    boxShadow: `${tokens.shadow.innerHighlight}, ${tokens.shadow.soft}`,
     padding: 0,
-    backdropFilter: 'blur(4px)',
-    pointerEvents: 'auto' as const,
+    transition: `background ${tokens.transition}, color ${tokens.transition}`,
   },
-  deleteBtn: {
-    width: 26, height: 26,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(0,0,0,0.55)',
-    border: '1px solid rgba(248,113,113,0.4)',
-    borderRadius: 6,
-    color: '#fca5a5',
-    cursor: 'pointer',
-    fontSize: 13, fontWeight: 700,
-    fontFamily: 'inherit',
-    padding: 0,
-    backdropFilter: 'blur(4px)',
-    pointerEvents: 'auto' as const,
-  },
-  cardBody: { padding: '14px 14px 8px 14px', flex: 1 },
-  cardName: { fontSize: 15, fontWeight: 700, color: COLOR.text, marginBottom: 4, letterSpacing: 0.2 },
-  cardSub: { fontSize: 11, color: COLOR.textMute, marginBottom: 10, lineHeight: 1.4 },
-  tagRow: { display: 'flex', gap: 6, flexWrap: 'wrap' as const },
-  tag: {
-    fontSize: 9.5, fontWeight: 700 as const, letterSpacing: 1.0,
-    padding: '2px 8px', borderRadius: 4,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
-    border: '1px solid transparent',
-  },
-  tagMansion: { color: COLOR.accentText, background: 'rgba(96,165,250,0.12)', borderColor: 'rgba(96,165,250,0.4)' },
-  tagOther: { color: '#92400e', background: 'rgba(251,191,36,0.12)', borderColor: 'rgba(251,191,36,0.4)' },
-  tagSplat: { color: '#86efac', background: 'rgba(34,197,94,0.12)', borderColor: 'rgba(34,197,94,0.4)' },
-  tag360: { color: '#c4b5fd', background: 'rgba(167,139,250,0.12)', borderColor: 'rgba(167,139,250,0.4)' },
-  cardActions: {
-    display: 'flex', gap: 8,
-    padding: '10px 14px 14px 14px',
-    borderTop: `1px solid ${COLOR.borderSoft}`,
-    marginTop: 8,
-  },
-  btnSecondary: {
-    flex: 1, textAlign: 'center' as const,
-    padding: '8px 14px',
-    background: '#ffffff',
-    border: `1px solid ${COLOR.border}`,
-    color: COLOR.text, fontSize: 12, fontWeight: 500,
-    borderRadius: 7, textDecoration: 'none' as const,
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  btnPrimary: {
-    flex: 1, textAlign: 'center' as const,
-    padding: '8px 14px',
-    background: COLOR.accent, color: '#ffffff',
-    border: `1px solid ${COLOR.accent}`,
-    fontSize: 12, fontWeight: 700,
-    borderRadius: 7, textDecoration: 'none' as const,
-    cursor: 'pointer', fontFamily: 'inherit',
+  iconBtnDanger: {
+    color: tokens.color.danger,
+    borderColor: tokens.color.dangerBorder,
   },
 
-  // Dialog
+  cardBody: { padding: '16px 18px 10px 18px', flex: 1 },
+  cardName: { fontSize: 15, fontWeight: 700, color: tokens.color.text, marginBottom: 4, letterSpacing: 0.2 },
+  cardSub: { fontSize: 12, color: tokens.color.textMute, marginBottom: 12, lineHeight: 1.45 },
+  tagRow: { display: 'flex', gap: 6, flexWrap: 'wrap' as const },
+
+  cardActions: {
+    display: 'flex', gap: 8,
+    padding: '12px 14px 14px 14px',
+  },
+
+  // Light-gray override applied to per-card actions (編集 / 開く). Plain
+  // variant alone is essentially white against the `#eef0f4` canvas;
+  // this gradient nudges the bg into visibly gray territory so the
+  // pill reads as "neutral / secondary" rather than "primary white".
+  pillNeutral: {
+    background: tokens.gradient.neutral,
+    borderColor: '#d8d8d8',
+  },
+
+  // ── Pill base ─────────────────────────────────────────────
+  // Shared by every <PillButton> variant. Variant specifics override
+  // background / border / color / boxShadow.
+  pillBase: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    padding: '10px 18px',
+    // Long-hand split (see Pill.tsx) — shorthand + variant `borderColor`
+    // overlay leaks the previous color across re-renders.
+    borderWidth: 1.5,
+    borderStyle: 'solid',
+    borderColor: 'transparent',
+    borderRadius: tokens.radius.pill,
+    fontSize: 12.5, fontWeight: 700, letterSpacing: 0.3,
+    cursor: 'pointer', fontFamily: tokens.font.family,
+    transition: `box-shadow ${tokens.transition}, transform ${tokens.transition}, filter ${tokens.transition}, background ${tokens.transition}`,
+    flexShrink: 0,
+    outline: 'none',
+  },
+  disabled: {
+    opacity: 0.45,
+    cursor: 'not-allowed',
+    boxShadow: tokens.shadow.innerHighlight,
+  },
+
+  // ── Pill toggle (segmented control, glass) ────────────────
+  // Outer container reads as a glass "tray" — slightly translucent
+  // surface with a faint top-down gradient. Active inner segment is a
+  // solid pale-blue pill with a luminous outer glow that bleeds beyond
+  // the gutter (matching the "Create Project" button in the reference).
+  pillToggle: {
+    display: 'flex', gap: 4,
+    padding: 5,
+    background: tokens.glass.surfaceStrong,
+    backdropFilter: tokens.backdrop,
+    WebkitBackdropFilter: tokens.backdrop,
+    border: `1px solid ${tokens.color.border}`,
+    borderRadius: tokens.radius.pill,
+    boxShadow: tokens.shadow.glass,
+  },
+  pillToggleSeg: {
+    flex: 1,
+    display: 'flex', flexDirection: 'column' as const, alignItems: 'flex-start', gap: 2,
+    padding: '11px 16px',
+    background: 'transparent',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'transparent',
+    borderRadius: tokens.radius.pill,
+    cursor: 'pointer',
+    color: tokens.color.textMute,
+    fontFamily: tokens.font.family,
+    textAlign: 'left' as const,
+    // Suppress the browser default focus outline — the pill recipe already
+    // has its own ring (the active state's accent border + inner light
+    // ring); a black focus rectangle on top of that is just visual noise.
+    outline: 'none',
+    transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}`,
+  },
+  pillToggleSegActive: {
+    background: tokens.gradient.accent,
+    borderColor: tokens.color.accentBorder,
+    color: tokens.color.text,
+    boxShadow: tokens.shadow.glassAccent,
+  },
+  pillToggleTitle: { fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3 },
+  pillToggleSub: { fontSize: 10.5, color: tokens.color.textFaint, fontWeight: 500 },
+
+  // ── Dialog ───────────────────────────────────────────────
   dialogBackdrop: {
     position: 'fixed' as const, inset: 0,
-    background: 'rgba(31, 41, 55, 0.45)',
-    backdropFilter: 'blur(4px)',
+    background: 'rgba(45, 49, 66, 0.28)',
+    backdropFilter: 'blur(14px) saturate(140%)',
+    WebkitBackdropFilter: 'blur(14px) saturate(140%)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     zIndex: 100,
     padding: 20,
   },
+  // Dialog stays mostly opaque (text needs to be readable) but uses the
+  // same translucent glass recipe — surfaceStrong is ~72 % opacity, with
+  // the colour blooms behind still tinting through.
   dialog: {
     width: 480, maxWidth: '100%',
-    background: COLOR.panel,
-    border: `1px solid ${COLOR.border}`,
-    borderRadius: 12,
+    background: tokens.gradient.surface,
+    border: `1px solid ${tokens.color.border}`,
+    borderRadius: 28,
     overflow: 'hidden' as const,
-    boxShadow: '0 24px 60px rgba(31,41,55,0.18)',
+    boxShadow: `${tokens.shadow.innerHighlight}, ${tokens.shadow.dialog}`,
     display: 'flex', flexDirection: 'column' as const,
   },
   dialogHeader: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '14px 18px',
-    borderBottom: `1px solid ${COLOR.borderSoft}`,
+    padding: '20px 24px 8px',
   },
-  dialogTitle: { fontSize: 14, fontWeight: 700, letterSpacing: 0.3 },
+  dialogTitle: { fontSize: 16, fontWeight: 700, letterSpacing: 0.3, color: tokens.color.text },
   dialogClose: {
-    width: 28, height: 28,
+    width: 32, height: 32,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'transparent', color: COLOR.textMute,
-    border: 'none',
-    fontSize: 18, cursor: 'pointer', borderRadius: 6, fontFamily: 'inherit',
+    background: tokens.gradient.surface,
+    border: `1px solid ${tokens.color.border}`,
+    color: tokens.color.textMute,
+    borderRadius: tokens.radius.pill,
+    boxShadow: tokens.shadow.glass,
+    fontSize: 18, cursor: 'pointer', fontFamily: tokens.font.family,
+    transition: `background ${tokens.transition}`,
   },
   dialogBody: {
-    padding: 18,
-    display: 'flex', flexDirection: 'column' as const, gap: 14,
+    padding: '14px 24px 22px',
+    display: 'flex', flexDirection: 'column' as const, gap: 18,
   },
   dialogFooter: {
-    display: 'flex', justifyContent: 'flex-end', gap: 8,
-    padding: '12px 18px',
-    borderTop: `1px solid ${COLOR.borderSoft}`,
-    background: 'rgba(0,0,0,0.03)',
-  },
-  btnCancel: {
-    padding: '8px 14px',
-    background: '#ffffff',
-    border: `1px solid ${COLOR.border}`,
-    color: COLOR.text, fontSize: 12, fontWeight: 500,
-    borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+    display: 'flex', justifyContent: 'flex-end', gap: 10,
+    padding: '16px 24px 24px',
   },
   fieldLabel: {
-    fontSize: 10, fontWeight: 700 as const, letterSpacing: 0.5,
-    color: COLOR.textMute, textTransform: 'uppercase' as const,
+    fontSize: 11, fontWeight: 700 as const, letterSpacing: 0.6,
+    color: tokens.color.textMute, textTransform: 'uppercase' as const,
   },
-  required: { color: COLOR.warn },
+  required: { color: tokens.color.warn },
+  // Sunken pill input — track gradient + inset shadow gives the
+  // pressed-into-the-surface look. Border catches a hint of light too.
   input: {
-    width: '100%', padding: '8px 10px',
-    background: COLOR.bg, border: `1px solid ${COLOR.border}`,
-    borderRadius: 6, color: COLOR.text, fontSize: 13,
-    outline: 'none', fontFamily: 'inherit',
+    width: '100%', padding: '12px 16px',
+    background: tokens.gradient.track,
+    border: `1px solid ${tokens.color.border}`,
+    borderRadius: tokens.radius.pill,
+    color: tokens.color.text, fontSize: 13,
+    outline: 'none', fontFamily: tokens.font.family,
     boxSizing: 'border-box' as const,
+    boxShadow: tokens.shadow.inset,
+    transition: `border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
   },
-  segment: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
-  segBtn: {
-    display: 'flex', flexDirection: 'column' as const, alignItems: 'flex-start', gap: 2,
-    padding: '10px 12px',
-    background: COLOR.panel2, border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 8, cursor: 'pointer', color: COLOR.textDim,
-    fontFamily: 'inherit', textAlign: 'left' as const,
-    transition: 'background 0.15s, border-color 0.15s',
-  },
-  segBtnActive: {
-    background: 'rgba(96,165,250,0.16)',
-    borderColor: 'rgba(96,165,250,0.55)',
-    color: COLOR.text,
-  },
-  segTitle: { fontSize: 13, fontWeight: 700, letterSpacing: 0.4 },
-  segSub: { fontSize: 10, color: COLOR.textMute },
 };

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { tokens } from './design-tokens';
 
 interface Props {
   /** Called every frame the joystick is touched. `x` / `y` are normalised
@@ -93,11 +94,11 @@ export function MobileJoystick({ onChange }: Props) {
         width: BASE_SIZE,
         height: BASE_SIZE,
         borderRadius: '50%',
-        background: 'rgba(255,255,255,0.18)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255,255,255,0.35)',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+        background: tokens.glass.surface,
+        backdropFilter: tokens.backdrop,
+        WebkitBackdropFilter: tokens.backdrop,
+        border: `1px solid ${tokens.color.border}`,
+        boxShadow: tokens.shadow.glass,
         touchAction: 'none',
         userSelect: 'none',
         WebkitUserSelect: 'none',
@@ -114,8 +115,9 @@ export function MobileJoystick({ onChange }: Props) {
           marginLeft: -THUMB_SIZE / 2,
           marginTop: -THUMB_SIZE / 2,
           borderRadius: '50%',
-          background: 'rgba(255,255,255,0.6)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+          background: tokens.gradient.surface,
+          border: `1px solid ${tokens.color.border}`,
+          boxShadow: tokens.shadow.glass,
           transform: `translate(${thumb.x}px, ${thumb.y}px)`,
           transition: activeIdRef.current === null ? 'transform 180ms ease-out' : 'none',
           pointerEvents: 'none',

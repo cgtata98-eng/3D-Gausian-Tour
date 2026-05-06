@@ -28,6 +28,7 @@ import { VRThumbPreview } from './VRThumbPreview';
 import { useDemoModeCamera } from './useDemoModeCamera';
 import { targetFromYaw } from '../core/viewpoint';
 import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
+import { tokens } from './design-tokens';
 import * as idb from '../utils/idb';
 import { unzipSync } from 'fflate';
 
@@ -118,6 +119,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const setPlanSplatStore = useSceneStore(s => s.setPlanSplat);
   const setPlanSplatSogStore = useSceneStore(s => s.setPlanSplatSog);
   const setPlanCollisionStore = useSceneStore(s => s.setPlanCollision);
+  const setPlanCollisionSourceStore = useSceneStore(s => s.setPlanCollisionSource);
   const setPlanSplatSourceNameStore = useSceneStore(s => s.setPlanSplatSourceName);
   const [showAddPlan, setShowAddPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
@@ -358,12 +360,18 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 
   const showCollision = useUIStore(s => s.showCollision);
   const toggleCollision = useUIStore(s => s.toggleCollision);
+  const useCollisionWalkable = useUIStore(s => s.useCollisionWalkable);
+  const toggleUseCollisionWalkable = useUIStore(s => s.toggleUseCollisionWalkable);
+  const useCollisionBlock = useUIStore(s => s.useCollisionBlock);
+  const toggleUseCollisionBlock = useUIStore(s => s.toggleUseCollisionBlock);
   const collisionOpacity = useUIStore(s => s.collisionOpacity);
   const setCollisionOpacity = useUIStore(s => s.setCollisionOpacity);
   const showGrid = useUIStore(s => s.showGrid);
   const toggleGrid = useUIStore(s => s.toggleGrid);
 
   useEffect(() => { smRef.current?.setCollisionVisible(showCollision); }, [showCollision]);
+  useEffect(() => { if (ready) smRef.current?.setCollisionWalkableEnabled(useCollisionWalkable); }, [ready, useCollisionWalkable]);
+  useEffect(() => { if (ready) smRef.current?.setCollisionBlockEnabled(useCollisionBlock); }, [ready, useCollisionBlock]);
   useEffect(() => { smRef.current?.setCollisionOpacity(collisionOpacity); }, [collisionOpacity]);
   useEffect(() => { if (ready) smRef.current?.setGridVisible(showGrid); }, [ready, showGrid]);
 
@@ -471,22 +479,27 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 
 
 
-  const handleColFile = async (file: File | Blob, type: 'walkable' | 'block') => {
+  const handleColFile = async (file: File | Blob, type: 'walkable' | 'block', source: 'manual' | 'auto') => {
     const sm = smRef.current; if (!sm) return;
     const sceneId = manifest?.id;
     const planId = activePlanId;
     if (!sceneId || !planId) return;
     setColLoading(type);
     try {
-      // Persist to IDB so reloads keep it AND the publish flow can find it.
-      const blobKey = `collision:${sceneId}:${planId}:${type}`;
+      // Source-scoped IDB key so manual and auto don't clobber each other.
+      const blobKey = `collision:${sceneId}:${planId}:${source}:${type}`;
       const blob = file instanceof File ? file : new Blob([await file.arrayBuffer()], { type: 'model/gltf-binary' });
       await idb.saveBlob(blobKey, blob);
-      setPlanCollisionStore(planId, type, `${idb.IDB_REF_PREFIX}${blobKey}`);
-      // Engine-side load via the IDB ref (resolves to a fresh blob: URL each time).
-      await sm.loadCollisionFromManifestRef(`${idb.IDB_REF_PREFIX}${blobKey}`, type);
-      sm.setCollisionVisible(true);
-      if (!showCollision) toggleCollision();
+      const ref = `${idb.IDB_REF_PREFIX}${blobKey}`;
+      setPlanCollisionStore(planId, source, type, ref);
+      // Push to engine only when this source is the active one — otherwise
+      // we'd silently swap the live collision out from under the user.
+      const activeSource = manifest?.plans?.find(p => p.id === planId)?.collision?.source ?? 'manual';
+      if (source === activeSource) {
+        await sm.loadCollisionFromManifestRef(ref, type);
+        sm.setCollisionVisible(true);
+        if (!showCollision) toggleCollision();
+      }
     } catch (e) {
       console.error(`collision ${type} upload failed:`, e);
       alert('コリジョン読込失敗: ' + (e instanceof Error ? e.message : String(e)));
@@ -495,10 +508,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     }
   };
 
-  /** Auto-generate a collision GLB from the active plan's splat by calling the
-   *  Vite middleware (`/api/gen-collision`) which spawns `splat-transform` on
-   *  the dev host. Only available during local development; in production the
-   *  middleware doesn't exist and the request returns 404. */
+  /** Auto-generate walkable + block collision GLBs from the active plan's
+   *  splat. Runs the splat-transform voxel pipeline twice with different
+   *  recipes (see vite.config.ts:collisionGen JSDoc for the matrix). In dev
+   *  this hits the Vite middleware which spawns the CLI; in production it
+   *  falls back to the browser-side WASM path. Both paths share the same
+   *  recipe + seed semantics so output is identical regardless of route.
+   *
+   *  Seed position priority — the seed must sit inside the room, otherwise
+   *  carve / exterior-fill silently no-op. We pick the first available of:
+   *    1. plan.fixedPosition (user-set initial camera)
+   *    2. plan.viewpoints[0]  (first authored viewpoint)
+   *    3. live camera position (where the user is currently looking from)
+   *    4. [0,0,0] last-resort default. */
   const handleAutoGenCollision = async () => {
     const sm = smRef.current; if (!sm) return;
     const sceneId = manifest?.id;
@@ -529,41 +551,47 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         return;
       }
 
-      // Production builds skip the dev-only Vite middleware entirely (it isn't
-      // there, and Cloudflare's edge would reject the upload with 413 anyway).
-      // In dev we try it first since the Node CLI is faster than the WASM
-      // pipeline; any error falls through to the browser path.
-      let glb: Blob | null = null;
-      if (import.meta.env.DEV) {
-        try {
-          const res = await fetch('/api/gen-collision', {
-            method: 'POST',
-            headers: {
-              'X-Input-Ext': ext,
-              'X-Shape': 'smooth',
-              'Content-Type': 'application/octet-stream',
-            },
-            body,
-          });
-          if (res.ok) {
-            glb = await res.blob();
-          } else {
-            console.warn(`[gen-collision] middleware returned ${res.status}; using browser fallback`);
-          }
-        } catch (e) {
-          console.warn('[gen-collision] middleware unreachable, using browser fallback:', e);
-        }
-      }
+      const seed: [number, number, number] =
+        plan.fixedPosition?.position
+        ?? plan.viewpoints[0]?.position
+        ?? sm.getCurrentPose()?.position
+        ?? [0, 0, 0];
+      const seedHeader = seed.map((n) => Number(n).toFixed(4)).join(',');
+      console.log(`[gen-collision] seed=${seedHeader}`);
 
-      if (!glb) {
+      const runRecipe = async (recipe: 'walkable' | 'block'): Promise<Blob> => {
+        // Production builds skip the dev-only Vite middleware (it isn't there,
+        // and Cloudflare's edge would 413 the upload anyway). In dev we try
+        // the middleware first — Node CLI is much faster than the in-browser
+        // WASM path — and fall back to the browser pipeline on any failure.
+        if (import.meta.env.DEV && body && ext) {
+          try {
+            const res = await fetch('/api/gen-collision', {
+              method: 'POST',
+              headers: {
+                'X-Input-Ext': ext,
+                'X-Recipe': recipe,
+                'X-Seed': seedHeader,
+                'Content-Type': 'application/octet-stream',
+              },
+              body,
+            });
+            if (res.ok) return await res.blob();
+            console.warn(`[gen-collision] ${recipe} middleware returned ${res.status}; using browser fallback`);
+          } catch (e) {
+            console.warn(`[gen-collision] ${recipe} middleware unreachable, using browser fallback:`, e);
+          }
+        }
         const { generateCollisionInBrowser } = await import('../utils/gen-collision-browser');
-        glb = await generateCollisionInBrowser(body, ext, { shape: 'smooth' });
-      }
-      // Use the same GLB as both walkable + block — rough but matches the user's
-      // immediate need ("get something working"). They can replace each side
-      // individually with a more refined mesh later.
-      await handleColFile(new File([glb], 'auto-collision.glb', { type: 'model/gltf-binary' }), 'walkable');
-      await handleColFile(new File([glb], 'auto-collision.glb', { type: 'model/gltf-binary' }), 'block');
+        return generateCollisionInBrowser(body!, ext!, { recipe, seed });
+      };
+
+      // Run sequentially — the CLI / WebGPU device is GPU-bound and running
+      // both in parallel just thrashes the same hardware.
+      const walkableGlb = await runRecipe('walkable');
+      await handleColFile(new File([walkableGlb], 'auto-walkable.glb', { type: 'model/gltf-binary' }), 'walkable', 'auto');
+      const blockGlb = await runRecipe('block');
+      await handleColFile(new File([blockGlb], 'auto-block.glb', { type: 'model/gltf-binary' }), 'block', 'auto');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('collision auto-gen failed:', e);
@@ -814,7 +842,13 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         <a
           href="/"
           onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate('/'); }}
-          style={{ ...S.viewerBtn, background: 'transparent', color: COLOR.textDim, border: `1px solid ${COLOR.border}` }}
+          style={{
+            ...S.viewerBtn,
+            background: tokens.gradient.surface,
+            color: COLOR.text,
+            border: `1px solid ${COLOR.border}`,
+            boxShadow: tokens.shadow.glass,
+          }}
         >← Project</a>
         <div style={S.logo}>
           <span style={S.badge}>DEV</span>
@@ -916,7 +950,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     <LabeledInput label="所在地" value={info.location ?? ''} onChange={(v) => updateInfo({ location: v })} placeholder="東京都千代田区…" />
                     <LabeledInput label="メモ" value={info.notes ?? ''} onChange={(v) => updateInfo({ notes: v })} placeholder="自由記入 (改行で複数行)" />
                     <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: 'rgba(0,0,0,0.55)', textTransform: 'uppercase' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: tokens.color.textMute, textTransform: 'uppercase' }}>
                         ビューア「物件概要」表示
                       </div>
                       <VisRow label="全体 (このブロックを表示)" checked={vis.overall !== false} onChange={(c) => setVis('overall', c)} />
@@ -977,7 +1011,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               return (
                 <Section title={`カラー (素材バリエーション)`} subtitle="COLOR VARIANTS" defaultOpen={false}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 11, color: tokens.color.textMute, lineHeight: 1.5 }}>
                       同じ視点で素材色違いに切り替えるバリエーション。各バリアントに視点ごとの 360° パノラマを登録します (未登録の視点は標準パノラマを利用)。
                     </div>
                     <button onClick={addVariant} style={S.btnPrimary}>+ バリアント追加</button>
@@ -1007,7 +1041,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             return (
                               <div key={vp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
                                 <span style={{ flex: 1, color: 'rgba(0,0,0,0.78)' }}>{vp.label}</span>
-                                <span style={{ fontSize: 10, color: has ? '#16a34a' : 'rgba(0,0,0,0.4)' }}>
+                                <span style={{ fontSize: 10, color: has ? '#16a34a' : tokens.color.textFaint }}>
                                   {has ? '登録済' : '未登録'}
                                 </span>
                                 <label style={{ ...S.btn, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -1030,13 +1064,13 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             );
                           })}
                           {(activePlan.viewpoints ?? []).length === 0 && (
-                            <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)' }}>視点がまだありません</span>
+                            <span style={{ fontSize: 11, color: tokens.color.textFaint }}>視点がまだありません</span>
                           )}
                         </div>
                       </div>
                     ))}
                     {variants.length === 0 && (
-                      <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)' }}>まだバリアントがありません</span>
+                      <span style={{ fontSize: 11, color: tokens.color.textFaint }}>まだバリアントがありません</span>
                     )}
                   </div>
                 </Section>
@@ -1072,7 +1106,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         <span style={S.projThumbEmpty}>未設定</span>
                       )}
                     </div>
-                    <div style={{ flex: 1, fontSize: 11, color: 'rgba(0,0,0,0.55)', lineHeight: 1.5 }}>
+                    <div style={{ flex: 1, fontSize: 11, color: tokens.color.textMute, lineHeight: 1.5 }}>
                       プロジェクト一覧カードに表示されるサムネ。下から好きな視点を選択してください。
                     </div>
                     {currentThumb && (
@@ -1246,7 +1280,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     onChange={e => setNewPlanName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addPlan(); if (e.key === 'Escape') setShowAddPlan(false); }}
                     autoFocus style={S.input} />
-                  <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', marginTop: 6 }}>
+                  <div style={{ fontSize: 11, color: tokens.color.textMute, marginTop: 6 }}>
                     {isVRMode
                       ? '新規プランは完全に空（VR視点 / 画像 / 図面 / info すべて未設定）で作成されます。'
                       : '新規プランは完全に空（splat / 視点 / 図面 / info すべて未設定）で作成されます。'}
@@ -1278,7 +1312,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   {/* BGM (ループ環境音) */}
                   <div style={S.subTitle}>BGM (ループ環境音)</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                    <span style={{ fontSize: 11, color: manifest?.audio ? '#16a34a' : 'rgba(0,0,0,0.4)' }}>
+                    <span style={{ fontSize: 11, color: manifest?.audio ? '#16a34a' : tokens.color.textFaint }}>
                       {manifest?.audio ? '設定済' : '未設定'}
                     </span>
                     <div style={{ flex: 1 }} />
@@ -1325,7 +1359,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       );
                     })}
                   </div>
-                  <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.5)', marginTop: 4, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginTop: 4, lineHeight: 1.5 }}>
                     プリセットから選ぶか、独自の音声ファイルをアップロード。ビューア側のスピーカーアイコンから再生切替。
                   </div>
 
@@ -1333,7 +1367,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
                     <div style={S.subTitle}>足音</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                      <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.7)' }}>
+                      <span style={{ fontSize: 11, color: tokens.color.textMute }}>
                         WASD で歩行、Shift で走行
                       </span>
                       <div style={{ flex: 1 }} />
@@ -1348,7 +1382,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               fontSize: 11,
                               background: enabled ? 'rgba(34,197,94,0.14)' : '#ffffff',
                               border: `1px solid ${enabled ? 'rgba(34,197,94,0.5)' : 'rgba(0,0,0,0.2)'}`,
-                              color: enabled ? '#15803d' : 'rgba(0,0,0,0.55)',
+                              color: enabled ? '#15803d' : tokens.color.textMute,
                               borderRadius: 999,
                               cursor: 'pointer',
                               fontFamily: 'inherit',
@@ -1365,7 +1399,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       const vol = Math.max(0, Math.min(1, manifest?.settings.footstepVolume ?? 0.7));
                       return (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, opacity: enabled ? 1 : 0.4 }}>
-                          <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.7)', minWidth: 64 }}>ボリューム</span>
+                          <span style={{ fontSize: 11, color: tokens.color.textMute, minWidth: 64 }}>ボリューム</span>
                           <input
                             type="range"
                             min={0}
@@ -1374,9 +1408,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             value={vol}
                             disabled={!enabled}
                             onChange={(e) => useSceneStore.getState().updateSettings({ footstepVolume: Number(e.target.value) })}
-                            style={{ flex: 1 }}
+                            style={{ flex: 1, accentColor: tokens.color.accent }}
                           />
-                          <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', minWidth: 32, textAlign: 'right' }}>
+                          <span style={{ fontSize: 11, color: tokens.color.textMute, minWidth: 32, textAlign: 'right', fontFamily: tokens.font.mono }}>
                             {Math.round(vol * 100)}%
                           </span>
                         </div>
@@ -1509,14 +1543,14 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             </button>
                           )}
                         </div>
-                        <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.5)', marginBottom: 6, lineHeight: 1.5 }}>
+                        <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginBottom: 6, lineHeight: 1.5 }}>
                           PLY が上下逆さま / 床にめり込む場合に調整。プランごとに保存されます。
                         </div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(0,0,0,0.6)', marginTop: 4 }}>回転 (°)</div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginTop: 4 }}>回転 (°)</div>
                         <Slider label="X (前後の傾き)" min={-180} max={180} step={1} value={rot[0]} onChange={(v) => setRot(0, v)} />
                         <Slider label="Y (水平回転)"   min={-180} max={180} step={1} value={rot[1]} onChange={(v) => setRot(1, v)} />
                         <Slider label="Z (左右の傾き)" min={-180} max={180} step={1} value={rot[2]} onChange={(v) => setRot(2, v)} />
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(0,0,0,0.6)', marginTop: 8 }}>位置 (m)</div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginTop: 8 }}>位置 (m)</div>
                         <Slider label="X (左右)" min={-50} max={50} step={0.05} value={pos[0]} onChange={(v) => setPos(0, v)} />
                         <Slider label="Y (前後)" min={-50} max={50} step={0.05} value={pos[2]} onChange={(v) => setPos(2, v)} />
                         <Slider label="Z (高さ)" min={-50} max={50} step={0.05} value={pos[1]} onChange={(v) => setPos(1, v)} />
@@ -1543,7 +1577,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', marginBottom: 6, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 11, color: tokens.color.textMute, marginBottom: 6, lineHeight: 1.5 }}>
                     プレビュー上で <strong>マウスホイール</strong> でズーム可能。<br />
                     範囲は <code style={S.codeInline}>{manifest?.settings.zoomFovMin ?? 25}°〜{manifest?.settings.zoomFovMax ?? 100}°</code> で固定。
                   </div>
@@ -1696,7 +1730,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             <button
                               title={activePlan?.panoramas?.[vp.id] ? '360パノラマ: 設定済み（クリックで差し替え）' : '360パノラマを追加'}
                               onClick={() => { setPanoTargetVp(vp.id); panoInputRef.current?.click(); }}
-                              style={{ ...S.iconBtn, color: activePlan?.panoramas?.[vp.id] ? '#22c55e' : 'rgba(0,0,0,0.55)' }}
+                              style={{ ...S.iconBtn, color: activePlan?.panoramas?.[vp.id] ? '#22c55e' : tokens.color.textMute }}
                               disabled={panoLoading === vp.id}
                             >
                               {panoLoading === vp.id ? '⏳' : '🌐'}
@@ -1736,7 +1770,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       <button type="button" onClick={() => addVpPanoInputRef.current?.click()} style={S.fileBtn}>
                         {addVpPanoName ? `🌐 ${addVpPanoName}` : '🌐 360 画像を選択（任意 / .jpg .png .hdr .exr）'}
                       </button>
-                      <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', marginTop: 6 }}>
+                      <div style={{ fontSize: 11, color: tokens.color.textMute, marginTop: 6 }}>
                         画像はあとから視点行の 🌐 ボタンでも差し替えできます。
                       </div>
                     </>
@@ -1753,9 +1787,90 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             {/* ===== Collision — プランタブ (3DGS のみ; 360VR では不要) ===== */}
             {debugTab === 'plan' && viewMode === 'splat' && (
             <Section title="コリジョン" subtitle="COLLISION" defaultOpen={false}>
+              {/* Source selector: manual upload vs auto-gen. Both sets are
+                  stashed independently so flipping doesn't cost a re-gen. */}
+              {(() => {
+                const planId = activePlanId;
+                const plan = manifest?.plans?.find(p => p.id === planId);
+                const cur = plan?.collision;
+                const source = cur?.source ?? 'manual';
+                const hasManual = !!(cur?.manualWalkable || cur?.manualBlock);
+                const hasAuto = !!(cur?.autoWalkable || cur?.autoBlock);
+                const choose = async (s: 'manual' | 'auto') => {
+                  if (!planId) return;
+                  setPlanCollisionSourceStore(planId, s);
+                  // Reload engine immediately so the active mesh matches the
+                  // freshly written manifest. Read it back from the store.
+                  const sm = smRef.current; if (!sm) return;
+                  const next = useSceneStore.getState().manifest?.plans?.find(p => p.id === planId)?.collision;
+                  if (next?.walkable) await sm.loadCollisionFromManifestRef(next.walkable, 'walkable');
+                  if (next?.block) await sm.loadCollisionFromManifestRef(next.block, 'block');
+                };
+                const segBase: React.CSSProperties = {
+                  flex: 1,
+                  padding: '8px 14px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: 0.3,
+                  borderRadius: tokens.radius.pill,
+                  color: tokens.color.text,
+                  fontFamily: tokens.font.family,
+                  outline: 'none',
+                  transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
+                };
+                return (
+                  <div style={{
+                    display: 'flex', gap: 4, padding: 5, marginBottom: 8,
+                    background: tokens.glass.surfaceStrong,
+                    backdropFilter: tokens.backdrop,
+                    WebkitBackdropFilter: tokens.backdrop,
+                    borderRadius: tokens.radius.pill,
+                    border: `1px solid ${tokens.color.border}`,
+                    boxShadow: tokens.shadow.glass,
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => choose('manual')}
+                      disabled={!hasManual && source !== 'manual'}
+                      style={{
+                        ...segBase,
+                        background: source === 'manual' ? tokens.gradient.accent : 'transparent',
+                        border: `1px solid ${source === 'manual' ? tokens.color.accentBorder : 'transparent'}`,
+                        boxShadow: source === 'manual' ? tokens.shadow.glassAccent : 'none',
+                        cursor: (!hasManual && source !== 'manual') ? 'not-allowed' : 'pointer',
+                        opacity: (!hasManual && source !== 'manual') ? 0.45 : 1,
+                      }}
+                      title="アップロードした手動 GLB を使用"
+                    >手動を使用 {hasManual ? '✓' : '—'}</button>
+                    <button
+                      type="button"
+                      onClick={() => choose('auto')}
+                      disabled={!hasAuto && source !== 'auto'}
+                      style={{
+                        ...segBase,
+                        background: source === 'auto' ? tokens.gradient.processing : 'transparent',
+                        border: `1px solid ${source === 'auto' ? tokens.color.processingBorder : 'transparent'}`,
+                        boxShadow: source === 'auto' ? tokens.shadow.glassProcessing : 'none',
+                        cursor: (!hasAuto && source !== 'auto') ? 'not-allowed' : 'pointer',
+                        opacity: (!hasAuto && source !== 'auto') ? 0.45 : 1,
+                      }}
+                      title="splat-transform で自動生成した GLB を使用"
+                    >自動を使用 {hasAuto ? '✓' : '—'}</button>
+                  </div>
+                );
+              })()}
+
+              <label style={S.toggle}>
+                <input type="checkbox" checked={useCollisionWalkable} onChange={toggleUseCollisionWalkable} />
+                <span>walkable を使用 <span style={{ fontSize: 10, color: tokens.color.textMute }}>（床スナップ／重力）</span></span>
+              </label>
+              <label style={S.toggle}>
+                <input type="checkbox" checked={useCollisionBlock} onChange={toggleUseCollisionBlock} />
+                <span>block を使用 <span style={{ fontSize: 10, color: tokens.color.textMute }}>（壁衝突）</span></span>
+              </label>
               <label style={S.toggle}>
                 <input type="checkbox" checked={showCollision} onChange={toggleCollision} />
-                <span>コリジョンを表示</span>
+                <span>コリジョンを表示 <span style={{ fontSize: 10, color: tokens.color.textMute }}>（デバッグメッシュ）</span></span>
               </label>
               {showCollision && (
                 <Slider label="不透明度" min={0} max={1} step={0.05} value={collisionOpacity} onChange={setCollisionOpacity} />
@@ -1768,34 +1883,40 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 style={{
                   marginTop: 10,
                   width: '100%',
-                  padding: '10px 12px',
-                  fontSize: 12,
+                  padding: '12px 14px',
+                  fontSize: 12.5,
                   fontWeight: 700,
-                  color: '#fff',
-                  background: colLoading === 'autogen' ? '#94a3b8' : '#7c3aed',
-                  border: 'none',
-                  borderRadius: 8,
+                  letterSpacing: 0.3,
+                  color: tokens.color.text,
+                  background: colLoading === 'autogen' ? tokens.gradient.neutral : tokens.gradient.processing,
+                  border: `1px solid ${colLoading === 'autogen' ? tokens.color.border : tokens.color.processingBorder}`,
+                  borderRadius: tokens.radius.pill,
+                  boxShadow: colLoading === 'autogen' ? tokens.shadow.glass : tokens.shadow.glassProcessing,
                   cursor: colLoading !== null ? 'not-allowed' : 'pointer',
+                  fontFamily: tokens.font.family,
+                  outline: 'none',
                 }}
                 title="splat-transform を使ってスプラットからコリジョン GLB を自動生成（ローカル npm run dev 中のみ）"
               >
-                {colLoading === 'autogen' ? '🤖 生成中…（数十秒〜）' : '🤖 コリジョン自動生成'}
+                {colLoading === 'autogen' ? '🤖 生成中…（数十秒〜1 分程度）' : '🤖 コリジョン自動生成'}
               </button>
-              <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.5)', marginTop: 4, lineHeight: 1.5 }}>
-                splat-transform で生成。walkable / block 両方に同じ GLB を割当。下から個別アップロードで上書き可。
+              <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 6, lineHeight: 1.55 }}>
+                splat-transform v2 voxel pipeline で walkable / block を別々に生成（floor-fill + carve / external-fill）。
+                10cm voxel + 連結クラスタ抽出 + 10万粒キャップ。
+                seed-pos は固定カメラ→最初の視点→ライブカメラの順で自動採用。下から個別 GLB で上書き可。
               </div>
               <div style={{ ...S.subTitle, marginTop: 14 }}><span style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
               <button onClick={() => walkableRef.current?.click()} style={S.fileBtn}>
                 {colLoading === 'walkable' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>
               <input ref={walkableRef} type="file" accept=".glb" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'walkable'); e.target.value = ''; }} />
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'walkable', 'manual'); e.target.value = ''; }} />
               <div style={{ ...S.subTitle, marginTop: 10 }}><span style={{ ...S.colorDot, background: '#ef4444' }} />BLOCK</div>
               <button onClick={() => blockRef.current?.click()} style={S.fileBtn}>
                 {colLoading === 'block' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>
               <input ref={blockRef} type="file" accept=".glb" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'block'); e.target.value = ''; }} />
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'block', 'manual'); e.target.value = ''; }} />
             </Section>
             )}
 
@@ -1825,7 +1946,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           }}
                         />
                       </div>
-                      <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', marginTop: 4, lineHeight: 1.6 }}>
+                      <div style={{ fontSize: 11, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.6 }}>
                         ・<strong style={{ color: '#fecaca' }}>赤ピン</strong>（選択中の視点）= <strong>初期位置</strong> — マップクリックで配置<br />
                         ・他の視点のドットを直接ドラッグして移動も可<br />
                         ・三角コーン = その視点の向き（下の yaw スライダーで調整）
@@ -2233,15 +2354,19 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
         disabled={busy}
         title="現在のシーンを R2 に公開して、顧客が URL でアクセスできるようにする"
         style={{
-          padding: '6px 12px',
+          padding: '7px 16px',
           fontSize: 12,
           fontWeight: 700,
-          color: '#fff',
-          background: busy ? '#94a3b8' : '#16a34a',
-          border: 'none',
-          borderRadius: 6,
+          letterSpacing: 0.3,
+          color: tokens.color.text,
+          background: busy ? tokens.gradient.neutral : tokens.gradient.success,
+          border: `1px solid ${busy ? tokens.color.border : tokens.color.successBorder}`,
+          borderRadius: tokens.radius.pill,
+          boxShadow: busy ? tokens.shadow.glass : tokens.shadow.glassSuccess,
           cursor: busy ? 'not-allowed' : 'pointer',
           marginRight: 6,
+          fontFamily: tokens.font.family,
+          outline: 'none',
         }}
       >
         {busy ? '公開中…' : '🚀 公開'}
@@ -2263,9 +2388,9 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
           {busy && progress && (
             <>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2937', marginBottom: 6 }}>公開中…</div>
-              <div style={{ fontSize: 11.5, color: 'rgba(0,0,0,0.7)', marginBottom: 6 }}>
+              <div style={{ fontSize: 11.5, color: tokens.color.textMute, marginBottom: 6 }}>
                 {progress.message}
-                <span style={{ marginLeft: 6, color: 'rgba(0,0,0,0.5)' }}>{progress.current}/{progress.total}</span>
+                <span style={{ marginLeft: 6, color: tokens.color.textFaint }}>{progress.current}/{progress.total}</span>
               </div>
               <div style={{ height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${Math.round((progress.current / Math.max(1, progress.total)) * 100)}%`, background: '#3b82f6', transition: 'width 120ms linear' }} />
@@ -2275,7 +2400,7 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
           {!busy && doneUrl && (
             <>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#15803d', marginBottom: 8 }}>✓ 公開完了</div>
-              <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.6)', marginBottom: 6 }}>顧客に送る URL:</div>
+              <div style={{ fontSize: 11, color: tokens.color.textMute, marginBottom: 6 }}>顧客に送る URL:</div>
               <input
                 readOnly
                 value={doneUrl}
@@ -2291,7 +2416,7 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
                 <button
                   type="button"
                   onClick={() => setDoneUrl(null)}
-                  style={{ padding: '5px 10px', fontSize: 11, background: '#fff', color: 'rgba(0,0,0,0.6)', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
+                  style={{ padding: '5px 10px', fontSize: 11, background: '#fff', color: tokens.color.textMute, border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
                 >閉じる</button>
               </div>
             </>
@@ -2303,7 +2428,7 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
               <button
                 type="button"
                 onClick={() => setError(null)}
-                style={{ padding: '5px 10px', fontSize: 11, background: '#fff', color: 'rgba(0,0,0,0.6)', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
+                style={{ padding: '5px 10px', fontSize: 11, background: '#fff', color: tokens.color.textMute, border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
               >閉じる</button>
             </>
           )}
@@ -2332,7 +2457,7 @@ const fpsOverlayStyle: React.CSSProperties = {
   background: 'rgba(15, 23, 42, 0.7)',
   color: '#fff',
   borderRadius: 6,
-  fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+  fontFamily: tokens.font.mono,
   fontSize: 12,
   fontWeight: 600,
   letterSpacing: 0.4,
@@ -2349,13 +2474,14 @@ function SaveIndicator({ state, lastSavedAt, onClick }: {
     const d = new Date(t);
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
   };
+  // The text colour is uniformly `tokens.color.text` now (status is conveyed
+  // by the dot colour, not by tinting the label). Keeping just the dot.
   let label = '保存';
-  let color: string = COLOR.textMute;
   let dot = COLOR.textMute;
-  if (state === 'saving') { label = '保存中…'; color = COLOR.accentText; dot = COLOR.accent; }
-  else if (state === 'dirty') { label = '未保存の変更'; color = COLOR.warn; dot = COLOR.warn; }
-  else if (state === 'saved') { label = `保存済 ${lastSavedAt ? fmt(lastSavedAt) : ''}`; color = COLOR.ok; dot = COLOR.ok; }
-  else if (state === 'error') { label = '保存エラー（クリックで再試行）'; color = COLOR.danger; dot = COLOR.danger; }
+  if (state === 'saving') { label = '保存中…'; dot = COLOR.accent; }
+  else if (state === 'dirty') { label = '未保存の変更'; dot = COLOR.warn; }
+  else if (state === 'saved') { label = `保存済 ${lastSavedAt ? fmt(lastSavedAt) : ''}`; dot = COLOR.ok; }
+  else if (state === 'error') { label = '保存エラー（クリックで再試行）'; dot = COLOR.danger; }
   else { label = '未保存'; }
 
   return (
@@ -2365,12 +2491,14 @@ function SaveIndicator({ state, lastSavedAt, onClick }: {
       title="今すぐ IndexedDB に保存します（ブラウザを閉じても残ります）"
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '6px 12px',
-        background: 'rgba(0,0,0,0.04)',
+        padding: '7px 14px',
+        background: tokens.gradient.surface,
         border: `1px solid ${COLOR.border}`,
-        borderRadius: 7,
-        color, fontSize: 11, fontWeight: 500,
-        cursor: 'pointer', fontFamily: 'inherit',
+        borderRadius: tokens.radius.pill,
+        boxShadow: tokens.shadow.glass,
+        color: tokens.color.text, fontSize: 11, fontWeight: 600,
+        cursor: 'pointer', fontFamily: tokens.font.family,
+        outline: 'none',
       }}
     >
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, boxShadow: `0 0 6px ${dot}`, flexShrink: 0 }} />
@@ -2414,7 +2542,7 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
   return (
     <div style={S.infoRow}>
       <div style={S.infoLabel}>{label}</div>
-      <div style={{ ...S.infoVal, ...(mono ? { fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace' } : null) }}>{value}</div>
+      <div style={{ ...S.infoVal, ...(mono ? { fontFamily: tokens.font.mono } : null) }}>{value}</div>
     </div>
   );
 }
@@ -2480,19 +2608,29 @@ function ViewerToolbarSection({
       defaultOpen={false}
       action={<button onClick={onReset} style={S.btn} title="すべて表示 (既定) に戻す">既定に戻す</button>}
     >
-      <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', marginBottom: 8, lineHeight: 1.55 }}>
+      <div style={{ fontSize: 11, color: tokens.color.textMute, marginBottom: 8, lineHeight: 1.55 }}>
         ビューアに出す項目を選びます。チェックを外すと閲覧者にも非表示になります。<br />
         薄く表示されている項目は、現在のプロジェクト種別 / モードでは元から出ない項目です。
       </div>
 
       <div style={S.toolbarGroupHead}>サイドバーサイズ</div>
-      <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-        {(['large', 'small'] as const).map((s) => {
+      <div style={{
+        display: 'flex', gap: 4, marginTop: 4, padding: 5,
+        background: tokens.glass.surfaceStrong,
+        backdropFilter: tokens.backdrop,
+        WebkitBackdropFilter: tokens.backdrop,
+        border: `1px solid ${tokens.color.border}`,
+        borderRadius: tokens.radius.pill,
+        boxShadow: tokens.shadow.glass,
+      }}>
+        {(['small', 'large'] as const).map((s) => {
           const labels: Record<string, { label: string; sub: string }> = {
-            large: { label: '大', sub: '全高表示 (既定)' },
-            small: { label: '小', sub: '内容の高さ分のみ' },
+            // Default flipped to "small" — fits more content on the screen
+            // and avoids the empty bottom that "large" leaves on short panels.
+            small: { label: '小', sub: '内容の高さ分のみ (既定)' },
+            large: { label: '大', sub: '全高表示' },
           };
-          const isA = (tb.size ?? 'large') === s;
+          const isA = (tb.size ?? 'small') === s;
           return (
             <button
               key={s}
@@ -2500,27 +2638,32 @@ function ViewerToolbarSection({
               onClick={() => onChange({ size: s })}
               style={{
                 flex: 1,
-                padding: '6px 8px',
-                fontSize: 11,
+                padding: '8px 10px',
+                fontSize: 12,
                 lineHeight: 1.3,
-                background: isA ? 'rgba(59,130,246,0.14)' : '#ffffff',
-                border: `1px solid ${isA ? 'rgba(59,130,246,0.5)' : 'rgba(0,0,0,0.12)'}`,
-                color: isA ? '#1d4ed8' : '#1f2937',
-                borderRadius: 6,
+                background: isA ? tokens.gradient.accent : 'transparent',
+                borderWidth: 1,
+                borderStyle: 'solid' as const,
+                borderColor: isA ? tokens.color.accentBorder : 'transparent',
+                color: tokens.color.text,
+                borderRadius: tokens.radius.pill,
+                boxShadow: isA ? tokens.shadow.glassAccent : 'none',
                 cursor: 'pointer',
-                fontFamily: 'inherit',
-                fontWeight: isA ? 600 : 500,
+                fontFamily: tokens.font.family,
+                fontWeight: isA ? 700 : 600,
                 textAlign: 'center',
+                outline: 'none',
+                transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
               }}
               title={`サイドバーを ${labels[s].label} で表示`}
             >
               <div>{labels[s].label}</div>
-              <div style={{ fontSize: 9.5, color: isA ? 'rgba(29,78,216,0.7)' : 'rgba(0,0,0,0.45)', marginTop: 2 }}>{labels[s].sub}</div>
+              <div style={{ fontSize: 9.5, color: tokens.color.textMute, marginTop: 2, fontWeight: 500 }}>{labels[s].sub}</div>
             </button>
           );
         })}
       </div>
-      <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.5)', marginTop: 6, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginTop: 6, lineHeight: 1.5 }}>
         どちらも幅は 320px。「小」は表示中のセクション分だけ縦に伸びます。
       </div>
 
@@ -2581,13 +2724,20 @@ const ORDER_LABELS: Record<OrderableSidebarBlock, string> = {
 };
 
 /**
- * Whether a sidebar block currently shows in the viewer based on the toolbar config.
- * Mirrors the gating in `LeftPanel.tsx`. Note `tracking` is keyed off `tb.demo` (the
- * legacy storage name) and is **default OFF** — every other block is default ON.
+ * Whether a sidebar block currently shows in the viewer based on the toolbar
+ * config. Mirrors `LeftPanel.tsx` exactly — most blocks are **default OFF**
+ * (only visible when explicitly checked), `quality` and `mobile` are
+ * **default ON** (visible unless explicitly turned off), `tracking` reads
+ * `tb.demo` (legacy storage name) and is default OFF.
  */
 function isBlockVisible(id: OrderableSidebarBlock, tb: ToolbarPatch): boolean {
+  // `mobile` lives on `ViewerToolbarConfig` but isn't in the local
+  // `ToolbarKey` union (no checkbox row), so reach in via the bag type.
+  const bag = tb as Record<string, unknown>;
   if (id === 'tracking') return tb.demo === true;
-  return (tb as Record<string, unknown>)[id] !== false;
+  if (id === 'quality')  return tb.quality !== false;
+  if (id === 'mobile')   return bag.mobile !== false;
+  return bag[id] === true;
 }
 
 /**
@@ -2642,11 +2792,11 @@ function SidebarOrderEditor({ tb, onChange }: { tb: ToolbarPatch; onChange: (pat
 
   return (
     <div>
-      <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.5)', marginBottom: 6, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginBottom: 6, lineHeight: 1.5 }}>
         サイドバーに表示される項目だけが並びます。ドラッグで順序を入替。表示／非表示は上のチェックボックスで切替。
       </div>
       {visibleOrdered.length === 0 ? (
-        <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', padding: '8px 10px', background: 'rgba(0,0,0,0.03)', borderRadius: 6, textAlign: 'center' }}>
+        <div style={{ fontSize: 11, color: tokens.color.textFaint, padding: '8px 10px', background: 'rgba(0,0,0,0.03)', borderRadius: 6, textAlign: 'center' }}>
           表示中の項目がありません
         </div>
       ) : (
@@ -2676,7 +2826,7 @@ function SidebarOrderEditor({ tb, onChange }: { tb: ToolbarPatch; onChange: (pat
                 }}
               >
                 <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.35)', minWidth: 14, lineHeight: 1, cursor: 'grab' }} title="ドラッグして並び替え">⋮⋮</span>
-                <span style={{ fontSize: 10, color: 'rgba(0,0,0,0.4)', fontFamily: 'ui-monospace, monospace', minWidth: 18 }}>{idx + 1}</span>
+                <span style={{ fontSize: 10, color: tokens.color.textFaint, fontFamily: tokens.font.mono, minWidth: 18 }}>{idx + 1}</span>
                 <span style={{ fontSize: 11.5, color: '#1f2937', flex: 1 }}>{ORDER_LABELS[id]}</span>
               </div>
             );
@@ -2709,30 +2859,33 @@ function EngineSwitchButton({
       type="button"
       onClick={() => { if (!isActive) onClick(); }}
       style={{
-        display: 'flex', alignItems: 'center', gap: 10,
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1,
         padding: '8px 12px',
         fontSize: 12,
-        background: isActive ? 'rgba(59,130,246,0.14)' : '#ffffff',
-        border: `1px solid ${isActive ? 'rgba(59,130,246,0.5)' : 'rgba(0,0,0,0.12)'}`,
-        borderRadius: 6,
+        background: isActive ? tokens.gradient.accent : tokens.gradient.surface,
+        // Long-hand split for the React shorthand-vs-longhand bug.
+        borderWidth: 1,
+        borderStyle: 'solid' as const,
+        borderColor: isActive ? tokens.color.accentBorder : tokens.color.border,
+        borderRadius: tokens.radius.pill,
+        boxShadow: isActive ? tokens.shadow.glassAccent : tokens.shadow.glass,
         cursor: isActive ? 'default' : 'pointer',
-        fontWeight: isActive ? 700 : 500,
-        color: isActive ? '#1d4ed8' : '#1f2937',
-        fontFamily: 'inherit',
+        fontWeight: isActive ? 700 : 600,
+        color: tokens.color.text,
+        fontFamily: tokens.font.family,
         width: '100%',
         textAlign: 'left',
         lineHeight: 1.3,
+        outline: 'none',
+        transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
       }}
       title={isActive ? '使用中' : `${label} に切替えてリロード`}
     >
-      <span style={{ width: 16, textAlign: 'center' }}>{isActive ? '●' : '○'}</span>
-      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 10 }}>{isActive ? '●' : '○'}</span>
         <span>{label}</span>
-        <span style={{ fontSize: 10, color: isActive ? 'rgba(29,78,216,0.7)' : 'rgba(0,0,0,0.5)', fontWeight: 400 }}>{sub}</span>
       </span>
-      <span style={{ fontSize: 10.5, color: isActive ? '#1d4ed8' : 'rgba(0,0,0,0.55)', whiteSpace: 'nowrap' }}>
-        {isActive ? '使用中' : '切替 ▶'}
-      </span>
+      <span style={{ fontSize: 9.5, color: tokens.color.textMute, fontWeight: 500 }}>{sub}</span>
     </button>
   );
 }
@@ -2818,34 +2971,34 @@ function RenderQualitySection({
       defaultOpen={false}
       action={<button onClick={onReset} style={S.btn} title="manifest.settings.render を未設定に戻す">既定に戻す</button>}
     >
-      <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', marginBottom: 8, lineHeight: 1.55 }}>
+      <div style={{ fontSize: 11, color: tokens.color.textMute, marginBottom: 8, lineHeight: 1.55 }}>
         露出 / 背景色は両エンジン反映。彩度・コントラスト・明るさ・トーンマップは PlayCanvas のみ反映。
       </div>
 
       {/* ビューアエンジン切替 — 各ボタンは「保存 + 即リロード」で切替を即時反映。 */}
       <div style={S.toolbarGroupHead}>ビューアエンジン</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4 }}>
         <EngineSwitchButton
-          label="PlayCanvas (PLY / SOG)"
-          sub="SuperSplat 同等品質 — CameraFrame + gamma passthrough + radialSorting / SOG 対応 (既定)"
+          label="PlayCanvas"
+          sub="PLY / SOG (既定)"
           isActive={(cfg.engine ?? 'playcanvas') === 'playcanvas'}
           onClick={() => onSwitchEngine('playcanvas')}
         />
         <EngineSwitchButton
-          label="Spark (SPZ)"
-          sub="Niantic Spark — Plan.splatSpz があれば ~10x 軽量 / 高速ロード"
+          label="Spark"
+          sub="SPZ 軽量 / 高速"
           isActive={cfg.engine === 'spark'}
           onClick={() => onSwitchEngine('spark')}
         />
       </div>
-      <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.5)', marginTop: 6, lineHeight: 1.4 }}>
+      <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginTop: 6, lineHeight: 1.4 }}>
         ボタンを押すと自動でリロードしてエンジンが切り替わります。
       </div>
 
       <Slider label="露出 (EV)" min={-3} max={3} step={0.1} value={ev} onChange={(v) => patch({ exposureEV: +v.toFixed(2) })} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-        <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.6)', width: 56 }}>背景色</span>
+        <span style={{ fontSize: 11, color: tokens.color.textMute, width: 56 }}>背景色</span>
         <input
           type="color"
           value={colorHex}
@@ -2858,13 +3011,13 @@ function RenderQualitySection({
           }}
           style={{ width: 36, height: 24, border: '1px solid rgba(0,0,0,0.12)', borderRadius: 4, padding: 0, cursor: 'pointer' }}
         />
-        <span style={{ fontSize: 10.5, fontFamily: 'ui-monospace, monospace', color: 'rgba(0,0,0,0.6)' }}>{colorHex}</span>
+        <span style={{ fontSize: 10.5, fontFamily: tokens.font.mono, color: tokens.color.textMute }}>{colorHex}</span>
       </div>
 
       {/* カラー調整 — PlayCanvas (CameraFrame) でのみ反映。Spark / mkkellogg では無視される。 */}
       <div style={S.toolbarGroupHead}>カラー調整 (PlayCanvas)</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-        <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.6)', width: 80 }}>トーン</span>
+        <span style={{ fontSize: 11, color: tokens.color.textMute, width: 80 }}>トーン</span>
         <select
           value={cfg.toneMapping ?? 'linear'}
           onChange={(e) => patch({ toneMapping: e.target.value as NonNullable<import('../core/types').RenderQualityConfig['toneMapping']> })}
@@ -3005,8 +3158,8 @@ function VideoTabPanel(props: {
   return (
     <Section title="動画" subtitle="VIDEO" defaultOpen={true}>
       {/* movement mode (walk / fly) — locked while a path recording / countdown is mid-flow */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-        <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.7)', minWidth: 64 }}>移動モード</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 10, padding: 5, background: tokens.glass.surfaceStrong, backdropFilter: tokens.backdrop, WebkitBackdropFilter: tokens.backdrop, border: `1px solid ${COLOR.border}`, borderRadius: tokens.radius.pill, boxShadow: tokens.shadow.glass }}>
+        <span style={{ fontSize: 11, color: COLOR.textMute, minWidth: 64, paddingLeft: 8, fontWeight: 600 }}>移動モード</span>
         {([['walk', '歩く'], ['fly', 'フライ']] as const).map(([k, label]) => (
           <button
             key={k}
@@ -3015,12 +3168,15 @@ function VideoTabPanel(props: {
             onClick={() => setMovementMode(k)}
             disabled={movementLocked}
             style={{
-              flex: 1, padding: '6px 10px', fontSize: 11.5, fontWeight: 600,
-              borderRadius: 6, cursor: movementLocked ? 'not-allowed' : 'pointer',
-              background: movementMode === k ? 'rgba(34,197,94,0.14)' : '#fff',
-              border: `1px solid ${movementMode === k ? 'rgba(34,197,94,0.5)' : 'rgba(0,0,0,0.15)'}`,
-              color: movementMode === k ? '#15803d' : 'rgba(0,0,0,0.7)',
-              opacity: movementLocked ? 0.5 : 1,
+              flex: 1, padding: '7px 12px', fontSize: 12, fontWeight: 700,
+              borderRadius: tokens.radius.pill, cursor: movementLocked ? 'not-allowed' : 'pointer',
+              background: movementMode === k ? tokens.gradient.accent : 'transparent',
+              border: `1px solid ${movementMode === k ? tokens.color.accentBorder : 'transparent'}`,
+              boxShadow: movementMode === k ? tokens.shadow.glassAccent : 'none',
+              color: COLOR.text,
+              opacity: movementLocked ? 0.45 : 1,
+              fontFamily: tokens.font.family, outline: 'none',
+              transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
             }}
           >
             {label}
@@ -3029,7 +3185,7 @@ function VideoTabPanel(props: {
       </div>
 
       {/* mode tabs */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 10, padding: 5, background: tokens.glass.surfaceStrong, backdropFilter: tokens.backdrop, WebkitBackdropFilter: tokens.backdrop, border: `1px solid ${COLOR.border}`, borderRadius: tokens.radius.pill, boxShadow: tokens.shadow.glass }}>
         {([['path', 'scene 補間', 'カメラ位置を補間して動画化'], ['free', '画面操作', '操作画面をそのまま録画']] as const).map(([k, label, sub]) => (
           <button
             key={k}
@@ -3038,16 +3194,19 @@ function VideoTabPanel(props: {
             onClick={() => props.setMode(k)}
             disabled={props.recState !== 'idle' || props.freeRecState !== 'idle'}
             style={{
-              padding: '8px 6px', fontSize: 11.5, lineHeight: 1.3,
-              borderRadius: 6, cursor: 'pointer', textAlign: 'center',
-              background: props.mode === k ? 'rgba(59,130,246,0.14)' : '#fff',
-              border: `1px solid ${props.mode === k ? 'rgba(59,130,246,0.5)' : 'rgba(0,0,0,0.15)'}`,
-              color: props.mode === k ? '#1d4ed8' : 'rgba(0,0,0,0.7)',
-              fontWeight: 600,
+              padding: '8px 8px', fontSize: 12, lineHeight: 1.3,
+              borderRadius: tokens.radius.pill, cursor: 'pointer', textAlign: 'center',
+              background: props.mode === k ? tokens.gradient.accent : 'transparent',
+              border: `1px solid ${props.mode === k ? tokens.color.accentBorder : 'transparent'}`,
+              boxShadow: props.mode === k ? tokens.shadow.glassAccent : 'none',
+              color: COLOR.text,
+              fontWeight: 700,
+              fontFamily: tokens.font.family, outline: 'none',
+              transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
             }}
           >
             <div>{label}</div>
-            <div style={{ fontSize: 9.5, fontWeight: 400, color: 'rgba(0,0,0,0.5)' }}>{sub}</div>
+            <div style={{ fontSize: 9.5, fontWeight: 500, color: COLOR.textMute, marginTop: 1 }}>{sub}</div>
           </button>
         ))}
       </div>
@@ -3240,7 +3399,7 @@ function PathRecordingPanel({
       </div>
 
       {keyframes.length === 0 && (
-        <div style={{ padding: '12px', fontSize: 11.5, color: 'rgba(0,0,0,0.5)', textAlign: 'center', border: '1px dashed rgba(0,0,0,0.2)', borderRadius: 6 }}>
+        <div style={{ padding: '12px', fontSize: 11.5, color: tokens.color.textFaint, textAlign: 'center', border: '1px dashed rgba(0,0,0,0.2)', borderRadius: 6 }}>
           まだ scene がありません。下の「+ scene を追加」を押してください。
         </div>
       )}
@@ -3280,7 +3439,7 @@ function PathRecordingPanel({
                 style={{ width: 84, height: 56, objectFit: 'cover', borderRadius: 4, cursor: isBusy ? 'default' : 'pointer', flexShrink: 0 }}
               />
             ) : (
-              <div style={{ width: 84, height: 56, background: 'rgba(0,0,0,0.08)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'rgba(0,0,0,0.4)', flexShrink: 0 }}>no img</div>
+              <div style={{ width: 84, height: 56, background: 'rgba(0,0,0,0.08)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: tokens.color.textFaint, flexShrink: 0 }}>no img</div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -3298,7 +3457,7 @@ function PathRecordingPanel({
                       padding: '1px 6px', fontSize: 9.5, fontWeight: 700, borderRadius: 999,
                       background: kf.passThrough ? 'rgba(168,85,247,0.14)' : 'rgba(0,0,0,0.04)',
                       border: `1px solid ${kf.passThrough ? 'rgba(168,85,247,0.5)' : 'rgba(0,0,0,0.15)'}`,
-                      color: kf.passThrough ? '#7e22ce' : 'rgba(0,0,0,0.55)',
+                      color: kf.passThrough ? '#7e22ce' : tokens.color.textMute,
                       cursor: isBusy ? 'not-allowed' : 'pointer',
                     }}
                   >
@@ -3306,12 +3465,12 @@ function PathRecordingPanel({
                   </button>
                 )}
               </div>
-              <div style={{ fontSize: 10, color: 'rgba(0,0,0,0.5)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 10, color: tokens.color.textFaint, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 ({kf.pose.position[0].toFixed(1)}, {kf.pose.position[1].toFixed(1)}, {kf.pose.position[2].toFixed(1)})
               </div>
               {!isLast && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                  <span style={{ fontSize: 9.5, color: 'rgba(0,0,0,0.5)' }}>次の scene へ</span>
+                  <span style={{ fontSize: 9.5, color: tokens.color.textFaint }}>次の scene へ</span>
                   <button
                     type="button"
                     className="video-btn-tap"
@@ -3335,7 +3494,7 @@ function PathRecordingPanel({
                     title="+1 秒"
                     style={{ ...btnIcon(isBusy || kf.durationSec >= 60), padding: '2px 8px', fontSize: 13, lineHeight: 1, fontWeight: 700 }}
                   >+</button>
-                  <span style={{ fontSize: 9.5, color: 'rgba(0,0,0,0.5)' }}>秒</span>
+                  <span style={{ fontSize: 9.5, color: tokens.color.textFaint }}>秒</span>
                 </div>
               )}
             </div>
@@ -3368,10 +3527,10 @@ function PathRecordingPanel({
         + 現在のカメラを scene{keyframes.length + 1} として追加
       </button>
 
-      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.7)' }}>合計 <strong>{totalSec.toFixed(1)}秒</strong></span>
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLOR.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 11, color: COLOR.textMute }}>合計 <strong style={{ color: COLOR.text }}>{totalSec.toFixed(1)}秒</strong></span>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.7)' }}>FPS</span>
+        <span style={{ fontSize: 11, color: COLOR.textMute }}>FPS</span>
         {([60, 30] as const).map((f) => (
           <button
             key={f}
@@ -3380,11 +3539,14 @@ function PathRecordingPanel({
             onClick={() => setFps(f)}
             disabled={isBusy}
             style={{
-              padding: '4px 12px', fontSize: 11, borderRadius: 999,
-              background: fps === f ? 'rgba(59,130,246,0.14)' : '#fff',
-              border: `1px solid ${fps === f ? 'rgba(59,130,246,0.5)' : 'rgba(0,0,0,0.2)'}`,
-              color: fps === f ? '#1d4ed8' : 'rgba(0,0,0,0.55)',
-              cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: 600,
+              padding: '5px 14px', fontSize: 11.5, borderRadius: tokens.radius.pill,
+              background: fps === f ? tokens.gradient.accent : tokens.gradient.surface,
+              border: `1px solid ${fps === f ? tokens.color.accentBorder : COLOR.border}`,
+              boxShadow: fps === f ? tokens.shadow.glassAccent : tokens.shadow.glass,
+              color: COLOR.text,
+              cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: 700,
+              fontFamily: tokens.font.family, outline: 'none',
+              transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
             }}
           >
             {f}
@@ -3394,9 +3556,9 @@ function PathRecordingPanel({
 
       <div style={{ marginTop: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.7)' }}>プレビュー位置</span>
+          <span style={{ fontSize: 11, color: tokens.color.textMute }}>プレビュー位置</span>
           <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', fontFamily: 'monospace' }}>
+          <span style={{ fontSize: 11, color: tokens.color.textMute, fontFamily: 'monospace' }}>
             {(progress * totalSec).toFixed(1)}s / {totalSec.toFixed(1)}s
           </span>
         </div>
@@ -3410,7 +3572,7 @@ function PathRecordingPanel({
             value={progress}
             disabled={!canRun && !isBusy}
             onChange={(e) => handleScrub(parseFloat(e.target.value))}
-            style={{ width: '100%', accentColor: isBusy ? '#dc2626' : '#3b82f6', display: 'block' }}
+            style={{ width: '100%', accentColor: isBusy ? tokens.color.danger : tokens.color.accent, display: 'block' }}
           />
           {/* trim range bar — green strip showing what will be exported */}
           <div style={{ position: 'relative', height: 6, marginTop: 2, background: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' }}>
@@ -3425,7 +3587,7 @@ function PathRecordingPanel({
               }}
             />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, fontSize: 9.5, color: 'rgba(0,0,0,0.5)', fontFamily: 'monospace' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, fontSize: 9.5, color: tokens.color.textFaint, fontFamily: 'monospace' }}>
             <span>0s</span>
             <span>{totalSec.toFixed(1)}s</span>
           </div>
@@ -3459,9 +3621,12 @@ function PathRecordingPanel({
             type="button"
             className="video-btn-cta"
             onClick={handleStopPreview}
-            style={{ flex: '1 1 auto', padding: '8px 12px', fontSize: 12, fontWeight: 700,
-              borderRadius: 8, border: '1px solid #1f2937', background: '#1f2937', color: '#fff',
-              cursor: 'pointer' }}
+            style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
+              borderRadius: tokens.radius.pill,
+              border: `1px solid ${tokens.color.border}`,
+              background: tokens.gradient.neutral, color: tokens.color.text,
+              boxShadow: tokens.shadow.glass,
+              cursor: 'pointer', fontFamily: tokens.font.family, outline: 'none' }}
           >
             ■ プレビュー停止
           </button>
@@ -3471,9 +3636,13 @@ function PathRecordingPanel({
             className="video-btn-cta"
             onClick={handlePreview}
             disabled={!canRun}
-            style={{ flex: '1 1 auto', padding: '8px 12px', fontSize: 12, fontWeight: 600,
-              borderRadius: 8, border: '1px solid rgba(0,0,0,0.2)', background: '#fff',
-              cursor: canRun ? 'pointer' : 'not-allowed', opacity: canRun ? 1 : 0.4 }}
+            style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
+              borderRadius: tokens.radius.pill,
+              border: `1px solid ${tokens.color.border}`,
+              background: tokens.gradient.surface, color: tokens.color.text,
+              boxShadow: tokens.shadow.glass,
+              cursor: canRun ? 'pointer' : 'not-allowed', opacity: canRun ? 1 : 0.45,
+              fontFamily: tokens.font.family, outline: 'none' }}
           >
             ▶ プレビュー再生
           </button>
@@ -3483,9 +3652,13 @@ function PathRecordingPanel({
           className="video-btn-cta"
           onClick={handleRecord}
           disabled={!canRun}
-          style={{ flex: '1 1 auto', padding: '8px 12px', fontSize: 12, fontWeight: 700,
-            borderRadius: 8, border: '1px solid #dc2626', background: '#dc2626', color: '#fff',
-            cursor: canRun ? 'pointer' : 'not-allowed', opacity: canRun ? 1 : 0.4 }}
+          style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
+            borderRadius: tokens.radius.pill,
+            border: `1px solid ${tokens.color.dangerBorder}`,
+            background: tokens.gradient.danger, color: tokens.color.text,
+            boxShadow: tokens.shadow.glass,
+            cursor: canRun ? 'pointer' : 'not-allowed', opacity: canRun ? 1 : 0.45,
+            fontFamily: tokens.font.family, outline: 'none' }}
         >
           ● 録画 → MP4 ダウンロード
         </button>
@@ -3503,7 +3676,7 @@ function PathRecordingPanel({
       </div>
 
       {isBusy && (
-        <div style={{ marginTop: 10, fontSize: 11.5, color: 'rgba(0,0,0,0.7)' }}>
+        <div style={{ marginTop: 10, fontSize: 11.5, color: tokens.color.textMute }}>
           {recState === 'recording' ? '録画中…' : 'プレビュー再生中…'}
           <div style={{ marginTop: 4, height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${Math.round(progress * 100)}%`, background: recState === 'recording' ? '#dc2626' : '#3b82f6', transition: 'width 80ms linear' }} />
@@ -3664,7 +3837,7 @@ function FreeRecordingPanel({
 
       {/* fps */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.7)' }}>FPS</span>
+        <span style={{ fontSize: 11, color: COLOR.textMute }}>FPS</span>
         {([60, 30] as const).map((f) => (
           <button
             key={f}
@@ -3673,11 +3846,14 @@ function FreeRecordingPanel({
             onClick={() => setFps(f)}
             disabled={isBusy}
             style={{
-              padding: '4px 12px', fontSize: 11, borderRadius: 999,
-              background: fps === f ? 'rgba(59,130,246,0.14)' : '#fff',
-              border: `1px solid ${fps === f ? 'rgba(59,130,246,0.5)' : 'rgba(0,0,0,0.2)'}`,
-              color: fps === f ? '#1d4ed8' : 'rgba(0,0,0,0.55)',
-              cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: 600,
+              padding: '5px 14px', fontSize: 11.5, borderRadius: tokens.radius.pill,
+              background: fps === f ? tokens.gradient.accent : tokens.gradient.surface,
+              border: `1px solid ${fps === f ? tokens.color.accentBorder : COLOR.border}`,
+              boxShadow: fps === f ? tokens.shadow.glassAccent : tokens.shadow.glass,
+              color: COLOR.text,
+              cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: 700,
+              fontFamily: tokens.font.family, outline: 'none',
+              transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
             }}
           >
             {f}
@@ -3697,8 +3873,12 @@ function FreeRecordingPanel({
           type="button"
           className="video-btn-cta"
           onClick={handleStart}
-          style={{ width: '100%', padding: '12px', fontSize: 14, fontWeight: 700,
-            borderRadius: 8, border: '1px solid #dc2626', background: '#dc2626', color: '#fff',
+          style={{ width: '100%', padding: '14px', fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3,
+            borderRadius: tokens.radius.pill,
+            border: `1px solid ${tokens.color.dangerBorder}`,
+            background: tokens.gradient.danger, color: tokens.color.text,
+            boxShadow: tokens.shadow.glass,
+            fontFamily: tokens.font.family, outline: 'none',
             cursor: 'pointer' }}
         >
           ● 録画開始
@@ -3709,8 +3889,12 @@ function FreeRecordingPanel({
           type="button"
           className="video-btn-cta"
           onClick={handleAbort}
-          style={{ width: '100%', padding: '12px', fontSize: 14, fontWeight: 700,
-            borderRadius: 8, border: '1px solid #d97706', background: '#fffbeb', color: '#92400e',
+          style={{ width: '100%', padding: '14px', fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3,
+            borderRadius: tokens.radius.pill,
+            border: `1px solid ${tokens.color.warnBorder}`,
+            background: tokens.gradient.warn, color: tokens.color.text,
+            boxShadow: tokens.shadow.glass,
+            fontFamily: tokens.font.family, outline: 'none',
             cursor: 'pointer' }}
         >
           開始まで {freeRecCountdown}s … キャンセル
@@ -3721,8 +3905,12 @@ function FreeRecordingPanel({
           type="button"
           className="video-btn-cta"
           onClick={handleStop}
-          style={{ width: '100%', padding: '12px', fontSize: 14, fontWeight: 700,
-            borderRadius: 8, border: '1px solid #1f2937', background: '#1f2937', color: '#fff',
+          style={{ width: '100%', padding: '14px', fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3,
+            borderRadius: tokens.radius.pill,
+            border: `1px solid ${tokens.color.border}`,
+            background: tokens.gradient.neutral, color: tokens.color.text,
+            boxShadow: tokens.shadow.glass,
+            fontFamily: tokens.font.family, outline: 'none',
             cursor: 'pointer' }}
         >
           ■ 録画停止 → {FREE_REC_BUFFER_SEC} 秒バッファ後に書き出し
@@ -3732,8 +3920,12 @@ function FreeRecordingPanel({
         <button
           type="button"
           disabled
-          style={{ width: '100%', padding: '12px', fontSize: 14, fontWeight: 700,
-            borderRadius: 8, border: '1px solid #d97706', background: '#fffbeb', color: '#92400e',
+          style={{ width: '100%', padding: '14px', fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3,
+            borderRadius: tokens.radius.pill,
+            border: `1px solid ${tokens.color.warnBorder}`,
+            background: tokens.gradient.warn, color: tokens.color.text,
+            boxShadow: tokens.shadow.glass, opacity: 0.7,
+            fontFamily: tokens.font.family, outline: 'none',
             cursor: 'default' }}
         >
           停止まで {freeRecCountdown}s …
@@ -3919,7 +4111,7 @@ function ClipLibrarySection({
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(0,0,0,0.75)' }}>ライブラリ</span>
-        <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)' }}>{library.length} 本保存済</span>
+        <span style={{ fontSize: 11, color: tokens.color.textFaint }}>{library.length} 本保存済</span>
         <div style={{ flex: 1 }} />
         {selectedCount > 0 && (
           <button
@@ -3935,7 +4127,7 @@ function ClipLibrarySection({
       </div>
 
       {library.length === 0 && (
-        <div style={{ padding: 12, fontSize: 11.5, color: 'rgba(0,0,0,0.5)', textAlign: 'center', border: '1px dashed rgba(0,0,0,0.2)', borderRadius: 6 }}>
+        <div style={{ padding: 12, fontSize: 11.5, color: tokens.color.textFaint, textAlign: 'center', border: '1px dashed rgba(0,0,0,0.2)', borderRadius: 6 }}>
           まだ保存された動画はありません。録画すると自動で保存されます。
         </div>
       )}
@@ -3984,13 +4176,13 @@ function ClipLibrarySection({
                 style={{ width: 64, height: 40, objectFit: 'cover', borderRadius: 3, flexShrink: 0, pointerEvents: 'none' }}
               />
             ) : (
-              <div style={{ width: 64, height: 40, background: 'rgba(0,0,0,0.08)', borderRadius: 3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'rgba(0,0,0,0.4)' }}>no img</div>
+              <div style={{ width: 64, height: 40, background: 'rgba(0,0,0,0.08)', borderRadius: 3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: tokens.color.textFaint }}>no img</div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(0,0,0,0.8)' }}>
-                <span style={{ marginRight: 4, color: 'rgba(0,0,0,0.55)' }}>{idx + 1}.</span>
+                <span style={{ marginRight: 4, color: tokens.color.textMute }}>{idx + 1}.</span>
                 {clip.origin === 'path' ? '🎞 scene 補間' : '📹 画面操作'}
-                <span style={{ marginLeft: 6, fontWeight: 400, color: 'rgba(0,0,0,0.55)' }}>
+                <span style={{ marginLeft: 6, fontWeight: 400, color: tokens.color.textMute }}>
                   {formatDuration(clip.durationMs)} / {formatBytes(clip.bytes)} / .{clip.ext}
                 </span>
               </div>
@@ -4023,7 +4215,7 @@ function ClipLibrarySection({
       )}
 
       {concatRunning && concatProgress && (
-        <div style={{ marginTop: 8, fontSize: 11.5, color: 'rgba(0,0,0,0.7)' }}>
+        <div style={{ marginTop: 8, fontSize: 11.5, color: tokens.color.textMute }}>
           結合中… clip {concatProgress.clipIndex + 1} / {concatProgress.total}（{Math.round(concatProgress.t01 * 100)}%）
           <div style={{ marginTop: 4, height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden' }}>
             <div
@@ -4043,26 +4235,32 @@ function ClipLibrarySection({
 
 // ----- styles -----
 
-const COLOR = {
-  bg: '#f7f8fa',
-  panel: '#ffffff',
-  panel2: '#f1f3f6',
-  border: '#dde1e8',
-  borderSoft: '#e8ebf0',
-  text: '#1f2937',        // 本文
-  textDim: '#374151',     // 2 次テキスト
-  textMute: '#4b5563',    // ラベル等 (やや濃いめにして可読性確保)
-  accent: '#3b82f6',
-  accentText: '#1d4ed8',
-  warn: '#d97706',
-  danger: '#dc2626',
-  ok: '#16a34a',
+// Mapped to the shared liquid-glass design tokens. Keeping the local `COLOR`
+// alias rather than tearing it out everywhere — every entry here is just
+// a re-export of the token, so future palette tweaks happen in one file
+// (`design-tokens.ts`) and propagate. Typed as `string` so consumers that
+// cross-assign different entries (e.g. `dot = state==='saving' ? accent
+// : warn`) don't trip narrowing.
+const COLOR: Record<string, string> = {
+  bg: tokens.color.bg,
+  panel: tokens.color.surface,
+  panel2: tokens.color.surfaceSoft,
+  border: tokens.color.border,
+  borderSoft: tokens.color.border,
+  text: tokens.color.text,
+  textDim: tokens.color.text,
+  textMute: tokens.color.textMute,
+  accent: tokens.color.accent,
+  accentText: tokens.color.accent,
+  warn: tokens.color.warn,
+  danger: tokens.color.danger,
+  ok: tokens.color.success,
 };
 
 const S: Record<string, React.CSSProperties> = {
   root: {
     width: '100vw', height: '100vh', background: COLOR.bg, color: COLOR.text,
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+    fontFamily: tokens.font.family,
     fontSize: 13,
     display: 'grid', gridTemplateRows: '48px 1fr', gridTemplateColumns: '1fr',
     overflow: 'hidden',
@@ -4070,27 +4268,40 @@ const S: Record<string, React.CSSProperties> = {
   header: {
     display: 'flex', alignItems: 'center', gap: 12,
     padding: '0 16px',
-    background: COLOR.panel,
+    background: tokens.glass.surfaceStrong,
+    backdropFilter: tokens.backdrop,
+    WebkitBackdropFilter: tokens.backdrop,
     borderBottom: `1px solid ${COLOR.border}`,
+    boxShadow: '0 1px 2px rgba(40,48,80,0.04)',
   },
   logo: { display: 'flex', alignItems: 'center', gap: 10 },
   badge: {
-    background: 'rgba(251,191,36,0.15)', color: COLOR.warn,
-    padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: 1,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    background: tokens.gradient.warn, color: COLOR.text,
+    border: `1px solid ${tokens.color.warnBorder}`,
+    padding: '3px 10px', borderRadius: tokens.radius.pill,
+    fontSize: 10, fontWeight: 700, letterSpacing: 1,
+    fontFamily: tokens.font.mono,
+    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
   },
-  sceneName: { fontSize: 13, fontWeight: 500, color: COLOR.text },
+  sceneName: { fontSize: 13, fontWeight: 600, color: COLOR.text },
   fpsChip: {
     display: 'flex', alignItems: 'center', gap: 6,
-    padding: '4px 10px', background: COLOR.panel2,
-    border: `1px solid ${COLOR.border}`, borderRadius: 6,
+    padding: '5px 12px', background: tokens.gradient.surface,
+    border: `1px solid ${COLOR.border}`,
+    borderRadius: tokens.radius.pill,
+    boxShadow: tokens.shadow.glass,
   },
   fpsDot: { width: 6, height: 6, borderRadius: '50%' },
-  fpsVal: { fontSize: 13, fontWeight: 700, fontFamily: 'ui-monospace, monospace' },
+  fpsVal: { fontSize: 13, fontWeight: 700, fontFamily: tokens.font.mono },
   fpsLabel: { fontSize: 10, color: COLOR.textMute, letterSpacing: 1 },
   viewerBtn: {
-    background: COLOR.accent, color: '#ffffff', textDecoration: 'none',
-    padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+    background: tokens.gradient.accent,
+    border: `1px solid ${tokens.color.accentBorder}`,
+    color: COLOR.text, textDecoration: 'none',
+    padding: '7px 16px', borderRadius: tokens.radius.pill,
+    fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
+    boxShadow: tokens.shadow.glassAccent,
+    fontFamily: tokens.font.family,
   },
   body: {
     minHeight: 0, overflow: 'hidden',
@@ -4105,17 +4316,19 @@ const S: Record<string, React.CSSProperties> = {
     borderRight: `1px solid ${COLOR.border}`,
   },
   section: {
-    background: COLOR.panel,
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 10,
+    background: tokens.gradient.surface,
+    border: `1px solid ${COLOR.border}`,
+    borderRadius: tokens.radius.md,
     overflow: 'hidden',
     flexShrink: 0,
+    boxShadow: tokens.shadow.glass,
   },
   sectionHeader: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     gap: 10,
-    padding: '10px 10px',
-    background: 'rgba(0,0,0,0.02)',
+    padding: '10px 12px',
+    background: tokens.gradient.neutral,
+    borderBottom: `1px solid ${COLOR.border}`,
   },
   sectionToggle: {
     flex: 1, minWidth: 0,
@@ -4137,14 +4350,17 @@ const S: Record<string, React.CSSProperties> = {
   sectionSubtitle: {
     fontSize: 10, fontWeight: 700, letterSpacing: 1.2,
     color: COLOR.accentText, textTransform: 'uppercase',
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontFamily: tokens.font.mono,
   },
   sectionBody: { padding: 10 },
 
   kvGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 },
   kvCell: {
-    background: COLOR.panel2, borderRadius: 6, padding: '8px 10px',
-    border: `1px solid ${COLOR.borderSoft}`,
+    background: tokens.gradient.neutral,
+    borderRadius: tokens.radius.sm,
+    padding: '8px 12px',
+    border: `1px solid ${COLOR.border}`,
+    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
     minWidth: 0,
   },
   kvLabel: {
@@ -4154,33 +4370,46 @@ const S: Record<string, React.CSSProperties> = {
   },
   kvVal: {
     fontSize: 14, fontWeight: 600,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontFamily: tokens.font.mono,
     color: COLOR.text,
     whiteSpace: 'nowrap' as const,
   },
 
   btnRow: { display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' },
   btn: {
-    background: 'rgba(0,0,0,0.06)', border: `1px solid ${COLOR.border}`,
-    color: COLOR.text, fontSize: 12, padding: '6px 12px', borderRadius: 6,
-    cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
+    background: tokens.gradient.neutral, border: `1px solid ${COLOR.border}`,
+    color: COLOR.text, fontSize: 12, padding: '7px 14px',
+    borderRadius: tokens.radius.pill,
+    boxShadow: tokens.shadow.glass,
+    cursor: 'pointer', fontFamily: tokens.font.family, fontWeight: 600,
+    outline: 'none',
   },
   btnPrimary: {
-    background: COLOR.ok, border: `1px solid ${COLOR.ok}`,
-    color: '#ffffff', fontSize: 12, padding: '6px 12px', borderRadius: 6,
-    cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700,
+    background: tokens.gradient.success, border: `1px solid ${tokens.color.successBorder}`,
+    color: COLOR.text, fontSize: 12, padding: '7px 14px',
+    borderRadius: tokens.radius.pill,
+    boxShadow: tokens.shadow.glassSuccess,
+    cursor: 'pointer', fontFamily: tokens.font.family, fontWeight: 700,
+    outline: 'none',
   },
   btnDanger: {
     width: '100%', marginTop: 8,
-    background: 'rgba(248,113,113,0.1)', border: `1px solid rgba(248,113,113,0.35)`,
-    color: COLOR.danger, fontSize: 12, padding: '6px 12px', borderRadius: 6,
-    cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
+    background: tokens.gradient.danger, border: `1px solid ${tokens.color.dangerBorder}`,
+    color: COLOR.text, fontSize: 12, padding: '8px 14px',
+    borderRadius: tokens.radius.pill,
+    boxShadow: tokens.shadow.glass,
+    cursor: 'pointer', fontFamily: tokens.font.family, fontWeight: 600,
+    outline: 'none',
   },
   fileBtn: {
-    width: '100%', padding: '10px 12px',
-    background: COLOR.panel2, border: `1px dashed ${COLOR.border}`,
-    color: COLOR.textDim, fontSize: 12, borderRadius: 6,
-    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center' as const,
+    width: '100%', padding: '11px 14px',
+    background: tokens.gradient.track, border: `1px dashed ${COLOR.border}`,
+    color: COLOR.textMute, fontSize: 12, borderRadius: tokens.radius.pill,
+    cursor: 'pointer', fontFamily: tokens.font.family,
+    textAlign: 'center' as const,
+    fontWeight: 600,
+    outline: 'none',
+    boxShadow: tokens.shadow.inset,
   },
 
   inlineCard: {
@@ -4190,27 +4419,37 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: 8,
   },
   input: {
-    width: '100%', padding: '8px 10px',
-    background: COLOR.bg, border: `1px solid ${COLOR.border}`,
-    borderRadius: 6, color: COLOR.text, fontSize: 13,
-    outline: 'none', fontFamily: 'inherit',
+    width: '100%', padding: '10px 14px',
+    background: tokens.gradient.track,
+    border: `1px solid ${COLOR.border}`,
+    borderRadius: tokens.radius.pill,
+    color: COLOR.text, fontSize: 13,
+    outline: 'none', fontFamily: tokens.font.family,
+    boxShadow: tokens.shadow.inset,
+    boxSizing: 'border-box' as const,
   },
   inputInline: {
-    width: '100%', padding: '3px 6px',
-    background: COLOR.bg, border: `1px solid ${COLOR.accent}`,
-    borderRadius: 4, color: COLOR.text, fontSize: 13, outline: 'none',
-    fontFamily: 'inherit',
+    width: '100%', padding: '4px 10px',
+    background: tokens.gradient.track,
+    border: `1px solid ${tokens.color.accentBorder}`,
+    borderRadius: tokens.radius.pill,
+    color: COLOR.text, fontSize: 13, outline: 'none',
+    fontFamily: tokens.font.family,
+    boxShadow: tokens.shadow.inset,
   },
   formLabel: {
-    fontSize: 10, fontWeight: 600, letterSpacing: 0.5,
+    fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
     color: COLOR.textMute, textTransform: 'uppercase' as const,
   },
   formInput: {
-    width: '100%', padding: '8px 10px',
-    background: COLOR.bg, border: `1px solid ${COLOR.border}`,
-    borderRadius: 6, color: COLOR.text, fontSize: 13,
-    outline: 'none', fontFamily: 'inherit',
+    width: '100%', padding: '10px 14px',
+    background: tokens.gradient.track,
+    border: `1px solid ${COLOR.border}`,
+    borderRadius: tokens.radius.pill,
+    color: COLOR.text, fontSize: 13,
+    outline: 'none', fontFamily: tokens.font.family,
     boxSizing: 'border-box' as const,
+    boxShadow: tokens.shadow.inset,
   },
 
   empty: {
@@ -4218,18 +4457,22 @@ const S: Record<string, React.CSSProperties> = {
     color: COLOR.textMute, fontSize: 12,
   },
 
-  vpList: { display: 'flex', flexDirection: 'column', gap: 4 },
+  vpList: { display: 'flex', flexDirection: 'column', gap: 6 },
   vpRow: {
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '10px 12px',
-    background: COLOR.panel2,
-    borderWidth: 1, borderStyle: 'solid', borderColor: COLOR.borderSoft,
-    borderRadius: 8,
-    transition: 'background 0.15s, border-color 0.15s',
+    background: tokens.gradient.surface,
+    borderWidth: 1,
+    borderStyle: 'solid' as const,
+    borderColor: COLOR.border,
+    borderRadius: tokens.radius.md,
+    transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
+    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
   },
   vpRowActive: {
-    background: 'rgba(251,191,36,0.08)',
-    borderColor: 'rgba(251,191,36,0.4)',
+    background: tokens.gradient.accent,
+    borderColor: tokens.color.accentBorder,
+    boxShadow: tokens.shadow.glassAccent,
   },
   vpDot: {
     width: 10, height: 10, borderRadius: '50%', padding: 0,
@@ -4261,7 +4504,7 @@ const S: Record<string, React.CSSProperties> = {
     background: 'rgba(34,197,94,0.85)', color: '#ffffff',
     fontSize: 9, fontWeight: 700,
     padding: '1px 4px', borderRadius: 3,
-    fontFamily: 'ui-monospace, monospace',
+    fontFamily: tokens.font.mono,
     letterSpacing: 0.4,
   },
   vpLabel: {
@@ -4270,7 +4513,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   vpMeta: {
     fontSize: 10, color: COLOR.textMute, marginTop: 2,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontFamily: tokens.font.mono,
     display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
     wordBreak: 'break-all' as const,
   },
@@ -4297,7 +4540,10 @@ const S: Record<string, React.CSSProperties> = {
   fpsBig: {
     display: 'flex', alignItems: 'baseline', gap: 6,
     marginTop: 10, padding: '14px 16px',
-    background: COLOR.panel2, borderRadius: 8,
+    background: tokens.gradient.neutral,
+    border: `1px solid ${COLOR.border}`,
+    borderRadius: tokens.radius.md,
+    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
   },
   fpsBigLabel: { fontSize: 11, color: COLOR.textMute, fontWeight: 600, letterSpacing: 1 },
 
@@ -4392,7 +4638,7 @@ const S: Record<string, React.CSSProperties> = {
     color: COLOR.textMute,
     padding: '0 4px 2px 4px',
     borderBottom: `1px solid ${COLOR.borderSoft}`,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontFamily: tokens.font.mono,
   },
   vpPosHeaderName: { textAlign: 'left' as const },
   vpPosHeaderCol: { textAlign: 'center' as const },
@@ -4423,7 +4669,7 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: 4,
     color: COLOR.text,
     fontSize: 11,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontFamily: tokens.font.mono,
     outline: 'none',
     boxSizing: 'border-box' as const,
     textAlign: 'right' as const,
@@ -4484,7 +4730,7 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: 4,
     color: COLOR.text,
     fontSize: 11,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontFamily: tokens.font.mono,
     outline: 'none',
     boxSizing: 'border-box' as const,
     textAlign: 'right' as const,
@@ -4493,7 +4739,7 @@ const S: Record<string, React.CSSProperties> = {
   vpYawUnit: {
     fontSize: 11,
     color: COLOR.textMute,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontFamily: tokens.font.mono,
     flexShrink: 0,
   },
   vpYawSlider: {
@@ -4507,7 +4753,7 @@ const S: Record<string, React.CSSProperties> = {
     background: 'rgba(0,0,0,0.08)',
     border: `1px solid ${COLOR.borderSoft}`,
     borderRadius: 3,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontFamily: tokens.font.mono,
     fontSize: 11,
     color: COLOR.text,
   },
@@ -4546,7 +4792,7 @@ const S: Record<string, React.CSSProperties> = {
   projThumbPreview: {
     width: 88,
     aspectRatio: '4 / 3',
-    background: 'rgba(0,0,0,0.4)',
+    background: tokens.color.textFaint,
     border: `1px solid ${COLOR.borderSoft}`,
     borderRadius: 6,
     overflow: 'hidden' as const,
@@ -4658,40 +4904,52 @@ const S: Record<string, React.CSSProperties> = {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr 1fr',
     gap: 4,
-    padding: 4,
+    padding: 5,
     margin: '0 0 4px 0',
-    background: 'rgba(255, 255, 255, 0.95)',
+    background: tokens.glass.surfaceStrong,
+    backdropFilter: tokens.backdrop,
+    WebkitBackdropFilter: tokens.backdrop,
     border: `1px solid ${COLOR.border}`,
-    borderRadius: 10,
-    backdropFilter: 'blur(8px)',
+    borderRadius: tokens.radius.pill,
+    boxShadow: tokens.shadow.glass,
   },
   tabBtn: {
     display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 1,
-    padding: '8px 10px',
+    padding: '9px 12px',
     background: 'transparent',
-    border: 'none',
-    borderRadius: 7,
+    // Split border into long-hand props. Mixing the `border` shorthand
+    // here and the `borderColor` long-hand in the active overlay below
+    // makes React leak the active borderColor onto the inactive state
+    // after a re-render — the classic "black ring after click" bug.
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'transparent',
+    borderRadius: tokens.radius.pill,
     cursor: 'pointer',
-    color: '#374151',
-    fontFamily: 'inherit',
-    transition: 'background 0.15s, color 0.15s',
+    color: COLOR.textMute,
+    fontFamily: tokens.font.family,
+    boxShadow: 'none',
+    transition: `background ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
+    outline: 'none',
   },
   tabBtnActive: {
-    background: 'rgba(96,165,250,0.18)',
-    color: '#1d4ed8',
+    background: tokens.gradient.accent,
+    borderColor: tokens.color.accentBorder,
+    color: COLOR.text,
+    boxShadow: tokens.shadow.glassAccent,
   },
   tabBtnTitle: { fontSize: 14, fontWeight: 700, letterSpacing: 0.4 },
-  tabBtnSub: { fontSize: 10, fontWeight: 700, letterSpacing: 1.2, opacity: 1, fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace' },
+  tabBtnSub: { fontSize: 10, fontWeight: 700, letterSpacing: 1.2, opacity: 1, fontFamily: tokens.font.mono },
   planPills: {
     display: 'flex' as const,
     flexWrap: 'wrap' as const,
     alignItems: 'center' as const,
     gap: 6,
-    padding: '8px 10px',
-    background: COLOR.panel,
+    padding: '8px 12px',
+    background: tokens.gradient.surface,
     border: `1px solid ${COLOR.border}`,
-    borderLeft: '3px solid #fbbf24',
-    borderRadius: 10,
+    borderRadius: tokens.radius.pill,
+    boxShadow: tokens.shadow.glass,
     marginBottom: 6,
   },
   planPillsLabel: {
@@ -4699,68 +4957,79 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 700 as const,
     letterSpacing: 1.4,
     color: COLOR.textMute,
-    fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+    fontFamily: tokens.font.mono,
     marginRight: 2,
+    paddingLeft: 4,
   },
   planPill: {
     flex: '0 1 auto' as const,
-    padding: '6px 14px',
-    background: COLOR.panel2,
-    border: '1px solid rgba(0,0,0,0.12)',
-    borderRadius: 7,
+    padding: '7px 14px',
+    background: 'transparent',
+    borderWidth: 1,
+    borderStyle: 'solid' as const,
+    borderColor: 'transparent',
+    borderRadius: tokens.radius.pill,
     cursor: 'pointer',
-    color: COLOR.textDim,
+    color: COLOR.textMute,
     fontSize: 12,
-    fontWeight: 500 as const,
-    fontFamily: 'inherit',
+    fontWeight: 600 as const,
+    fontFamily: tokens.font.family,
     letterSpacing: 0.3,
-    transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+    transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
     whiteSpace: 'nowrap' as const,
+    outline: 'none',
   },
   planPillActive: {
-    background: '#fbbf24',
-    border: '1px solid #fbbf24',
-    color: '#1a1500',
+    background: tokens.gradient.accent,
+    borderColor: tokens.color.accentBorder,
+    color: COLOR.text,
     fontWeight: 700 as const,
-    boxShadow: '0 0 0 2px rgba(251,191,36,0.25)',
+    boxShadow: tokens.shadow.glassAccent,
   },
   modeRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
   modeBtn: {
     display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
-    padding: '10px 12px',
-    background: COLOR.panel2, border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 8, cursor: 'pointer', color: COLOR.textDim,
-    fontFamily: 'inherit', textAlign: 'left' as const,
-    transition: 'background 0.15s, border-color 0.15s',
+    padding: '10px 14px',
+    background: tokens.gradient.surface,
+    borderWidth: 1,
+    borderStyle: 'solid' as const,
+    borderColor: COLOR.border,
+    borderRadius: tokens.radius.md, cursor: 'pointer', color: COLOR.textMute,
+    fontFamily: tokens.font.family, textAlign: 'left' as const,
+    transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
+    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
+    outline: 'none',
   },
   modeBtnActive: {
-    background: 'rgba(96,165,250,0.16)',
-    borderColor: 'rgba(96,165,250,0.55)',
+    background: tokens.gradient.accent,
+    borderColor: tokens.color.accentBorder,
     color: COLOR.text,
+    boxShadow: tokens.shadow.glassAccent,
   },
   modeBtnTitle: { fontSize: 13, fontWeight: 700, letterSpacing: 0.4 },
   modeBtnSub: { fontSize: 10, color: COLOR.textMute, letterSpacing: 0.3 },
   modeHint: {
-    marginTop: 8, padding: '8px 10px',
-    background: 'rgba(96,165,250,0.08)',
-    border: '1px solid rgba(96,165,250,0.25)',
-    borderRadius: 6,
-    fontSize: 11, color: COLOR.accentText, lineHeight: 1.5,
+    marginTop: 8, padding: '10px 14px',
+    background: tokens.gradient.accent,
+    border: `1px solid ${tokens.color.accentBorder}`,
+    borderRadius: tokens.radius.md,
+    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
+    fontSize: 11, color: COLOR.text, lineHeight: 1.55,
   },
   toolbarGroupHead: {
     fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5,
-    color: 'rgba(0,0,0,0.55)', textTransform: 'uppercase',
+    color: tokens.color.textMute, textTransform: 'uppercase',
     marginTop: 12,
   },
-  toolbarHint: { color: 'rgba(0,0,0,0.5)', marginLeft: 6, fontSize: 10.5 },
+  toolbarHint: { color: tokens.color.textFaint, marginLeft: 6, fontSize: 10.5 },
   sliderHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 },
   sliderLabel: { fontSize: 11, color: COLOR.textDim },
-  sliderVal: { fontSize: 11, color: COLOR.textDim, fontFamily: 'ui-monospace, monospace' },
+  sliderVal: { fontSize: 11, color: COLOR.textDim, fontFamily: tokens.font.mono },
   sliderValInput: {
     width: 64,
     padding: '2px 6px',
     fontSize: 11,
-    fontFamily: 'ui-monospace, monospace',
+    fontFamily: tokens.font.mono,
     color: COLOR.textDim,
     background: COLOR.panel,
     border: `1px solid ${COLOR.borderSoft}`,

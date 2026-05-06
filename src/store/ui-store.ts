@@ -68,6 +68,12 @@ interface UIState {
   audioVolume: number;
   setAudioVolume: (v: number) => void;
   showCollision: boolean;
+  /** Pushes the walkable GLB triangles to the camera controller so the
+   *  player snaps to the floor. Off → no gravity, current Y is held. */
+  useCollisionWalkable: boolean;
+  /** Pushes the block GLB triangles to the camera controller so the player
+   *  collides with walls. Off → walls are ignored, player passes through. */
+  useCollisionBlock: boolean;
   showFloorPlan: boolean;
   showDebugStats: boolean;
   /** Debug grid on the XZ plane (Y=0). Helps eyeball splat scale / position. */
@@ -83,6 +89,8 @@ interface UIState {
   lighting: LightingMode;
   toggleDeveloper: () => void;
   toggleCollision: () => void;
+  toggleUseCollisionWalkable: () => void;
+  toggleUseCollisionBlock: () => void;
   toggleFloorPlan: () => void;
   toggleDebugStats: () => void;
   toggleGrid: () => void;
@@ -157,6 +165,8 @@ export const useUIStore = create<UIState>((set) => ({
   audioVolume: 0.5,
   setAudioVolume: (audioVolume) => set({ audioVolume: Math.max(0, Math.min(1, audioVolume)) }),
   showCollision: false,
+  useCollisionWalkable: true,
+  useCollisionBlock: true,
   showFloorPlan: true,
   showDebugStats: false,
   showGrid: false,
@@ -171,6 +181,8 @@ export const useUIStore = create<UIState>((set) => ({
   lighting: 'day',
   toggleDeveloper: () => set((s) => ({ isDeveloper: !s.isDeveloper })),
   toggleCollision: () => set((s) => ({ showCollision: !s.showCollision })),
+  toggleUseCollisionWalkable: () => set((s) => ({ useCollisionWalkable: !s.useCollisionWalkable })),
+  toggleUseCollisionBlock: () => set((s) => ({ useCollisionBlock: !s.useCollisionBlock })),
   toggleFloorPlan: () => set((s) => ({ showFloorPlan: !s.showFloorPlan })),
   toggleDebugStats: () => set((s) => ({ showDebugStats: !s.showDebugStats })),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),

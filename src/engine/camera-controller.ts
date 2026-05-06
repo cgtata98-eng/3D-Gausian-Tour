@@ -529,13 +529,26 @@ export class CameraController {
   }
 
   /**
-   * Cast a ray straight down through the walkable mesh and return the floor Y at the
-   * given XZ. The ray starts well above the player so we always hit the top surface.
+   * Resolve the floor Y at a given XZ, used for floor-snap during walk mode.
+   *
+   * The walkable mesh comes from splat-transform's carve recipe, which
+   * produces a 3D NAVIGABLE VOLUME (not a flat surface). Carved volumes can
+   * be wildly irregular — they leak through wall gaps into adjacent rooms,
+   * pick up floater bubbles at random Y, and have multi-level floors. Naive
+   * ray-down-from-50m or ray-up-from-50m hits whichever surface happens to
+   * be closest in either direction, which on irregular meshes teleports
+   * the player to ceiling height or to a far-away floater.
+   *
+   * Strategy: trust the player's current Y as a prior. The floor must be
+   * within walking-step distance directly below them. Cast DOWN from just
+   * above the player, capped at 3 m — that's enough to catch a real step
+   * down but not enough to reach a leaked-through floater. If nothing's
+   * within that range, return null (don't snap, keep current Y).
    */
   private raycastFloor(x: number, z: number): number | null {
     if (!this.walkableTris) return null;
-    const start = (this.playerPos.y > 0 ? this.playerPos.y : 0) + 50;
-    const hit = raycastTriangles(x, start, z, 0, -1, 0, this.walkableTris, 100);
+    const start = this.playerPos.y;
+    const hit = raycastTriangles(x, start, z, 0, -1, 0, this.walkableTris, 3);
     return hit ? hit.point.y : null;
   }
 

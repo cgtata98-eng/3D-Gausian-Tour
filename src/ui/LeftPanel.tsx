@@ -7,6 +7,7 @@ import { calibrateHeadTracker } from '../utils/head-tracker';
 import { resolveScenePath } from '../core/scene-manifest';
 import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
 import * as idb from '../utils/idb';
+import { tokens } from './design-tokens';
 
 /**
  * Constrain pan so the zoomed image still covers the viewport (no empty letterbox edges).
@@ -49,7 +50,9 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   const tb = manifest?.viewerToolbar ?? {};
   // サイドバーサイズ — 'large' (既定: 全高表示) / 'small' (内容の高さ分だけに縮める。幅は同じ 320)。
   // 表示する項目は両モード共通。`small` は純粋にパネルの縦サイズのみ変える。
-  const sidebarSize = tb.size ?? 'large';
+  // Default flipped to 'small' — keeps the panel compact unless the
+  // author explicitly opts into the full-height "大" preset.
+  const sidebarSize = tb.size ?? 'small';
   const sStyles = sidebarSizeStyles(sidebarSize);
   // 既定はすべて OFF（顧客向けに最小限の UI を配信したい想定）。制作者が Debug →
   // ツールバー表示で必要な項目を明示的にチェックして出します。
@@ -159,7 +162,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
                 {hasMap ? (
                   <MapContent onViewpointClick={onViewpointClick} />
                 ) : (
-                  <div style={{ padding: '20px 10px', color: 'rgba(31,41,55,0.72)', fontSize: 12, textAlign: 'center' }}>
+                  <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 12, textAlign: 'center' }}>
                     このプランの図面はまだ設定されていません
                   </div>
                 )}
@@ -265,7 +268,7 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
 
   if (!manifest || !floorPlan) {
     return (
-      <div style={{ padding: '20px 10px', color: 'rgba(31,41,55,0.72)', fontSize: 12, textAlign: 'center' }}>
+      <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 12, textAlign: 'center' }}>
         このプランの図面はまだ設定されていません
       </div>
     );
@@ -718,7 +721,7 @@ function ViewpointsContent({ onViewpointClick }: { onViewpointClick: (id: string
   const viewpoints = activePlan?.viewpoints ?? [];
   if (viewpoints.length === 0) {
     return (
-      <div style={{ padding: '20px 10px', color: 'rgba(31,41,55,0.72)', fontSize: 12, textAlign: 'center' }}>
+      <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 12, textAlign: 'center' }}>
         このプランのシーンはまだ追加されていません
       </div>
     );
@@ -946,7 +949,7 @@ const aiOverlayZoomHud: React.CSSProperties = {
   borderRadius: 12,
   fontSize: 11,
   fontWeight: 600,
-  fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+  fontFamily: tokens.font.mono,
   letterSpacing: 0.5,
   pointerEvents: 'none',
 };
@@ -973,7 +976,7 @@ export function AiGeneratingOverlay() {
 const aiBusyOverlay: React.CSSProperties = {
   position: 'absolute',
   inset: 0,
-  background: 'rgba(255, 255, 255, 0.78)',
+  background: tokens.glass.surfaceStrong,
   zIndex: 80,
   display: 'flex',
   flexDirection: 'column',
@@ -981,29 +984,31 @@ const aiBusyOverlay: React.CSSProperties = {
   justifyContent: 'center',
   gap: 14,
   pointerEvents: 'auto',
-  backdropFilter: 'blur(2px)',
+  backdropFilter: 'blur(8px)',
+  WebkitBackdropFilter: 'blur(8px)',
 };
 const aiBusySpinner: React.CSSProperties = {
-  width: 42,
-  height: 42,
-  border: '3px solid rgba(0,0,0,0.12)',
-  borderTopColor: '#3b82f6',
+  width: 44,
+  height: 44,
+  border: `3px solid ${tokens.color.border}`,
+  borderTopColor: tokens.color.accent,
   borderRadius: '50%',
   animation: 'spin 0.9s linear infinite',
 };
 const aiBusyText: React.CSSProperties = {
   fontSize: 14,
-  fontWeight: 600,
-  color: '#1f2937',
+  fontWeight: 700,
+  color: tokens.color.text,
   letterSpacing: 0.6,
-  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+  fontFamily: tokens.font.family,
 };
 const aiBusySubText: React.CSSProperties = {
   fontSize: 11.5,
-  color: 'rgba(31,41,55,0.6)',
+  color: tokens.color.textMute,
   letterSpacing: 0.4,
-  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+  fontFamily: tokens.font.family,
   marginTop: -6,
+  fontWeight: 500,
 };
 
 const aiOverlayBtn: React.CSSProperties = {
@@ -1279,42 +1284,47 @@ const aiRefAddBtn: React.CSSProperties = {
   fontSize: 18,
   fontWeight: 300,
   lineHeight: 1,
-  background: '#fff',
-  color: 'rgba(0,0,0,0.5)',
-  border: '1px dashed rgba(0,0,0,0.25)',
-  borderRadius: 4,
+  background: tokens.gradient.surface,
+  color: tokens.color.textFaint,
+  border: `1px dashed ${tokens.color.border}`,
+  borderRadius: tokens.radius.sm,
   cursor: 'pointer',
-  fontFamily: 'inherit',
+  fontFamily: tokens.font.family,
   padding: 0,
+  outline: 'none',
 };
 
 const aiPromptStyle: React.CSSProperties = {
   width: '100%',
   resize: 'vertical',
   fontSize: 12,
-  padding: '8px 10px',
-  border: '1px solid rgba(0,0,0,0.15)',
-  borderRadius: 6,
-  fontFamily: 'inherit',
-  color: '#1f2937',
-  background: '#ffffff',
+  padding: '10px 14px',
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.md,
+  fontFamily: tokens.font.family,
+  color: tokens.color.text,
+  background: tokens.gradient.track,
   boxSizing: 'border-box',
   minHeight: 56,
+  outline: 'none',
+  boxShadow: tokens.shadow.inset,
 };
 
 const aiGenerateBtn = (disabled: boolean): React.CSSProperties => ({
   marginTop: 6,
   width: '100%',
-  padding: '8px 10px',
-  fontSize: 12,
-  fontWeight: 600,
-  background: disabled ? 'rgba(59,130,246,0.4)' : '#3b82f6',
-  color: '#ffffff',
-  border: 'none',
-  borderRadius: 6,
+  padding: '10px 14px',
+  fontSize: 12.5,
+  fontWeight: 700,
+  background: disabled ? tokens.gradient.neutral : tokens.gradient.accent,
+  color: tokens.color.text,
+  border: `1px solid ${disabled ? tokens.color.border : tokens.color.accentBorder}`,
+  borderRadius: tokens.radius.pill,
+  boxShadow: disabled ? tokens.shadow.glass : tokens.shadow.glassAccent,
   cursor: disabled ? 'not-allowed' : 'pointer',
-  fontFamily: 'inherit',
+  fontFamily: tokens.font.family,
   letterSpacing: 0.4,
+  outline: 'none',
 });
 
 const aiCardActions: React.CSSProperties = {
@@ -1336,7 +1346,7 @@ const aiCardActionBtn: React.CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'inherit',
   padding: 0,
-  color: '#1f2937',
+  color: tokens.color.text,
 };
 
 // ── Quality preset ───────────────────────────────────────────────
@@ -1364,9 +1374,9 @@ function QualityBlock() {
         value={value}
         onChange={setValue}
         options={[
-          { id: 'low',  label: 'LOW' },
-          { id: 'mid',  label: 'MID' },
-          { id: 'high', label: 'HIGH' },
+          { id: 'low',  label: 'Low' },
+          { id: 'mid',  label: 'Mid' },
+          { id: 'high', label: 'High' },
         ]}
       />
     </div>
@@ -1424,7 +1434,7 @@ function MobileToolsBlock({ onClose }: { onClose: () => void }) {
         <button onClick={onClose} style={overviewCloseBtn} title="閉じる">×</button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-        <span style={{ fontSize: 10.5, color: 'rgba(31,41,55,0.55)' }}>遅</span>
+        <span style={{ fontSize: 10.5, color: tokens.color.textMute }}>遅</span>
         <input
           type="range"
           min={MOBILE_SPEED_MIN}
@@ -1432,13 +1442,13 @@ function MobileToolsBlock({ onClose }: { onClose: () => void }) {
           step={0.5}
           value={speed}
           onChange={(e) => apply(parseFloat(e.target.value))}
-          style={{ flex: 1, accentColor: '#3b82f6' }}
+          style={{ flex: 1, accentColor: tokens.color.accent }}
         />
-        <span style={{ fontSize: 10.5, color: 'rgba(31,41,55,0.55)' }}>速</span>
+        <span style={{ fontSize: 10.5, color: tokens.color.textMute }}>速</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, fontSize: 11, color: 'rgba(31,41,55,0.7)', fontFamily: 'monospace' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, fontSize: 11, color: tokens.color.textMute, fontFamily: 'monospace' }}>
         <span>{MOBILE_SPEED_MIN.toFixed(1)} m/s</span>
-        <span style={{ fontWeight: 700, color: '#1d4ed8' }}>{speed.toFixed(1)} m/s</span>
+        <span style={{ fontWeight: 700, color: tokens.color.accent }}>{speed.toFixed(1)} m/s</span>
         <span>{MOBILE_SPEED_MAX.toFixed(1)} m/s</span>
       </div>
     </div>
@@ -1525,7 +1535,7 @@ function LightingContent() {
 
 function SegmentedToggle<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { id: T; label: string }[] }) {
   return (
-    <div style={{ display: 'flex', gap: 2, padding: 3, background: 'rgba(0,0,0,0.05)', borderRadius: 999, border: '1px solid rgba(0,0,0,0.08)' }}>
+    <div style={{ display: 'flex', gap: 4, padding: 5, background: tokens.glass.surfaceStrong, backdropFilter: tokens.backdrop, WebkitBackdropFilter: tokens.backdrop, borderRadius: tokens.radius.pill, border: `1px solid ${tokens.color.border}`, boxShadow: tokens.shadow.glass }}>
       {options.map((o) => {
         const isA = value === o.id;
         return (
@@ -1535,17 +1545,23 @@ function SegmentedToggle<T extends string>({ value, onChange, options }: { value
             style={{
               flex: 1,
               padding: '8px 14px',
-              border: 'none',
-              borderRadius: 999,
-              background: isA ? '#3b82f6' : 'transparent',
-              color: isA ? '#ffffff' : 'rgba(31,41,55,0.75)',
-              fontWeight: isA ? 600 : 500,
-              fontSize: 13,
+              // Long-hand border so re-renders don't leak the previous
+              // active borderColor onto the inactive state.
+              borderWidth: 1,
+              borderStyle: 'solid',
+              borderColor: isA ? tokens.color.accentBorder : 'transparent',
+              borderRadius: tokens.radius.pill,
+              background: isA ? tokens.gradient.accent : 'transparent',
+              color: tokens.color.text,
+              boxShadow: isA ? tokens.shadow.glassAccent : 'none',
+              fontWeight: isA ? 700 : 600,
+              fontSize: 12.5,
               cursor: 'pointer',
-              fontFamily: 'inherit',
-              transition: 'background 0.15s, color 0.15s',
+              fontFamily: tokens.font.family,
+              transition: `background ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
               whiteSpace: 'nowrap',
               minWidth: 0,
+              outline: 'none',
             }}
           >{o.label}</button>
         );
@@ -1645,20 +1661,23 @@ function sidebarSizeStyles(size: SidebarSize) {
       top: 0, left: 0,
       ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }),
       width: 320,
-      background: '#ffffff',
-      borderRight: '1px solid rgba(0,0,0,0.08)',
-      borderBottom: isSmall ? '1px solid rgba(0,0,0,0.08)' : undefined,
-      boxShadow: '0 8px 32px rgba(15,23,42,0.08)',
+      background: tokens.glass.surfaceStrong,
+      backdropFilter: tokens.backdrop,
+      WebkitBackdropFilter: tokens.backdrop,
+      borderRight: `1px solid ${tokens.color.border}`,
+      borderBottom: isSmall ? `1px solid ${tokens.color.border}` : undefined,
+      boxShadow: tokens.shadow.glass,
       display: 'flex',
       flexDirection: 'column',
       zIndex: 6,
+      fontFamily: tokens.font.family,
     } as React.CSSProperties,
   };
 }
 
 const sidebarTitleBlock: React.CSSProperties = {
   padding: '12px 14px 12px 16px',
-  borderBottom: '1px solid rgba(0,0,0,0.08)',
+  borderBottom: `1px solid ${tokens.color.border}`,
   flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
@@ -1669,7 +1688,7 @@ const sidebarTitle: React.CSSProperties = {
   fontSize: 15,
   fontWeight: 700,
   letterSpacing: 0.3,
-  color: '#1f2937',
+  color: tokens.color.text,
 };
 
 const titleIconBtn: React.CSSProperties = {
@@ -1678,14 +1697,16 @@ const titleIconBtn: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: 'transparent',
-  border: '1px solid rgba(0,0,0,0.08)',
-  borderRadius: 6,
-  color: 'rgba(31,41,55,0.7)',
+  background: tokens.gradient.surface,
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.pill,
+  color: tokens.color.textMute,
   cursor: 'pointer',
   padding: 0,
-  fontFamily: 'inherit',
+  fontFamily: tokens.font.family,
   flexShrink: 0,
+  boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
+  outline: 'none',
 };
 
 const titleIconGlyph: React.CSSProperties = {
@@ -1697,24 +1718,27 @@ const titleIconGlyph: React.CSSProperties = {
 const collapsedHandle: React.CSSProperties = {
   position: 'absolute',
   top: 16, left: 16,
-  width: 32, height: 32,
+  width: 36, height: 36,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: '#ffffff',
-  border: '1px solid rgba(0,0,0,0.08)',
-  borderRadius: 8,
-  color: 'rgba(31,41,55,0.78)',
+  background: tokens.glass.surfaceStrong,
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.pill,
+  color: tokens.color.text,
   cursor: 'pointer',
   padding: 0,
-  fontFamily: 'inherit',
-  boxShadow: '0 4px 16px rgba(15,23,42,0.1)',
+  fontFamily: tokens.font.family,
+  backdropFilter: tokens.backdrop,
+  WebkitBackdropFilter: tokens.backdrop,
+  boxShadow: tokens.shadow.glass,
   zIndex: 6,
+  outline: 'none',
 };
 
 const sidebarBlock: React.CSSProperties = {
   padding: '10px 16px',
-  borderBottom: '1px solid rgba(0,0,0,0.08)',
+  borderBottom: `1px solid ${tokens.color.border}`,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
@@ -1723,7 +1747,7 @@ const sidebarBlock: React.CSSProperties = {
 
 const sidebarMapBlock: React.CSSProperties = {
   padding: '10px 16px',
-  borderBottom: '1px solid rgba(0,0,0,0.08)',
+  borderBottom: `1px solid ${tokens.color.border}`,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
@@ -1735,9 +1759,9 @@ const blockHeading: React.CSSProperties = {
   fontSize: 10,
   fontWeight: 700,
   letterSpacing: 1.2,
-  color: '#1f2937',
+  color: tokens.color.text,
   textTransform: 'uppercase',
-  fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+  fontFamily: tokens.font.mono,
 };
 
 const colorInlineToggles: React.CSSProperties = {
@@ -1746,7 +1770,7 @@ const colorInlineToggles: React.CSSProperties = {
   gap: 8,
   marginTop: 6,
   paddingTop: 8,
-  borderTop: '1px solid rgba(0,0,0,0.06)',
+  borderTop: `1px solid ${tokens.color.border}`,
 };
 
 const inlineToggleRow: React.CSSProperties = {
@@ -1759,7 +1783,7 @@ const inlineToggleLabel: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   letterSpacing: 0.6,
-  color: 'rgba(31,41,55,0.65)',
+  color: tokens.color.textMute,
   width: 32,
   flexShrink: 0,
 };
@@ -1771,24 +1795,25 @@ const miniIconBtn: React.CSSProperties = {
   gap: 10,
   padding: '10px 12px',
   background: 'transparent',
-  color: 'rgba(31,41,55,0.85)',
+  color: tokens.color.text,
   border: '1px solid transparent',
-  borderRadius: 8,
+  borderRadius: tokens.radius.md,
   cursor: 'pointer',
-  fontFamily: 'inherit',
-  transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+  fontFamily: tokens.font.family,
+  transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}`,
   textAlign: 'left',
   width: '100%',
   // Each button takes an equal share of the toolbar's flexed height — together
   // they fully cover the toolbar with no leftover blank space.
   flex: 1,
   minHeight: 0,
+  outline: 'none',
 };
 
 const miniIconLabel: React.CSSProperties = {
   fontSize: 13,
   letterSpacing: 0.3,
-  fontWeight: 500,
+  fontWeight: 600,
 };
 
 
@@ -1801,12 +1826,13 @@ const iconBtn: React.CSSProperties = {
   gap: 3,
   padding: '8px 4px',
   background: 'transparent',
-  color: 'rgba(31,41,55,0.78)',
+  color: tokens.color.text,
   border: '1px solid transparent',
-  borderRadius: 10,
+  borderRadius: tokens.radius.md,
   cursor: 'pointer',
-  fontFamily: 'inherit',
-  transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+  fontFamily: tokens.font.family,
+  transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}`,
+  outline: 'none',
 };
 
 const iconGlyph: React.CSSProperties = {
@@ -1834,38 +1860,45 @@ const vpGridCard: React.CSSProperties = {
   alignItems: 'stretch',
   gap: 4,
   padding: 4,
-  background: 'rgba(255,255,255,0.55)',
-  border: '1px solid rgba(0,0,0,0.06)',
-  borderRadius: 6,
+  background: tokens.gradient.surface,
+  // Long-hand split (see other components) — shorthand `border` mixed
+  // with `borderColor` overlay leaks the active color onto inactive
+  // cards after a state change.
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: tokens.color.border,
+  borderRadius: tokens.radius.sm,
   cursor: 'pointer',
-  fontFamily: 'inherit',
-  color: '#1f2937',
-  transition: 'background 0.15s, border-color 0.15s',
+  fontFamily: tokens.font.family,
+  color: tokens.color.text,
+  transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
+  outline: 'none',
 };
 
 const vpGridThumb: React.CSSProperties = {
   width: '100%',
   aspectRatio: '4 / 3',
-  borderRadius: 4,
+  borderRadius: tokens.radius.sm,
   overflow: 'hidden',
-  background: 'rgba(0,0,0,0.06)',
-  border: '1px solid rgba(0,0,0,0.06)',
+  background: tokens.color.surfaceSoft,
+  border: `1px solid ${tokens.color.border}`,
 };
 
 const vpGridLabel: React.CSSProperties = {
   fontSize: 11,
-  fontWeight: 500,
+  fontWeight: 600,
   letterSpacing: 0.2,
   textAlign: 'center',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  color: '#1f2937',
+  color: tokens.color.text,
 };
 
 const vpCardActive: React.CSSProperties = {
-  background: 'rgba(59,130,246,0.14)',
-  borderColor: 'rgba(59,130,246,0.5)',
+  background: tokens.gradient.accent,
+  borderColor: tokens.color.accentBorder,
+  boxShadow: tokens.shadow.glassAccent,
 };
 
 const vpThumbImg: React.CSSProperties = {
@@ -1881,12 +1914,12 @@ const vpThumbPh: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  color: 'rgba(31,41,55,0.35)',
+  color: tokens.color.textFaint,
   fontSize: 12,
 };
 
 const vpLabelActive: React.CSSProperties = {
-  color: '#1f2937',
+  color: tokens.color.text,
   fontWeight: 700,
 };
 
@@ -1898,21 +1931,21 @@ const zoomBadge: React.CSSProperties = {
   fontSize: 10,
   fontWeight: 700,
   letterSpacing: 0.6,
-  color: '#1f2937',
+  color: tokens.color.text,
   background: 'rgba(255,255,255,0.85)',
-  border: '1px solid rgba(0,0,0,0.08)',
+  border: `1px solid ${tokens.color.border}`,
   borderRadius: 4,
-  fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+  fontFamily: tokens.font.mono,
   pointerEvents: 'none',
 };
 
 const infoSummary: React.CSSProperties = {
   marginLeft: 10,
   paddingLeft: 10,
-  borderLeft: '1px solid rgba(0,0,0,0.12)',
+  borderLeft: `1px solid ${tokens.color.border}`,
   fontSize: 11,
   fontWeight: 500,
-  color: 'rgba(31,41,55,0.78)',
+  color: tokens.color.textMute,
   letterSpacing: 0.3,
   whiteSpace: 'nowrap',
   overflow: 'hidden',
@@ -1923,7 +1956,7 @@ const infoSummary: React.CSSProperties = {
 
 const infoSummaryEmpty: React.CSSProperties = {
   fontSize: 12,
-  color: 'rgba(31,41,55,0.4)',
+  color: tokens.color.textFaint,
 };
 
 const overviewWrap: React.CSSProperties = {
@@ -1974,7 +2007,7 @@ const overviewHeading: React.CSSProperties = {
   fontSize: 15,
   fontWeight: 700,
   letterSpacing: 0.3,
-  color: '#1f2937',
+  color: tokens.color.text,
   lineHeight: 1.3,
 };
 
@@ -1984,7 +2017,7 @@ const overviewArea: React.CSSProperties = {
   flexWrap: 'wrap',
   gap: 4,
   fontSize: 12,
-  color: '#1f2937',
+  color: tokens.color.text,
   lineHeight: 1.4,
 };
 
@@ -1993,7 +2026,7 @@ const overviewAreaLabel: React.CSSProperties = {
 };
 
 const overviewAreaSep: React.CSSProperties = {
-  color: 'rgba(31,41,55,0.6)',
+  color: tokens.color.textMute,
 };
 
 const overviewAreaValue: React.CSSProperties = {
@@ -2003,7 +2036,7 @@ const overviewAreaValue: React.CSSProperties = {
 
 const overviewAreaSub: React.CSSProperties = {
   fontSize: 10.5,
-  color: 'rgba(31,41,55,0.78)',
+  color: tokens.color.textMute,
   fontWeight: 400,
 };
 
@@ -2019,7 +2052,7 @@ const overviewBullets: React.CSSProperties = {
 
 const overviewBullet: React.CSSProperties = {
   fontSize: 12,
-  color: '#1f2937',
+  color: tokens.color.text,
   lineHeight: 1.5,
 };
 
@@ -2030,33 +2063,37 @@ const overviewHeaderRow: React.CSSProperties = {
 };
 
 const overviewCloseBtn: React.CSSProperties = {
-  width: 22,
-  height: 22,
+  width: 24,
+  height: 24,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: 'transparent',
-  border: '1px solid rgba(0,0,0,0.1)',
-  borderRadius: 4,
-  color: 'rgba(31,41,55,0.65)',
+  background: tokens.gradient.surface,
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.pill,
+  color: tokens.color.textMute,
   cursor: 'pointer',
-  fontSize: 14,
+  fontSize: 13,
   lineHeight: 1,
   padding: 0,
-  fontFamily: 'inherit',
+  fontFamily: tokens.font.family,
+  boxShadow: tokens.shadow.glass,
+  outline: 'none',
 };
 
 const overviewRestoreBtn: React.CSSProperties = {
-  background: 'rgba(59,130,246,0.1)',
-  border: '1px solid rgba(59,130,246,0.35)',
-  color: '#1d4ed8',
-  borderRadius: 4,
+  background: tokens.gradient.accent,
+  border: `1px solid ${tokens.color.accentBorder}`,
+  color: tokens.color.text,
+  borderRadius: tokens.radius.pill,
   fontSize: 10,
-  fontWeight: 600,
+  fontWeight: 700,
   letterSpacing: 0.3,
-  padding: '2px 8px',
+  padding: '3px 10px',
   cursor: 'pointer',
-  fontFamily: 'inherit',
+  fontFamily: tokens.font.family,
+  boxShadow: tokens.shadow.glassAccent,
+  outline: 'none',
 };
 
 // Closed (master-off) state — a slim handle that re-opens the block.
@@ -2065,7 +2102,7 @@ const overviewClosedBar: React.CSSProperties = {
   alignItems: 'center',
   gap: 8,
   padding: '8px 16px',
-  borderBottom: '1px solid rgba(0,0,0,0.08)',
+  borderBottom: `1px solid ${tokens.color.border}`,
   background: 'transparent',
   border: 'none',
   borderRadius: 0,
@@ -2073,13 +2110,13 @@ const overviewClosedBar: React.CSSProperties = {
   textAlign: 'left',
   cursor: 'pointer',
   fontFamily: 'inherit',
-  color: '#1f2937',
+  color: tokens.color.text,
   flexShrink: 0,
 };
 
 const overviewClosedChevron: React.CSSProperties = {
   fontSize: 9,
-  color: 'rgba(31,41,55,0.7)',
+  color: tokens.color.textMute,
   width: 10,
 };
 
@@ -2090,47 +2127,60 @@ const chipRow: React.CSSProperties = {
 };
 
 const chipBtn: React.CSSProperties = {
-  padding: '5px 10px',
-  background: 'transparent',
-  border: '1px solid rgba(0,0,0,0.1)',
-  borderRadius: 999,
-  color: 'rgba(31,41,55,0.78)',
+  padding: '6px 14px',
+  background: tokens.gradient.surface,
+  // Long-hand split so the active overlay's `borderColor` doesn't leak
+  // back onto the inactive state after a re-render.
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: tokens.color.border,
+  borderRadius: tokens.radius.pill,
+  color: tokens.color.text,
   fontSize: 12,
-  fontFamily: 'inherit',
+  fontFamily: tokens.font.family,
   cursor: 'pointer',
-  fontWeight: 500,
+  fontWeight: 600,
   letterSpacing: 0.2,
-  transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+  boxShadow: tokens.shadow.glass,
+  outline: 'none',
+  transition: `background ${tokens.transition}, border-color ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}`,
 };
 
 const chipBtnActive: React.CSSProperties = {
-  background: 'rgba(59,130,246,0.14)',
-  borderColor: 'rgba(59,130,246,0.45)',
-  color: '#1d4ed8',
-  fontWeight: 600,
+  background: tokens.gradient.accent,
+  borderColor: tokens.color.accentBorder,
+  color: tokens.color.text,
+  fontWeight: 700,
+  boxShadow: tokens.shadow.glassAccent,
 };
 
 const colorChip: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 6,
-  padding: '4px 10px 4px 4px',
-  background: 'transparent',
-  border: '1px solid rgba(0,0,0,0.1)',
-  borderRadius: 999,
-  color: 'rgba(31,41,55,0.78)',
+  padding: '5px 12px 5px 5px',
+  background: tokens.gradient.surface,
+  // Long-hand split for the same React shorthand-vs-longhand bug.
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: tokens.color.border,
+  borderRadius: tokens.radius.pill,
+  color: tokens.color.text,
   fontSize: 12,
-  fontFamily: 'inherit',
+  fontFamily: tokens.font.family,
   cursor: 'pointer',
-  fontWeight: 500,
-  transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+  fontWeight: 600,
+  boxShadow: tokens.shadow.glass,
+  outline: 'none',
+  transition: `background ${tokens.transition}, border-color ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}`,
 };
 
 const colorChipActive: React.CSSProperties = {
-  background: 'rgba(59,130,246,0.14)',
-  borderColor: 'rgba(59,130,246,0.45)',
-  color: '#1d4ed8',
-  fontWeight: 600,
+  background: tokens.gradient.accent,
+  borderColor: tokens.color.accentBorder,
+  color: tokens.color.text,
+  fontWeight: 700,
+  boxShadow: tokens.shadow.glassAccent,
 };
 
 const colorSwatch: React.CSSProperties = {
@@ -2150,7 +2200,7 @@ const emptyHint: React.CSSProperties = {
 
 const emptyHintInline: React.CSSProperties = {
   fontSize: 10.5,
-  color: 'rgba(31,41,55,0.4)',
+  color: tokens.color.textFaint,
   alignSelf: 'center',
   marginLeft: 4,
 };
@@ -2160,7 +2210,7 @@ const overviewClosedLabel: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   letterSpacing: 1.0,
-  color: 'rgba(31,41,55,0.55)',
+  color: tokens.color.textMute,
   textTransform: 'uppercase',
 };
 

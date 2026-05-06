@@ -5,6 +5,7 @@ import { useUIStore } from '../store/ui-store';
 import { LeftPanel } from './LeftPanel';
 import { calibrateHeadTracker } from '../utils/head-tracker';
 import { navigate } from '../utils/url';
+import { tokens } from './design-tokens';
 
 interface ViewerOverlayProps {
   sceneId: string;
@@ -239,17 +240,18 @@ const mirrorBadge: React.CSSProperties = {
   right: 16,
   display: 'flex',
   alignItems: 'center',
-  gap: 6,
-  padding: '6px 12px',
-  background: 'rgba(59,130,246,0.92)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 999,
+  gap: 8,
+  padding: '7px 14px',
+  background: tokens.gradient.accent,
+  color: tokens.color.text,
+  border: `1px solid ${tokens.color.accentBorder}`,
+  borderRadius: tokens.radius.pill,
   cursor: 'pointer',
-  fontFamily: 'inherit',
+  fontFamily: tokens.font.family,
   letterSpacing: 0.4,
-  boxShadow: '0 4px 16px rgba(15,23,42,0.25)',
+  boxShadow: tokens.shadow.glassAccent,
   zIndex: 10,
+  outline: 'none',
 };
 
 const debugBtn: React.CSSProperties = {
@@ -257,12 +259,14 @@ const debugBtn: React.CSSProperties = {
   bottom: 144, left: 16,
   width: 40, height: 40,
   display: 'flex', alignItems: 'center', justifyContent: 'center',
-  background: 'rgba(255, 255, 255, 0.78)',
-  border: '1px solid rgba(0,0,0,0.06)',
-  borderRadius: 10,
-  backdropFilter: 'blur(16px)',
-  boxShadow: '0 8px 32px rgba(15,23,42,0.1)',
-  color: 'rgba(31,41,55,0.78)',
+  background: tokens.glass.surfaceStrong,
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.pill,
+  backdropFilter: tokens.backdrop,
+  WebkitBackdropFilter: tokens.backdrop,
+  boxShadow: tokens.shadow.glass,
+  color: tokens.color.text,
   textDecoration: 'none',
   zIndex: 5,
+  fontFamily: tokens.font.family,
 };
