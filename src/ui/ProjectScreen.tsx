@@ -300,9 +300,14 @@ function ProjectCard({ project, onOpen, onDelete, onEdit }: {
         <div style={S.thumbOverlay}>
           <button
             type="button"
-            onClick={copyShareLink}
-            title="閲覧用 URL をクリップボードにコピー"
-            style={{ ...S.thumbAction, ...(copied ? S.thumbActionCopied : null) }}
+            onClick={project.publishedAt ? copyShareLink : undefined}
+            disabled={!project.publishedAt}
+            title={project.publishedAt ? '閲覧用 URL をクリップボードにコピー' : '未公開 — デバッグ画面の「🚀 公開」ボタンから公開してください'}
+            style={{
+              ...S.thumbAction,
+              ...(copied ? S.thumbActionCopied : null),
+              ...(project.publishedAt ? null : S.thumbActionDisabled),
+            }}
           >
             {copied ? '✓ コピー済' : '🔗 リンク'}
           </button>
@@ -659,6 +664,13 @@ const S: Record<string, React.CSSProperties> = {
     background: 'rgba(231,241,231,0.95)',
     color: tokens.color.success,
     borderColor: tokens.color.successBorder,
+  },
+  thumbActionDisabled: {
+    background: 'rgba(240,242,246,0.78)',
+    color: tokens.color.textFaint,
+    borderColor: tokens.color.border,
+    cursor: 'not-allowed',
+    opacity: 0.6,
   },
   iconBtn: {
     width: 30, height: 30,

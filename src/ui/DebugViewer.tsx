@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { loadSceneManifest } from '../core/scene-manifest';
 import type { ViewerEngine, CameraKeyframe } from '../core/types';
 import { pickSupportedMime, CanvasRecorder, downloadBlob } from '../utils/video-recorder';
@@ -2335,6 +2336,7 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
       await publishScene(manifest as never, (p) => setProgress(p));
       const url = `${window.location.origin}/viewer/${sceneId}`;
       setDoneUrl(url);
+      useProjectStore.getState().updateProject(sceneId, { publishedAt: Date.now() });
       notifyPublishDone(sceneId, url, Date.now() - startedAt);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -2371,11 +2373,11 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
       >
         {busy ? '公開中…' : '🚀 公開'}
       </button>
-      {(busy || doneUrl || error) && (
+      {(busy || doneUrl || error) && createPortal(
         <div
           style={{
             position: 'fixed',
-            top: 16, right: 16,
+            top: 70, right: 16,
             zIndex: 9999,
             width: 360,
             padding: 14,
@@ -2432,7 +2434,8 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
               >閉じる</button>
             </>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

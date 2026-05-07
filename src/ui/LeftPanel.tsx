@@ -122,7 +122,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
               <DemoModeBlock />
             )) : null,
             mobile: showMobile ? (hiddenSections.includes('mobile') ? (
-              <ClosedSectionHandle label="モバイル" onOpen={() => setSectionHidden('mobile', false)} />
+              <ClosedSectionHandle label="移動スピード" onOpen={() => setSectionHidden('mobile', false)} />
             ) : (
               <MobileToolsBlock onClose={() => setSectionHidden('mobile', true)} />
             )) : null,
@@ -488,7 +488,6 @@ function TypeSelectBlock({ onPlanSwitch }: { onPlanSwitch?: (planId: string) => 
       ) : plans.length === 1 ? (
         <div style={chipRow}>
           <button style={{ ...chipBtn, ...chipBtnActive }} disabled title="単一プラン">{plans[0].label}</button>
-          <span style={emptyHintInline}>+ 追加はデバッグ画面で</span>
         </div>
       ) : (
         <div style={chipRow}>

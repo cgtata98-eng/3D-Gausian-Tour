@@ -52,7 +52,13 @@ async function handlePublish(request: Request, env: Env, url: URL): Promise<Resp
   const [, rawSceneId, rawFilename] = match;
 
   const sceneId = rawSceneId.replace(/[^a-zA-Z0-9_-]/g, '');
-  const filename = rawFilename.replace(/\.\.+/g, '').replace(/^\/+/, '');
+  // The client `encodeURIComponent`s the whole filename, so multibyte chars and
+  // path slashes both arrive percent-encoded. Decode so R2 keys are stored
+  // with their original UTF-8 (e.g. `_name_京都ホテル/.placeholder`).
+  let decodedFilename: string;
+  try { decodedFilename = decodeURIComponent(rawFilename); }
+  catch { decodedFilename = rawFilename; }
+  const filename = decodedFilename.replace(/\.\.+/g, '').replace(/^\/+/, '');
   if (!sceneId || !filename) return new Response('Bad path', { status: 400 });
   const r2Key = `${sceneId}/${filename}`;
   const action = url.searchParams.get('action');

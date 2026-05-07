@@ -12,6 +12,8 @@ export interface Project {
   subtitle?: string;
   /** Unix ms when added. 0 for the seed entries. */
   createdAt: number;
+  /** Unix ms of the most recent successful publish. Undefined means never published. */
+  publishedAt?: number;
 }
 
 const STORAGE_KEY = '3droomtour:projects:v1';
