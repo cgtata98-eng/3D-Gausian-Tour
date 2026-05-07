@@ -18,13 +18,7 @@ const STORAGE_KEY = '3droomtour:projects:v1';
 
 /** Seed entries for the project list — assets live under R2 (or local /assets/scenes
  *  during dev) at `<id>/scene.json`, `<id>/splat.sog`, etc. */
-const SEED: Project[] = [
-  { id: 'sample', name: 'Sample Mansion', type: 'mansion', viewMode: 'splat', subtitle: 'デモ - kousei_100 ベース', createdAt: 0 },
-  { id: 'kousei', name: 'Kousei Mansion', type: 'mansion', viewMode: 'splat', subtitle: '高品質スキャン（kousei_750）', createdAt: 0 },
-  { id: 'modern', name: 'モダンマンション', type: 'mansion', viewMode: 'splat', subtitle: '都心 1LDK プラン例', createdAt: 0 },
-  { id: 'nordic', name: '北欧スタイルマンション', type: 'mansion', viewMode: 'splat', subtitle: 'ナチュラル・北欧テイスト', createdAt: 0 },
-  { id: 'showroom', name: 'ショールーム / 展示空間', type: 'other', viewMode: '360', subtitle: '店舗・展示用 (マンション以外)', createdAt: 0 },
-];
+const SEED: Project[] = [];
 
 function loadFromStorage(): Project[] {
   try {
