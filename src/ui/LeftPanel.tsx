@@ -2197,14 +2197,6 @@ const emptyHint: React.CSSProperties = {
   padding: '4px 0',
 };
 
-const emptyHintInline: React.CSSProperties = {
-  fontSize: 10.5,
-  color: tokens.color.textFaint,
-  alignSelf: 'center',
-  marginLeft: 4,
-};
-
-
 const overviewClosedLabel: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
