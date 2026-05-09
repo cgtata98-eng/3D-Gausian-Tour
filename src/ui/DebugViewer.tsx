@@ -1393,9 +1393,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             )}
 
             {/* ===== 環境音 (全体, プラン管理の下) =====
-                BGM は両モードで使えるが、足音は歩く 3DGS でしか意味がないので
-                splat データが無い場合は subsection を出さない。 */}
-            {debugTab === 'global' && !isVRMode && (() => {
+                BGM は両モードで使える (パノラマでも音楽は流せる)。足音は歩く
+                3DGS でしか意味がないので、VR モード or splat データが無い場合は
+                subsection を出さない。 */}
+            {debugTab === 'global' && (() => {
               const setSceneAudio = useSceneStore.getState().setSceneAudio;
               const handleAudioFile = async (file: File) => {
                 if (!manifest) return;
@@ -1464,8 +1465,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   </div>
 
                   {/* 足音 (デフォルト固定 / ON-OFF + ボリューム、Shift で走行)
-                      splat 無し（パノラマだけのプロジェクト）では歩けないので非表示。 */}
-                  {hasSplatData && (
+                      VR / パノラマモードや splat データ無しでは歩かないので非表示。 */}
+                  {!isVRMode && hasSplatData && (
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
                     <div style={S.subTitle}>足音</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
@@ -3251,19 +3252,31 @@ function ViewerToolbarSection({
 
       <div style={S.toolbarGroupHead}>サイドバー</div>
       <ToolbarRow tb={tb} keyName="type"       label={isOtherProject && !isVRMode ? '場所 (プラン切替)' : 'タイプ (プラン切替)'} hint="— 既定 OFF" defaultOff onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="overview"   label="間取り概要"               hint={isOtherProject ? '— その他では非対応' : '— 既定 OFF'} disabled={isOtherProject} defaultOff onChange={onChange} />
+      {/* 間取り / カラーは「その他」プロジェクトでは概念的に存在しないので
+          DOM ごと出さない (grayed out で残しておくと UI のノイズ)。 */}
+      {!isOtherProject && (
+        <ToolbarRow tb={tb} keyName="overview"   label="間取り概要" hint="— 既定 OFF" defaultOff onChange={onChange} />
+      )}
       <ToolbarRow tb={tb} keyName="viewpoints" label="シーン" hint="— 既定 OFF" defaultOff onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="color"      label="カラー (素材バリエーション)" hint={isOtherProject ? '— その他では非対応' : '— 既定 OFF'} disabled={isOtherProject} defaultOff onChange={onChange} />
+      {!isOtherProject && (
+        <ToolbarRow tb={tb} keyName="color"      label="カラー (素材バリエーション)" hint="— 既定 OFF" defaultOff onChange={onChange} />
+      )}
       <ToolbarRow tb={tb} keyName="aiGenerate" label="AI 画像生成" hint="— 既定 OFF" defaultOff onChange={onChange} />
       <ToolbarRow tb={tb} keyName="map"        label={isOtherProject ? 'MAP' : 'FLOOR MAP'} hint="— 既定 OFF" defaultOff onChange={onChange} />
       <ToolbarRow tb={tb} keyName="pins"       label="タグ (3D ピン / リンク付き)" hint="— 既定 OFF" defaultOff onChange={onChange} />
 
       <div style={S.toolbarGroupHead}>オーバーレイ / アイコン</div>
-      <ToolbarRow tb={tb} keyName="audio"      label="環境音アイコン (タイトル右)" hint={isVRMode ? '— 360° では非対応' : '— 既定 OFF'} disabled={isVRMode} defaultOff onChange={onChange} />
+      {/* 環境音 (BGM) と ヘッドトラッキングはパノラマでも使える ─ enable 状態のままにする。
+          移動モード切替・画質プリセットは 3DGS 専用なので VR モードでは行ごと非表示。 */}
+      <ToolbarRow tb={tb} keyName="audio"      label="環境音アイコン (タイトル右)" hint="— 既定 OFF" defaultOff onChange={onChange} />
       <ToolbarRow tb={tb} keyName="fullscreen" label="フルスクリーンアイコン" hint="— 既定 OFF" defaultOff onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="movement"   label="移動モード切替 (歩く / フライ)" hint={isVRMode ? '— 360° では非対応' : '— 既定 OFF'} disabled={isVRMode} defaultOff onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="quality"    label="画質 (LOW / MID / HIGH)" hint={isVRMode ? '— 360° では非対応' : '— 既定 ON'} disabled={isVRMode} onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="demo"       label="ヘッドトラッキング" hint={isVRMode ? '— 360° では非対応' : '— 既定 OFF'} disabled={isVRMode} defaultOff onChange={onChange} />
+      {!isVRMode && (
+        <ToolbarRow tb={tb} keyName="movement"   label="移動モード切替 (歩く / フライ)" hint="— 既定 OFF" defaultOff onChange={onChange} />
+      )}
+      {!isVRMode && (
+        <ToolbarRow tb={tb} keyName="quality"    label="画質 (LOW / MID / HIGH)" hint="— 既定 ON" onChange={onChange} />
+      )}
+      <ToolbarRow tb={tb} keyName="demo"       label="ヘッドトラッキング" hint="— 既定 OFF" defaultOff onChange={onChange} />
 
       {!isOtherProject && (
         <>
@@ -3317,9 +3330,13 @@ function isBlockVisible(id: OrderableSidebarBlock, tb: ToolbarPatch, isVRMode: b
   // `mobile` lives on `ViewerToolbarConfig` but isn't in the local
   // `ToolbarKey` union (no checkbox row), so reach in via the bag type.
   const bag = tb as Record<string, unknown>;
-  // `mobile` (移動スピード) は 3DGS 専用 — 360° モードでは LeftPanel 側でも出ないので
-  // 並び替えリストにも載せない。
-  if (id === 'mobile')   return !isVRMode && bag.mobile !== false;
+  // 3DGS 専用ブロック — 並び替えリストでは VR モードのとき行ごと除外。
+  // `mobile`(移動スピード) / `movement`(歩く・フライ) / `quality`(画質) は LeftPanel
+  // 側で `viewMode === 'splat'` ガードされていて VR では描画されないため、
+  // 並び替えリストに載せると UI の不整合になる。
+  const splatOnly = id === 'mobile' || id === 'movement' || id === 'quality';
+  if (isVRMode && splatOnly) return false;
+  if (id === 'mobile')   return bag.mobile !== false;
   if (id === 'tracking') return tb.demo === true;
   if (id === 'quality')  return tb.quality !== false;
   return bag[id] === true;

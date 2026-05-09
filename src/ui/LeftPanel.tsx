@@ -68,7 +68,8 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // タップで `useUIStore.showPins` が反転 → ScenePinsOverlay の出し分けに使う。
   const showPinsToggle = tb.pins === true;
   const showMovement   = tb.movement   === true && viewMode === 'splat';
-  const showDemo       = tb.demo       === true && viewMode === 'splat';
+  // ヘッドトラッキングは VR モードでも有効 (パノラマ視点回転に使える)。
+  const showDemo       = tb.demo       === true;
   const showQuality    = tb.quality    !== false && viewMode === 'splat';
   const showAiGenerate = tb.aiGenerate === true;
   // Mobile-only block: only relevant on touch devices, so we gate by
@@ -1576,14 +1577,13 @@ function SegmentedToggle<T extends string>({ value, onChange, options }: { value
 // ── Fullscreen ────────────────────────────────────────────────────
 
 /** Speaker icon button in the sidebar title row — toggles ambient audio mute.
- *  Hidden in 360° mode (audio is a 3DGS-only feature) or when the author hides
- *  the icon via Debug → ツールバー表示 → 環境音アイコン. */
+ *  Available in both 3DGS and panorama modes (BGM is mode-independent). The
+ *  author can still hide the icon via Debug → ツールバー表示 → 環境音アイコン. */
 function AmbientAudioToggle() {
   const muted = useUIStore((s) => s.audioMuted);
   const setMuted = useUIStore((s) => s.setAudioMuted);
-  const viewMode = useUIStore((s) => s.viewMode);
   const allowed = useSceneStore((s) => s.manifest?.viewerToolbar?.audio) === true;
-  if (viewMode === '360' || !allowed) return null;
+  if (!allowed) return null;
   return (
     <button
       onClick={() => setMuted(!muted)}
