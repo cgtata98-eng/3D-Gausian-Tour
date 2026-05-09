@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { SceneManifest, SceneInfo, SceneSettings, SplatTransform, ViewerToolbarConfig, Viewpoint, Plan, FloorPlanConfig, AiGenerationEntry } from '../core/types';
+import type { SceneManifest, SceneInfo, SceneSettings, SplatTransform, ViewerToolbarConfig, Viewpoint, Plan, FloorPlanConfig, AiGenerationEntry, ScenePin, PinPlacement } from '../core/types';
+import { getPinPlacements } from '../core/pin-placements';
 import { useCameraStore } from './camera-store';
 import { useProjectStore } from './project-store';
 
@@ -163,6 +164,21 @@ interface SceneState {
   removeAiGenerationEntry: (id: string) => void;
   /** Update label / prompt / panoramas / thumbnail of an existing entry. */
   updateAiGenerationEntry: (id: string, patch: Partial<AiGenerationEntry>) => void;
+  // ── Scene pins (annotation tags) ──────────────────────────────────
+  /** Add an annotation pin to the active plan. */
+  addPin: (pin: ScenePin) => void;
+  /** Remove a pin by id from the active plan. */
+  removePin: (id: string) => void;
+  /** Patch a pin's metadata (title / comment / url / image). */
+  updatePin: (id: string, patch: Partial<ScenePin>) => void;
+  /** Add one placement (viewpoint + position) to a pin. Migrates legacy
+   *  `position` / `viewpointId` singletons into the placements array on
+   *  the same write so future edits use the array path exclusively. */
+  addPinPlacement: (pinId: string, placement: PinPlacement) => void;
+  /** Patch a single placement by its id. */
+  updatePinPlacement: (pinId: string, placementId: string, patch: Partial<PinPlacement>) => void;
+  /** Remove a single placement from a pin (the pin and other placements survive). */
+  removePinPlacement: (pinId: string, placementId: string) => void;
 }
 
 /**
@@ -435,5 +451,60 @@ export const useSceneStore = create<SceneState>((set) => ({
   updateAiGenerationEntry: (id, patch) => set((s) => withActivePlan(s, (p) => ({
     ...p,
     aiHistory: (p.aiHistory ?? []).map((e) => e.id === id ? { ...e, ...patch } : e),
+  }))),
+  addPin: (pin) => set((s) => withActivePlan(s, (p) => ({
+    ...p,
+    pins: [...(p.pins ?? []), pin],
+  }))),
+  removePin: (id) => set((s) => withActivePlan(s, (p) => ({
+    ...p,
+    pins: (p.pins ?? []).filter((e) => e.id !== id),
+  }))),
+  updatePin: (id, patch) => set((s) => withActivePlan(s, (p) => ({
+    ...p,
+    pins: (p.pins ?? []).map((e) => e.id === id ? { ...e, ...patch } : e),
+  }))),
+  addPinPlacement: (pinId, placement) => set((s) => withActivePlan(s, (p) => ({
+    ...p,
+    pins: (p.pins ?? []).map((e) => {
+      if (e.id !== pinId) return e;
+      // Migrate legacy single-placement fields into the array on first write.
+      const existing = getPinPlacements(e);
+      const next: ScenePin = {
+        ...e,
+        placements: [...existing, placement],
+      };
+      delete next.position;
+      delete next.viewpointId;
+      return next;
+    }),
+  }))),
+  updatePinPlacement: (pinId, placementId, patch) => set((s) => withActivePlan(s, (p) => ({
+    ...p,
+    pins: (p.pins ?? []).map((e) => {
+      if (e.id !== pinId) return e;
+      const existing = getPinPlacements(e);
+      const next: ScenePin = {
+        ...e,
+        placements: existing.map((pl) => pl.id === placementId ? { ...pl, ...patch } : pl),
+      };
+      delete next.position;
+      delete next.viewpointId;
+      return next;
+    }),
+  }))),
+  removePinPlacement: (pinId, placementId) => set((s) => withActivePlan(s, (p) => ({
+    ...p,
+    pins: (p.pins ?? []).map((e) => {
+      if (e.id !== pinId) return e;
+      const existing = getPinPlacements(e);
+      const next: ScenePin = {
+        ...e,
+        placements: existing.filter((pl) => pl.id !== placementId),
+      };
+      delete next.position;
+      delete next.viewpointId;
+      return next;
+    }),
   }))),
 }));

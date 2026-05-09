@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useProjectStore, type Project } from '../store/project-store';
+import { useSceneStore } from '../store/scene-store';
 import { useUIStore, type ProjectType, type ViewMode } from '../store/ui-store';
 import { navigate } from '../utils/url';
+import * as idb from '../utils/idb';
+import type { SceneManifest } from '../core/types';
 import { tokens } from './design-tokens';
 
 /**
@@ -34,6 +37,16 @@ function generateShareId(): string {
  * (white gradient + 1.5 px hairline border + inset top highlight + multi-
  * layered drop shadow).
  */
+type SortKey = 'newest' | 'oldest' | 'name';
+const SORT_STORAGE_KEY = '3droomtour:projects:sort:v1';
+function loadInitialSort(): SortKey {
+  try {
+    const raw = localStorage.getItem(SORT_STORAGE_KEY);
+    if (raw === 'newest' || raw === 'oldest' || raw === 'name') return raw;
+  } catch { /* localStorage disabled */ }
+  return 'newest';
+}
+
 export function ProjectScreen() {
   const projects = useProjectStore((s) => s.projects);
   const addProject = useProjectStore((s) => s.addProject);
@@ -45,6 +58,19 @@ export function ProjectScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const editing = editingId ? projects.find((p) => p.id === editingId) : null;
+  const [sortKey, setSortKey] = useState<SortKey>(loadInitialSort);
+  // Sorted view of the project list. The store's `projects` array reflects
+  // creation order; we re-sort here so users can flip newest / oldest / name
+  // without mutating the underlying ordering.
+  const sortedProjects = [...projects].sort((a, b) => {
+    if (sortKey === 'name') return a.name.localeCompare(b.name, 'ja');
+    if (sortKey === 'oldest') return a.createdAt - b.createdAt;
+    return b.createdAt - a.createdAt; // newest
+  });
+  const setSort = (k: SortKey) => {
+    setSortKey(k);
+    try { localStorage.setItem(SORT_STORAGE_KEY, k); } catch { /* ignore */ }
+  };
 
   const handleOpen = (p: Project, mode: 'viewer' | 'debug') => {
     setUiViewMode(p.viewMode);
@@ -99,9 +125,19 @@ export function ProjectScreen() {
 
       <div style={S.body}>
         <div style={S.heading}>
-          <div style={S.headingTitle}>
-            プロジェクト一覧
-            <span style={S.headingCount}>{projects.length}</span>
+          <div style={S.headingRow}>
+            <div style={S.headingTitle}>
+              プロジェクト一覧
+              <span style={S.headingCount}>{projects.length}</span>
+            </div>
+            {projects.length > 0 && (
+              <div style={S.sortRow}>
+                <span style={S.sortLabel}>並び替え</span>
+                <SortPill active={sortKey === 'newest'} onClick={() => setSort('newest')}>新しい順</SortPill>
+                <SortPill active={sortKey === 'oldest'} onClick={() => setSort('oldest')}>古い順</SortPill>
+                <SortPill active={sortKey === 'name'} onClick={() => setSort('name')}>名前順</SortPill>
+              </div>
+            )}
           </div>
           <div style={S.headingSub}>
             種別と表示モードはプロジェクトごとに設定されます。各カードを開いて中身を編集してください。
@@ -116,7 +152,7 @@ export function ProjectScreen() {
           </div>
         ) : (
           <div style={S.grid}>
-            {projects.map((p) => (
+            {sortedProjects.map((p) => (
               <ProjectCard
                 key={p.id}
                 project={p}
@@ -147,7 +183,28 @@ export function ProjectScreen() {
           initial={editing}
           onCancel={() => setEditingId(null)}
           onSubmit={(payload) => {
-            updateProject(editing.id, payload);
+            const editingId = editing.id;
+            const renamed = payload.name !== editing.name;
+            updateProject(editingId, payload);
+            // 改名を IDB の manifest と (該当シーンが表示中なら) scene-store にも反映 —
+            // DebugViewer / LeftPanel のヘッダは manifest.name を参照するため、
+            // ここで同期しないとリネーム後も古い名前のまま残る。
+            if (renamed) {
+              void (async () => {
+                try {
+                  const persisted = await idb.loadManifest<SceneManifest>(editingId);
+                  if (persisted) {
+                    await idb.saveManifest(editingId, { ...persisted, name: payload.name });
+                  }
+                } catch (e) {
+                  console.warn('[rename] IDB manifest sync failed:', e);
+                }
+                const live = useSceneStore.getState().manifest;
+                if (live?.id === editingId) {
+                  useSceneStore.getState().setSceneName(payload.name);
+                }
+              })();
+            }
             setEditingId(null);
           }}
         />
@@ -378,6 +435,29 @@ function ProjectDialog({ mode, initial, onCancel, onSubmit }: {
   const [subtitle, setSubtitle] = useState(initial?.subtitle ?? '');
   const [type, setType] = useState<ProjectType>(initial?.type ?? 'mansion');
   const [viewMode, setViewMode] = useState<ViewMode>(initial?.viewMode ?? 'splat');
+  // Edit mode: peek into the IDB-persisted manifest so we can lock the view
+  // mode toggle to whichever data has actually been authored. Switching from
+  // 3DGS-with-PLY to 360 (or vice versa) is a footgun — the prior data stays
+  // in the manifest but is silently invisible in the new mode.
+  const [hasGsData, setHasGsData] = useState(false);
+  const [hasVrData, setHasVrData] = useState(false);
+  useEffect(() => {
+    if (mode !== 'edit' || !initial) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const m = await idb.loadManifest<SceneManifest>(initial.id);
+        if (cancelled || !m?.plans) return;
+        const gs = m.plans.some((p) => !!p.splat || !!p.splatSog);
+        const vr = m.plans.some((p) => p.panoramas && Object.keys(p.panoramas).length > 0);
+        setHasGsData(gs);
+        setHasVrData(vr);
+      } catch {
+        // No manifest yet (project freshly created, no upload) — both flags stay false.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mode, initial]);
 
   const submit = () => {
     if (!name.trim()) return;
@@ -434,10 +514,30 @@ function ProjectDialog({ mode, initial, onCancel, onSubmit }: {
               value={viewMode}
               onChange={setViewMode}
               options={[
-                { value: 'splat', title: '3DGS',  sub: 'Gaussian Splat 回遊' },
-                { value: '360',   title: '360VR', sub: '視点ごとのパノラマ' },
+                {
+                  value: 'splat',
+                  title: '3DGS',
+                  sub: 'Gaussian Splat 回遊',
+                  disabled: hasVrData,
+                  disabledReason: 'パノラマが登録済のため切替不可',
+                },
+                {
+                  value: '360',
+                  title: '360VR',
+                  sub: '視点ごとのパノラマ',
+                  disabled: hasGsData,
+                  disabledReason: 'Splat が登録済のため切替不可',
+                },
               ]}
             />
+            {(hasGsData || hasVrData) && (
+              <span style={S.modeLockHint}>
+                {hasGsData ? 'Splat (PLY/SOG) ' : ''}
+                {hasGsData && hasVrData ? '・' : ''}
+                {hasVrData ? 'パノラマ画像 ' : ''}
+                が登録済のため、もう一方のモードには切替できません。
+              </span>
+            )}
           </Field>
         </div>
 
@@ -470,18 +570,25 @@ function Field({ label, required, children }: { label: string; required?: boolea
 function PillToggle<T extends string>({ value, onChange, options }: {
   value: T;
   onChange: (v: T) => void;
-  options: { value: T; title: string; sub?: string }[];
+  options: { value: T; title: string; sub?: string; disabled?: boolean; disabledReason?: string }[];
 }) {
   return (
     <div style={S.pillToggle}>
       {options.map((o) => {
         const active = o.value === value;
+        const disabled = !!o.disabled && !active;
         return (
           <button
             key={o.value}
             type="button"
-            onClick={() => onChange(o.value)}
-            style={{ ...S.pillToggleSeg, ...(active ? S.pillToggleSegActive : null) }}
+            onClick={() => { if (!disabled) onChange(o.value); }}
+            disabled={disabled}
+            title={disabled ? o.disabledReason : undefined}
+            style={{
+              ...S.pillToggleSeg,
+              ...(active ? S.pillToggleSegActive : null),
+              ...(disabled ? S.pillToggleSegDisabled : null),
+            }}
           >
             <span style={S.pillToggleTitle}>{o.title}</span>
             {o.sub && <span style={S.pillToggleSub}>{o.sub}</span>}
@@ -489,6 +596,24 @@ function PillToggle<T extends string>({ value, onChange, options }: {
         );
       })}
     </div>
+  );
+}
+
+// ── Sort selector pill ───────────────────────────────────────────
+
+function SortPill({ active, onClick, children }: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ ...S.sortPill, ...(active ? S.sortPillActive : null) }}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -520,11 +645,16 @@ const THUMB_GRAD_OTHER = 'linear-gradient(135deg, rgba(160,122,62,0.14), rgba(16
 
 const S: Record<string, React.CSSProperties> = {
   root: {
-    width: '100vw', minHeight: '100vh',
+    width: '100vw', height: '100vh',
     // Calm light-gray canvas — visible enough to ground the white pills
     // but plain so the active-pill coloured glows are the only colour
     // accents. Reference image is essentially the same: clean light
     // backdrop, drama from the pills themselves.
+    //
+    // height (not min-height) + overflow:auto = fixed-height root with
+    // its OWN scroll context. With min-height the root grew with content
+    // and overflow never triggered — once you had ~10+ projects the bottom
+    // cards fell below the viewport with no scrollbar.
     background: tokens.color.bg,
     color: tokens.color.text,
     fontFamily: tokens.font.family,
@@ -570,10 +700,49 @@ const S: Record<string, React.CSSProperties> = {
     marginBottom: 28,
     paddingLeft: 4,
   },
+  headingRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+    flexWrap: 'wrap' as const,
+    marginBottom: 8,
+  },
   headingTitle: {
     fontSize: 22, fontWeight: 700, letterSpacing: 0.2,
-    marginBottom: 8, color: tokens.color.text,
+    color: tokens.color.text,
     display: 'flex', alignItems: 'center', gap: 12,
+  },
+  sortRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sortLabel: {
+    fontSize: 11,
+    color: tokens.color.textMute,
+    marginRight: 4,
+  },
+  sortPill: {
+    padding: '5px 12px',
+    fontSize: 11.5,
+    fontWeight: 600,
+    background: tokens.gradient.surface,
+    borderWidth: 1,
+    borderStyle: 'solid' as const,
+    borderColor: tokens.color.border,
+    borderRadius: tokens.radius.pill,
+    color: tokens.color.textMute,
+    cursor: 'pointer',
+    fontFamily: tokens.font.family,
+    outline: 'none',
+    transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}`,
+  },
+  sortPillActive: {
+    background: tokens.gradient.accent,
+    borderColor: tokens.color.accentBorder,
+    color: tokens.color.text,
+    boxShadow: tokens.shadow.glassAccent,
   },
   headingCount: {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -776,8 +945,20 @@ const S: Record<string, React.CSSProperties> = {
     color: tokens.color.text,
     boxShadow: tokens.shadow.glassAccent,
   },
+  pillToggleSegDisabled: {
+    opacity: 0.42,
+    cursor: 'not-allowed' as const,
+    boxShadow: 'none',
+    color: tokens.color.textMute,
+  },
   pillToggleTitle: { fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3 },
   pillToggleSub: { fontSize: 10.5, color: tokens.color.textFaint, fontWeight: 500 },
+  modeLockHint: {
+    fontSize: 11,
+    color: tokens.color.textMute,
+    marginTop: 8,
+    lineHeight: 1.55,
+  },
 
   // ── Dialog ───────────────────────────────────────────────
   dialogBackdrop: {

@@ -322,6 +322,85 @@ export class SceneManager {
     this.cameraController.jumpTo(pose.position, pose.target, pose.fov);
   }
 
+  /**
+   * Project a 3D world point to 2D canvas pixel coordinates. Returns null when
+   * the point is behind the camera (or when the camera component isn't ready).
+   * Used by the scene-pins overlay to position HTML markers each frame.
+   *
+   * Behind-camera detection uses dot(world - camPos, forward). PlayCanvas's
+   * `Camera.worldToScreen` does perspective divide internally and the resulting
+   * `screenCoord.z` is the pre-divide clip z (not a reliable "behind" flag) —
+   * relying on it produced inconsistent visibility, so we check explicitly.
+   */
+  worldToScreen(world: [number, number, number]): { x: number; y: number } | null {
+    const cam = this.camera.camera;
+    if (!cam) return null;
+    const camPos = this.camera.getPosition();
+    const fwd = this.camera.forward;
+    const dx = world[0] - camPos.x;
+    const dy = world[1] - camPos.y;
+    const dz = world[2] - camPos.z;
+    if (dx * fwd.x + dy * fwd.y + dz * fwd.z <= 0) return null;
+    const out = new Vec3();
+    cam.worldToScreen(new Vec3(world[0], world[1], world[2]), out);
+    return { x: out.x, y: out.y };
+  }
+
+  /**
+   * Synthesize a world-space position in front of the current camera.
+   * Used by the "+ ピンを追加" button to drop a pin at a sensible default
+   * location (~2 m ahead) the user can then drag in the 3D scene.
+   */
+  getCameraForwardPoint(distance = 2): [number, number, number] {
+    const pos = this.camera.getPosition();
+    const fwd = this.camera.forward;
+    return [
+      +(pos.x + fwd.x * distance).toFixed(3),
+      +(pos.y + fwd.y * distance).toFixed(3),
+      +(pos.z + fwd.z * distance).toFixed(3),
+    ];
+  }
+
+  /**
+   * Click-to-place helper for scene pins. Casts a ray from the camera through
+   * the given canvas-pixel coordinate and returns the world-space intersection
+   * with the floor plane (Y = 0). Falls back to "camera forward 2 m" when the
+   * ray points up / parallel to the floor and would never intersect.
+   *
+   * No splat-surface raycasting — Gaussian Splat is not a triangle mesh, so
+   * intersecting against the floor plane gives a deterministic, predictable
+   * spot the author can refine via the X/Y/Z sliders afterwards.
+   */
+  screenToFloorPoint(canvasX: number, canvasY: number): [number, number, number] | null {
+    const cam = this.camera.camera;
+    if (!cam) return null;
+    // PlayCanvas's `screenToWorld(x, y, z)` reads canvas-pixel x/y plus a
+    // distance from the camera. We need TWO points — one at the near plane
+    // and one further out — to define the ray direction without assuming
+    // anything about FOV / aspect / etc.
+    const near = new Vec3();
+    const far = new Vec3();
+    cam.screenToWorld(canvasX, canvasY, cam.nearClip, near);
+    cam.screenToWorld(canvasX, canvasY, cam.nearClip + 1, far);
+    const dir = new Vec3().sub2(far, near).normalize();
+    if (Math.abs(dir.y) < 1e-4) {
+      // Ray parallel to the floor — never hits Y=0. Fall back gracefully.
+      return this.getCameraForwardPoint(2);
+    }
+    const camPos = this.camera.getPosition();
+    // (camPos + t·dir).y = 0 → t = -camPos.y / dir.y
+    const t = -camPos.y / dir.y;
+    if (t <= 0) {
+      // Floor plane is behind the camera (looking up). Use forward fallback.
+      return this.getCameraForwardPoint(2);
+    }
+    return [
+      +(camPos.x + dir.x * t).toFixed(3),
+      0,
+      +(camPos.z + dir.z * t).toFixed(3),
+    ];
+  }
+
   /** The host canvas. Used by the 動画タブ to attach a `MediaRecorder` via
    *  `canvas.captureStream()`. Returns null if PlayCanvas hasn't initialised. */
   getCanvas(): HTMLCanvasElement | null {
@@ -435,13 +514,15 @@ export class SceneManager {
     } else {
       if (this.splatEntity) this.splatEntity.enabled = true;
       this.cameraController?.setMovementLocked(false);
+      // Always tear down the custom equirect mesh; restoring the saved cubemap
+      // skybox state alone leaves our mesh sitting in the SKYBOX layer and the
+      // panorama leaks through behind the splat.
+      removeHdri(this.app);
       if (this.savedSkybox) {
         this.app.scene.skybox = this.savedSkybox.skybox;
         this.app.scene.envAtlas = this.savedSkybox.envAtlas;
         this.app.scene.skyboxIntensity = this.savedSkybox.intensity;
         this.savedSkybox = null;
-      } else {
-        removeHdri(this.app);
       }
     }
   }

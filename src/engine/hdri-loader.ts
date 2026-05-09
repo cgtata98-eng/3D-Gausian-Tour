@@ -1,19 +1,19 @@
-import {
-  AppBase,
-  Asset,
-  Quat,
-  Texture,
-  TextureHandler,
-  EnvLighting,
-  Vec3,
-} from 'playcanvas';
+import { AppBase, Quat, Vec3 } from 'playcanvas';
+import { applyEquirectSkybox, removeEquirectSkybox } from './equirect-skybox';
 
 /** 180° rotation around +Y, baked once. Aligns equirect u=0.5 with camera yaw=0. */
 const SKYBOX_Y_FLIP = new Quat().setFromAxisAngle(Vec3.UP, 180);
 
 /**
- * Load an HDRI image (HDR/PNG/JPG/EXR) and apply it as skybox + environment lighting.
- * Accepts a URL or data URL.
+ * Load a panorama image (PNG/JPG; HDR/EXR not supported in this path) and apply
+ * it as the visible 360° skybox.
+ *
+ * The visible skybox is rendered by `equirect-skybox.ts` — a custom mesh that
+ * samples the equirect texture directly via spherical UVs from the view
+ * direction. This bypasses PlayCanvas's `EnvLighting.generateSkyboxCubemap`,
+ * which otherwise bakes a visible "dot" at zenith / nadir from the equirect's
+ * polar rows being collapsed into a single cubemap texel at +Y / -Y face
+ * centre.
  *
  * The skybox is rotated 180° around Y so the equirect's longitude-0 (image horizontal
  * center, u=0.5) lines up with PlayCanvas's camera yaw 0 (looking -Z). Without this,
@@ -21,24 +21,21 @@ const SKYBOX_Y_FLIP = new Quat().setFromAxisAngle(Vec3.UP, 180);
  * is impossible to achieve without per-component yaw offsets that ripple into the
  * floor-plan map (mapYaw / cone direction). With the rotation, "yaw 0 = front" holds
  * end-to-end across preview, camera, mapYaw and live cone.
+ *
+ * IBL / env atlas is intentionally not generated here. PlayCanvas's `Sky` falls
+ * back to envAtlas when `scene.skybox` is null and renders the small mipmap
+ * atlas into the SKYBOX layer, which blurs everything our custom mesh would
+ * have drawn. Since the 3DGS splat doesn't use IBL reflections (and the
+ * 360 mode shows nothing else), dropping env atlas costs nothing visible.
  */
 export async function applyHdri(app: AppBase, url: string): Promise<void> {
-  // Ensure TextureHandler is registered
-  if (!app.loader.getHandler('texture')) {
-    app.loader.addHandler('texture', new TextureHandler(app));
-  }
+  // Force the env atlas off so PlayCanvas's auto SkyMesh fallback path (which
+  // would otherwise render the tiny mipmap atlas as a blurred backdrop) stays
+  // disabled. See module-level comment for the full reasoning.
+  app.scene.envAtlas = null;
+  app.scene.skybox = null;
 
-  const texture = await loadTexture(app, url);
-
-  // Skybox cubemap face size. The previous fixed 512 visibly downsampled 4K+ panoramas;
-  // 1024 quadruples the resolution while keeping GPU memory modest (~24 MB RGBA8).
-  const skyboxCubemap = EnvLighting.generateSkyboxCubemap(texture, 1024);
-  app.scene.skybox = skyboxCubemap;
-
-  // Env atlas drives ambient/reflections, not the visible background, so default size is fine.
-  const lightingSource = EnvLighting.generateLightingSource(texture);
-  const envAtlas = EnvLighting.generateAtlas(lightingSource);
-  app.scene.envAtlas = envAtlas;
+  await applyEquirectSkybox(app, url);
 
   app.scene.skyboxIntensity = 1.0;
   app.scene.skyboxMip = 0;
@@ -47,6 +44,7 @@ export async function applyHdri(app: AppBase, url: string): Promise<void> {
 
 /** Remove the current skybox */
 export function removeHdri(app: AppBase) {
+  removeEquirectSkybox(app);
   app.scene.skybox = null;
   app.scene.envAtlas = null;
 }
@@ -54,18 +52,4 @@ export function removeHdri(app: AppBase) {
 /** Set skybox intensity */
 export function setHdriIntensity(app: AppBase, intensity: number) {
   app.scene.skyboxIntensity = intensity;
-}
-
-function loadTexture(app: AppBase, url: string): Promise<Texture> {
-  return new Promise((resolve, reject) => {
-    const asset = new Asset('hdri', 'texture', { url });
-    asset.on('load', () => {
-      resolve(asset.resource as Texture);
-    });
-    asset.on('error', (err: string) => {
-      reject(new Error(`Failed to load HDRI: ${err}`));
-    });
-    app.assets.add(asset);
-    app.assets.load(asset);
-  });
 }

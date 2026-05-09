@@ -14,6 +14,7 @@ import { AmbientAudio } from './AmbientAudio';
 import { FootstepAudio } from './FootstepAudio';
 import { useDemoModeCamera } from './useDemoModeCamera';
 import { MobileJoystick } from './MobileJoystick';
+import { ScenePinsOverlay } from './ScenePinsOverlay';
 import { tokens } from './design-tokens';
 
 /** Subset of methods Viewer needs, satisfied by both ThreeSceneManager and the
@@ -192,10 +193,27 @@ export function Viewer({ sceneId }: ViewerProps) {
             onPlanSwitch={(planId) => { void sceneManagerRef.current?.setActivePlan(planId); }}
           />
           <MobileJoystick onChange={(x, y) => sceneManagerRef.current?.setTouchJoystick?.(x, y)} />
+          <PinsOverlayGate containerRef={wrapRef} />
         </>
       )}
     </div>
   );
+}
+
+/**
+ * Gate the pins overlay by both the per-project toolbar opt-in
+ * (`viewerToolbar.pins === true`) and the runtime sidebar show toggle
+ * (`showPins`). Either being false hides the overlay. Kept inline in this
+ * file (rather than baked into ScenePinsOverlay) so DebugViewer can render
+ * the overlay unconditionally for authoring while customers go through
+ * this gate.
+ */
+function PinsOverlayGate({ containerRef }: { containerRef: React.RefObject<HTMLElement | null> }) {
+  const tb = useSceneStore((s) => s.manifest?.viewerToolbar);
+  const showPins = useUIStore((s) => s.showPins);
+  if (!tb?.pins) return null;
+  if (!showPins) return null;
+  return <ScenePinsOverlay containerRef={containerRef} />;
 }
 
 const wrap: React.CSSProperties = {

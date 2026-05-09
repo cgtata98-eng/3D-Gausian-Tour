@@ -141,6 +141,11 @@ interface UIState {
    *  generate button and show a spinner. */
   aiBusy: boolean;
   setAiBusy: (v: boolean) => void;
+  /** Viewer-side toggle for the 3D annotation pins (商品リンクタグ).
+   *  Author opts the project into showing pins via `viewerToolbar.pins`; this
+   *  flag is the runtime per-session show/hide the customer can flip. Default ON. */
+  showPins: boolean;
+  setShowPins: (v: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -210,4 +215,6 @@ export const useUIStore = create<UIState>((set) => ({
   setMirrorMode: (mirrorMode) => set({ mirrorMode }),
   aiBusy: false,
   setAiBusy: (aiBusy) => set({ aiBusy }),
+  showPins: true,
+  setShowPins: (showPins) => set({ showPins }),
 }));

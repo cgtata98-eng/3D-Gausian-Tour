@@ -319,10 +319,61 @@ export interface Plan {
    * `colorVariants` does, but without manual asset uploads.
    */
   aiHistory?: AiGenerationEntry[];
+  /**
+   * Annotation pins anchored to 3D points in the scene. Customers see them as
+   * floating tags with comment / URL / image popups (e.g. "ソファ → IKEA 商品ページ").
+   * Created and edited from the Debug "ツール" tab.
+   */
+  pins?: ScenePin[];
 
   // ── Free-form ────────────────────────────────────────────────────
   /** Free-form note shown next to the plan switcher. */
   notes?: string;
+}
+
+/**
+ * One placement of a tag in the 3D scene. The same tag can have many of
+ * these so the same product can be marked from different viewpoints (or
+ * even multiple times within one viewpoint).
+ */
+export interface PinPlacement {
+  id: string;
+  /** Viewpoint this placement is bound to. Only rendered while that viewpoint
+   *  is active — keeps each angle showing only its own pins. */
+  viewpointId: string;
+  /** [x, y, z] in world space (m). */
+  position: [number, number, number];
+}
+
+/**
+ * Annotation tag (renamed concept, type kept as `ScenePin` for stored-data
+ * compatibility). Holds the metadata once and references zero-or-more
+ * placements that pin it to specific viewpoints in the scene.
+ *
+ * Tags created via "+ タグを追加" start with `placements` empty — the author
+ * drags / drops the row onto the preview at each viewpoint to add a placement.
+ *
+ * Legacy `position` / `viewpointId` are kept readable so older saved scenes
+ * continue to render. They're treated as one synthetic placement; the next
+ * edit migrates them into the `placements` array and clears the singletons.
+ */
+export interface ScenePin {
+  id: string;
+  /** Short label rendered on the floating chip. */
+  title: string;
+  /** Optional multi-line description shown in the popup. */
+  comment?: string;
+  /** Optional product / reference URL — opened in a new tab via the popup button. */
+  url?: string;
+  /** Optional inline thumbnail (data URL or path). Shown in the popup. */
+  image?: string;
+  /** All placements of this tag (one per viewpoint typically; can be many).
+   *  Source of truth from now on. Empty / undefined = unplaced tag. */
+  placements?: PinPlacement[];
+  /** @deprecated Legacy single-placement world coords. Kept for read compat. */
+  position?: [number, number, number];
+  /** @deprecated Legacy single-placement viewpoint id. Kept for read compat. */
+  viewpointId?: string;
 }
 
 /**
@@ -413,6 +464,10 @@ export interface ViewerToolbarConfig {
    *  panoramas via prompt; results are saved to the plan's AI history and can
    *  be browsed / downloaded like manual color variants. Default ON. */
   aiGenerate?: boolean;
+  /** Annotation pins (商品リンクタグ). When true, `Plan.pins[]` is rendered as
+   *  HTML overlays anchored to 3D positions; sidebar gets a "タグ表示" toggle so
+   *  the viewer can hide them. Default OFF — same convention as most blocks. */
+  pins?: boolean;
   /** Sidebar size preset. Default 'small' (compact). Set 'large' to make
    *  the sidebar fill the viewport top-to-bottom. */
   size?: SidebarSize;

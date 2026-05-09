@@ -64,6 +64,9 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   const showColor      = tb.color      === true && !isOther;
   const showMap        = tb.map        === true;
   const showFullscreen = tb.fullscreen === true;
+  // タグ (ピン) は viewerToolbar.pins で制作者が opt-in したときだけアイコンが出る。
+  // タップで `useUIStore.showPins` が反転 → ScenePinsOverlay の出し分けに使う。
+  const showPinsToggle = tb.pins === true;
   const showMovement   = tb.movement   === true && viewMode === 'splat';
   const showDemo       = tb.demo       === true && viewMode === 'splat';
   const showQuality    = tb.quality    !== false && viewMode === 'splat';
@@ -94,6 +97,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
           <span style={sidebarTitle}>{sceneName}</span>
           <div style={{ flex: 1 }} />
           {manifest?.audio && <AmbientAudioToggle />}
+          {showPinsToggle && <PinsVisibilityToggle />}
           {showFullscreen && <FullscreenButton iconOnly />}
           <button onClick={() => setSidebarCollapsed(true)} style={titleIconBtn} title="サイドバーを閉じる (ビューを最大化)">
             <span style={titleIconGlyph}>
@@ -1596,6 +1600,30 @@ function AmbientAudioToggle() {
             <path d="M11 5L6 9H2v6h4l5 4z" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
           </svg>
         )}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * タグ (3D ピン) の表示 / 非表示を切り替えるアイコン。
+ * 制作者が `viewerToolbar.pins === true` で opt-in したときだけ親側で render
+ * される。タップで `useUIStore.showPins` をトグル → ScenePinsOverlay の出し分け。
+ */
+function PinsVisibilityToggle() {
+  const showPins = useUIStore((s) => s.showPins);
+  const setShowPins = useUIStore((s) => s.setShowPins);
+  return (
+    <button
+      onClick={() => setShowPins(!showPins)}
+      style={{ ...titleIconBtn, ...(showPins ? null : { opacity: 0.45 }) }}
+      title={showPins ? 'タグを非表示にする' : 'タグを表示する'}
+    >
+      <span style={titleIconGlyph}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+          <circle cx="12" cy="9" r="2.5" />
+        </svg>
       </span>
     </button>
   );

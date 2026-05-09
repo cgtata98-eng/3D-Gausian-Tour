@@ -26,9 +26,11 @@ import { FootstepAudio } from './FootstepAudio';
 import { BGM_PRESETS } from '../core/audio-presets';
 import { FloorPlanMiniMap } from './FloorPlanMiniMap';
 import { VRThumbPreview } from './VRThumbPreview';
+import { ScenePinsOverlay } from './ScenePinsOverlay';
 import { useDemoModeCamera } from './useDemoModeCamera';
 import { targetFromYaw } from '../core/viewpoint';
 import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
+import { getPinPlacements } from '../core/pin-placements';
 import { tokens } from './design-tokens';
 import * as idb from '../utils/idb';
 import { unzipSync } from 'fflate';
@@ -54,7 +56,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const projectsList = useProjectStore((s) => s.projects);
 
   /** Top-level tab in the left panel. 'global' shows mansion/camera/etc; 'plan' shows the active plan;
-   *  'video' is the scene1→scene2 MP4 recorder. */
+   *  'video' is the scene1→scene2 MP4 recorder. Pins live inside the Plan tab next to viewpoints. */
   const [debugTab, setDebugTab] = useState<'global' | 'plan' | 'video'>('global');
   const [showAddVp, setShowAddVp] = useState(false);
   const [newVpName, setNewVpName] = useState('');
@@ -129,6 +131,14 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const [planSplatTargetId, setPlanSplatTargetId] = useState<string | null>(null);
   const [planSplatBusy, setPlanSplatBusy] = useState<string | null>(null);
   const planSplatInputRef = useRef<HTMLInputElement>(null);
+  // Drag-over highlight state for the plan / viewpoint rows. Tracked separately
+  // so a row only lights up while the cursor is over IT, not its sibling rows.
+  const [planDragOverId, setPlanDragOverId] = useState<string | null>(null);
+  const [vpDragOverId, setVpDragOverId] = useState<string | null>(null);
+  // 「位置を変更」モード — { pinId, placementId } がセットされている間、preview を
+  // クリックするとその placement の position が新しい床面交点に書き換えられる。
+  // 新規タグ作成は「+ タグを追加」(未配置で list へ) → ドラッグで preview に配置。
+  const [pinMoveTargetId, setPinMoveTargetId] = useState<{ pinId: string; placementId: string } | null>(null);
   const thumbs = useSceneStore(s => s.viewpointThumbnails);
   const [thumbBusy, setThumbBusy] = useState<string | null>(null);
   const thumbInputRef = useRef<HTMLInputElement>(null);
@@ -138,6 +148,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const [addVpPanoName, setAddVpPanoName] = useState<string | null>(null);
   const addVpPanoInputRef = useRef<HTMLInputElement>(null);
   const isVRMode = viewMode === '360';
+  // True when at least one plan has actual 3DGS data (PLY or SOG). Drives the
+  // visibility of splat-only UI (移動速度 / 初期高さ / 足音 / コリジョン) so a
+  // project that only holds panoramas — even if its viewMode happens to be
+  // 'splat' — won't surface walking-related controls. "歩けないので" everything
+  // tied to walking gets hidden when there's nothing to walk through.
+  const hasSplatData = manifest?.plans?.some((p) => !!p.splat || !!p.splatSog) ?? false;
   // Persistence state: last successful IDB save time + dirty/saving flag.
   type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -647,6 +663,16 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     (window as unknown as { __sceneManager?: AnySceneManager | null }).__sceneManager = smRef.current;
   }, [ready]);
 
+  // Esc cancels pin move mode.
+  useEffect(() => {
+    if (!pinMoveTargetId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPinMoveTargetId(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pinMoveTargetId]);
+
   // Re-apply panorama when the active color variant changes (360° mode only).
   const activeColor = useUIStore(s => s.activeColor);
   useEffect(() => {
@@ -816,6 +842,66 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     if (!activePlanId) return;
     setPlanPanoramaStore(activePlanId, viewpointId, undefined);
     if (viewMode === '360' && activeVp === viewpointId) smRef.current?.setViewMode('splat');
+  };
+
+  // ── Drag-and-drop file upload (plan rows / viewpoint rows) ─────────────
+  // Row-level handlers so the user can drop a PLY/SOG onto a plan (3DGS) or
+  // a panorama onto a viewpoint (VR) instead of clicking the upload button.
+  // dragOver fires continuously while hovering — preventDefault is what
+  // makes the browser treat the row as a drop target.
+  const isSplatFile = (f: File) => /\.(ply|splat|sog)$/i.test(f.name);
+  const isImageFile = (f: File) =>
+    f.type.startsWith('image/') || /\.(jpg|jpeg|png|hdr|exr|webp|avif|bmp|tif|tiff)$/i.test(f.name);
+
+  const handlePlanRowDragOver = (e: React.DragEvent, planId: string) => {
+    if (isVRMode) return; // VR plans don't take a single drop; viewpoints do.
+    if (e.dataTransfer.types.indexOf('Files') < 0) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (planDragOverId !== planId) setPlanDragOverId(planId);
+  };
+  const handlePlanRowDragLeave = (e: React.DragEvent) => {
+    // Ignore leaves that fire because the cursor moved onto a child element.
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setPlanDragOverId(null);
+  };
+  const handlePlanRowDrop = (e: React.DragEvent, planId: string) => {
+    if (isVRMode) return;
+    e.preventDefault();
+    setPlanDragOverId(null);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length === 0) return;
+    // SOG legacy bundle is multi-file (meta.json + .webp) — pass through;
+    // single-file PLY/SPLAT/.sog also work. Reject if nothing splat-like dropped.
+    const looksValid = files.some(isSplatFile) || files.some((f) => f.name.toLowerCase() === 'meta.json');
+    if (!looksValid) {
+      alert('Splat ファイル (PLY / SPLAT / SOG) をドロップしてください。');
+      return;
+    }
+    void handlePlanSplatFiles(files, planId);
+  };
+
+  const handleVpRowDragOver = (e: React.DragEvent, vpId: string) => {
+    if (!isVRMode) return; // panorama drop is VR-only.
+    if (e.dataTransfer.types.indexOf('Files') < 0) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (vpDragOverId !== vpId) setVpDragOverId(vpId);
+  };
+  const handleVpRowDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setVpDragOverId(null);
+  };
+  const handleVpRowDrop = (e: React.DragEvent, vpId: string) => {
+    if (!isVRMode) return;
+    e.preventDefault();
+    setVpDragOverId(null);
+    const file = Array.from(e.dataTransfer.files ?? []).find(isImageFile);
+    if (!file) {
+      alert('画像ファイル (JPG / PNG / HDR / EXR 等) をドロップしてください。');
+      return;
+    }
+    handlePanoFile(file, vpId);
   };
 
   /**
@@ -1198,8 +1284,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               : p.splat;
                     const panoCount = p.panoramas ? Object.keys(p.panoramas).length : 0;
                     const planVpCount = p.viewpoints.length;
+                    const isPlanDragOver = planDragOverId === p.id;
                     return (
-                      <div key={p.id} style={{ ...S.vpRow, ...(isActive ? S.vpRowActive : null) }}>
+                      <div
+                        key={p.id}
+                        style={{
+                          ...S.vpRow,
+                          ...(isActive ? S.vpRowActive : null),
+                          ...(isPlanDragOver ? S.vpRowDropTarget : null),
+                        }}
+                        onDragOver={(e) => handlePlanRowDragOver(e, p.id)}
+                        onDragLeave={handlePlanRowDragLeave}
+                        onDrop={(e) => handlePlanRowDrop(e, p.id)}
+                      >
                         <button
                           onClick={() => switchPlan(p.id)}
                           style={{ ...S.vpDot, background: isActive ? '#fbbf24' : 'rgba(0,0,0,0.2)' }}
@@ -1295,7 +1392,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             </Section>
             )}
 
-            {/* ===== 環境音 (全体, プラン管理の下) — 3DGS モード専用、360° モードでは非表示 ===== */}
+            {/* ===== 環境音 (全体, プラン管理の下) =====
+                BGM は両モードで使えるが、足音は歩く 3DGS でしか意味がないので
+                splat データが無い場合は subsection を出さない。 */}
             {debugTab === 'global' && !isVRMode && (() => {
               const setSceneAudio = useSceneStore.getState().setSceneAudio;
               const handleAudioFile = async (file: File) => {
@@ -1364,7 +1463,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     プリセットから選ぶか、独自の音声ファイルをアップロード。ビューア側のスピーカーアイコンから再生切替。
                   </div>
 
-                  {/* 足音 (デフォルト固定 / ON-OFF + ボリューム、Shift で走行) */}
+                  {/* 足音 (デフォルト固定 / ON-OFF + ボリューム、Shift で走行)
+                      splat 無し（パノラマだけのプロジェクト）では歩けないので非表示。 */}
+                  {hasSplatData && (
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
                     <div style={S.subTitle}>足音</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
@@ -1418,6 +1519,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       );
                     })()}
                   </div>
+                  )}
                 </Section>
               );
             })()}
@@ -1426,6 +1528,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             {debugTab === 'global' && (
               <RenderQualitySection
                 cfg={manifest?.settings.render ?? {}}
+                isVRMode={isVRMode}
                 onPatch={(patch) => useSceneStore.getState().updateSettings({
                   render: { ...(manifest?.settings.render ?? {}), ...patch },
                 })}
@@ -1485,20 +1588,27 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 
               {viewMode === 'splat' ? (
                 <>
-                  <Slider label="移動速度" min={0.1} max={30} step={0.1} value={moveSpeed} onChange={onMoveSpeedChange} />
+                  {/* 移動速度 / 初期高さ は 3DGS で実際に歩き回るときの設定なので、
+                      splat データが入ってる時だけ出す。パノラマモードに切り替え忘れた
+                      VR プロジェクトでも UI が混乱しないようガード。 */}
+                  {hasSplatData && (
+                    <Slider label="移動速度" min={0.1} max={30} step={0.1} value={moveSpeed} onChange={onMoveSpeedChange} />
+                  )}
                   <Slider label="FOV" min={30} max={120} step={1} value={fovLocal} onChange={onFovChange} />
-                  <Slider
-                    label="初期高さ (m)"
-                    min={0.3}
-                    max={3.0}
-                    step={0.05}
-                    value={manifest?.settings.initialHeight ?? manifest?.settings.cameraHeight ?? 1.6}
-                    onChange={(v) => {
-                      const next = +v.toFixed(2);
-                      updateSettings({ initialHeight: next });
-                      smRef.current?.setCurrentHeight(next);
-                    }}
-                  />
+                  {hasSplatData && (
+                    <Slider
+                      label="初期高さ (m)"
+                      min={0.3}
+                      max={3.0}
+                      step={0.05}
+                      value={manifest?.settings.initialHeight ?? manifest?.settings.cameraHeight ?? 1.6}
+                      onChange={(v) => {
+                        const next = +v.toFixed(2);
+                        updateSettings({ initialHeight: next });
+                        smRef.current?.setCurrentHeight(next);
+                      }}
+                    />
+                  )}
 
                   {/* PLY (3DGS) の軸 / 位置調整 — 上下逆さまな PLY を直したり、モデルを地面に合わせる */}
                   {(() => {
@@ -1680,9 +1790,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       const isThumbBusy = thumbBusy === vp.id;
                       const vpPanoSrc = activePlan?.panoramas?.[vp.id];
                       const showVrPreview = isA && isVRMode && !!vpPanoSrc && !!activePlanId;
+                      const isVpDragOver = vpDragOverId === vp.id;
                       return (
                         <div key={vp.id}>
-                        <div style={{ ...S.vpRow, ...(isA ? S.vpRowActive : null) }}>
+                        <div
+                          style={{
+                            ...S.vpRow,
+                            ...(isA ? S.vpRowActive : null),
+                            ...(isVpDragOver ? S.vpRowDropTarget : null),
+                          }}
+                          onDragOver={(e) => handleVpRowDragOver(e, vp.id)}
+                          onDragLeave={handleVpRowDragLeave}
+                          onDrop={(e) => handleVpRowDrop(e, vp.id)}
+                        >
                           <button
                             onClick={() => handleVpClick(vp.id)}
                             style={S.vpThumb}
@@ -1785,8 +1905,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             </Section>
             )}
 
-            {/* ===== Collision — プランタブ (3DGS のみ; 360VR では不要) ===== */}
-            {debugTab === 'plan' && viewMode === 'splat' && (
+            {/* ===== Collision — プランタブ (3DGS のみ; 360VR では不要)
+                 パノラマだけのプロジェクト (splat データ無し) でも歩かないので非表示。 */}
+            {debugTab === 'plan' && viewMode === 'splat' && hasSplatData && (
             <Section title="コリジョン" subtitle="COLLISION" defaultOpen={false}>
               {/* Source selector: manual upload vs auto-gen. Both sets are
                   stashed independently so flipping doesn't cost a re-gen. */}
@@ -2059,6 +2180,21 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             </Section>
             )}
 
+            {/* ===== ピン (商品リンクタグ) — プランタブ。
+                  ピンはプランデータの一部 (Plan.pins[]) なのでプランタブに置く。
+                  Viewer での表示有無は ツールバー表示 → 「タグ」で切替。 */}
+            {debugTab === 'plan' && (
+              <PinsPlanSection
+                pins={manifest?.plans?.find((p) => p.id === activePlanId)?.pins ?? []}
+                activePlanId={activePlanId}
+                activePlan={manifest?.plans?.find((p) => p.id === activePlanId)}
+                smRef={smRef}
+                moveTargetId={pinMoveTargetId}
+                onStartMove={(pinId, placementId) => setPinMoveTargetId({ pinId, placementId })}
+                onCancelMove={() => setPinMoveTargetId(null)}
+              />
+            )}
+
             {debugTab === 'video' && (
               <VideoTabPanel
                 manifest={manifest}
@@ -2104,15 +2240,77 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         {/* RIGHT: Full-height preview mirroring the Viewer */}
         <div
           ref={previewWrapRef}
-          onDrop={e => { e.preventDefault(); setIsDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFloorPlanFile(f); }}
-          onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
+          onDrop={e => {
+            e.preventDefault();
+            setIsDragOver(false);
+            // Pin drop: タグ行を preview にドロップ → 今いる視点に **新しい配置を追加**。
+            // 既存の配置はそのまま残るので、同じタグを複数視点・複数箇所に置ける。
+            const pinId = e.dataTransfer.getData('application/x-pin-id');
+            if (pinId) {
+              const canvas = canvasRef.current;
+              if (!canvas) return;
+              const r = canvas.getBoundingClientRect();
+              const cx = e.clientX - r.left;
+              const cy = e.clientY - r.top;
+              const sm = smRef.current;
+              const pos = sm && 'screenToFloorPoint' in sm
+                ? (sm as { screenToFloorPoint: (x: number, y: number) => [number, number, number] | null }).screenToFloorPoint(cx, cy)
+                : null;
+              if (pos) {
+                const activeVpId = useCameraStore.getState().activeViewpoint;
+                if (activeVpId) {
+                  useSceneStore.getState().addPinPlacement(pinId, {
+                    id: `pl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+                    viewpointId: activeVpId,
+                    position: pos,
+                  });
+                }
+              }
+              return;
+            }
+            // File drop fallback (floor plan upload).
+            const f = e.dataTransfer.files[0];
+            if (f) handleFloorPlanFile(f);
+          }}
+          onDragOver={e => {
+            e.preventDefault();
+            // dropEffect must be compatible with the drag source's effectAllowed,
+            // otherwise the browser shows a 🚫 cursor and blocks the drop. Pin
+            // rows are 'copy' (drop = add new placement) so we mirror it here.
+            if (e.dataTransfer.types.includes('application/x-pin-id')) {
+              e.dataTransfer.dropEffect = 'copy';
+            } else {
+              setIsDragOver(true);
+            }
+          }}
           onDragLeave={() => setIsDragOver(false)}
-          style={{ ...S.preview, ...(isDragOver ? S.previewDrag : null) }}
+          onClick={(e) => {
+            if (!activePlanId || !pinMoveTargetId) return;
+            // Move-mode click: resolve canvas-pixel coords, intersect floor,
+            // update the targeted placement's position + bind to the active
+            // viewpoint so it appears at this angle from now on.
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const r = canvas.getBoundingClientRect();
+            const cx = e.clientX - r.left;
+            const cy = e.clientY - r.top;
+            const sm = smRef.current;
+            const pos = sm && 'screenToFloorPoint' in sm
+              ? (sm as { screenToFloorPoint: (x: number, y: number) => [number, number, number] | null }).screenToFloorPoint(cx, cy)
+              : null;
+            if (!pos) return;
+            const activeVpId = useCameraStore.getState().activeViewpoint;
+            if (!activeVpId) return;
+            useSceneStore.getState().updatePinPlacement(pinMoveTargetId.pinId, pinMoveTargetId.placementId, { position: pos, viewpointId: activeVpId });
+            setPinMoveTargetId(null);
+          }}
+          style={{ ...S.preview, ...(isDragOver ? S.previewDrag : null), ...(pinMoveTargetId ? { cursor: 'crosshair' } : null) }}
         >
           <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
           <AiScreenOverlay />
           <AiGeneratingOverlay />
           <FpsOverlay />
+          <ScenePinsOverlay containerRef={previewWrapRef} />
           {debugTab === 'video' && (
             <VideoOverlay
               freeRecState={freeRecState}
@@ -2441,6 +2639,387 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
   );
 }
 
+// ── プランタブ: シーンピン (商品リンクタグ) ────────────────────────────
+//
+// Pin annotations anchored to 3D world positions. Authoring lives here in
+// the debug UI's Plan tab; rendering lives in `ScenePinsOverlay.tsx`. Each
+// pin row edits one `Plan.pins[]` entry and writes through the scene-store
+// helpers so HMR / IDB autosave catches changes like every other field.
+
+type AnyManagerRef = React.MutableRefObject<{
+  worldToScreen?: (w: [number, number, number]) => { x: number; y: number } | null;
+  getCameraForwardPoint?: (d?: number) => [number, number, number];
+  jumpToPose?: (pose: import('../core/types').CameraPose) => void;
+  screenToFloorPoint?: (canvasX: number, canvasY: number) => [number, number, number] | null;
+} | null>;
+
+function PinsPlanSection({
+  pins,
+  activePlanId,
+  activePlan,
+  smRef,
+  moveTargetId,
+  onStartMove,
+  onCancelMove,
+}: {
+  pins: import('../core/types').ScenePin[];
+  activePlanId: string | null;
+  activePlan: import('../core/types').Plan | undefined;
+  smRef: AnyManagerRef;
+  /** { pinId, placementId } currently in move-mode (next canvas click updates that placement). */
+  moveTargetId: { pinId: string; placementId: string } | null;
+  /** Enter move-mode for a specific placement. */
+  onStartMove: (pinId: string, placementId: string) => void;
+  /** Cancel the move-mode without changing the placement. */
+  onCancelMove: () => void;
+}) {
+  const addPin = useSceneStore((s) => s.addPin);
+  const removePin = useSceneStore((s) => s.removePin);
+  const updatePin = useSceneStore((s) => s.updatePin);
+  const removePinPlacement = useSceneStore((s) => s.removePinPlacement);
+  // Dropping the picker on a pin row uploads a thumbnail image as a base64
+  // data URL. Keep the `<input type=file>` ref-bound so the click can be
+  // triggered programmatically from the row's button.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileTargetRef = useRef<string | null>(null);
+  // Per-pin expand/collapse — many pins clutter the panel fast, so default
+  // is collapsed. Multiple pins can be open simultaneously.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const togglePin = (id: string) => setExpandedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+
+  const handleImageFile = (file: File) => {
+    const id = fileTargetRef.current;
+    if (!id) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = reader.result;
+      if (typeof data === 'string') updatePin(id, { image: data });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  if (!activePlanId) {
+    return (
+      <Section title="タグ" subtitle="PINS" defaultOpen={true}>
+        <div style={S.empty}>プランが選択されていません</div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section
+      title={`タグ (${pins.length})`}
+      subtitle="PINS"
+      defaultOpen={true}
+      action={(
+        <button
+          type="button"
+          onClick={() => {
+            // 「+ タグを追加」は metadata だけのタグをリストに追加。位置と視点は
+            // 未設定のまま — 後でリスト行をプレビューにドラッグするか 📍 で配置する。
+            const newId = `pin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+            addPin({ id: newId, title: '新しいタグ' });
+          }}
+          style={S.btnPrimary}
+          title="タグをリストに追加 (配置はあとからドラッグ or 📍 で)"
+        >
+          + タグを追加
+        </button>
+      )}
+    >
+      {moveTargetId && (
+        <div style={pinPlacementBanner}>
+          ✏️ 位置変更モード中 — プレビューをクリックでピンを移動 (Esc で解除)
+        </div>
+      )}
+
+      {pins.length === 0 ? (
+        <div style={S.empty}>まだタグが追加されていません</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {pins.map((pin, idx) => {
+            const isExpanded = expandedIds.has(pin.id);
+            const placements = getPinPlacements(pin);
+            const placementCount = placements.length;
+            return (
+            <div
+              key={pin.id}
+              style={pinCardStyle}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/x-pin-id', pin.id);
+                e.dataTransfer.effectAllowed = 'copy';
+                const ghost = document.createElement('canvas');
+                ghost.width = 1; ghost.height = 1;
+                e.dataTransfer.setDragImage(ghost, 0, 0);
+              }}
+            >
+              {/* 折りたたみヘッダ — クリックで開閉。タイトル空のときは "タグN" にフォールバック。 */}
+              <button
+                type="button"
+                onClick={() => togglePin(pin.id)}
+                style={pinHeaderRow}
+                title={isExpanded ? '折りたたむ' : '展開して編集'}
+              >
+                <span style={pinHeaderChevron}>{isExpanded ? '▼' : '▶'}</span>
+                <span style={pinHeaderTitle}>
+                  タグ{idx + 1}：{pin.title || '(無題)'}
+                </span>
+                <span style={pinHeaderHint}>
+                  {placementCount > 0 ? `配置：${placementCount}箇所` : '未配置 — ドラッグで配置'}
+                </span>
+              </button>
+
+              {!isExpanded ? null : (
+              <>
+              <div style={{ height: 8 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <input
+                  type="text"
+                  value={pin.title}
+                  onChange={(e) => updatePin(pin.id, { title: e.target.value })}
+                  placeholder="タイトル (例: ソファ)"
+                  style={{ ...S.input, flex: 1 }}
+                />
+                <button
+                  type="button"
+                  title="このタグを複製 (metadata だけコピー、配置は新規)"
+                  onClick={() => {
+                    const newId = `pin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+                    addPin({
+                      id: newId,
+                      title: pin.title,
+                      comment: pin.comment,
+                      url: pin.url,
+                      image: pin.image,
+                    });
+                  }}
+                  style={S.iconBtn}
+                >📄</button>
+                <button
+                  type="button"
+                  title="このタグを完全削除 (すべての配置も消える)"
+                  onClick={() => removePin(pin.id)}
+                  style={{ ...S.iconBtn, color: '#dc2626' }}
+                >✕</button>
+              </div>
+
+              <textarea
+                value={pin.comment ?? ''}
+                onChange={(e) => updatePin(pin.id, { comment: e.target.value })}
+                placeholder="コメント (任意 / 複数行)"
+                rows={2}
+                style={{ ...S.input, fontFamily: 'inherit', resize: 'vertical', minHeight: 48 }}
+              />
+              <div style={{ height: 6 }} />
+              <input
+                type="url"
+                value={pin.url ?? ''}
+                onChange={(e) => updatePin(pin.id, { url: e.target.value })}
+                placeholder="URL (https://… 商品ページなど)"
+                style={S.input}
+              />
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                {pin.image ? (
+                  <img src={pin.image} alt="" style={pinThumbStyle} />
+                ) : (
+                  <div style={{ ...pinThumbStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.color.textFaint, fontSize: 18 }}>
+                    🖼
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+                  <button
+                    type="button"
+                    onClick={() => { fileTargetRef.current = pin.id; fileInputRef.current?.click(); }}
+                    style={{ ...S.btn, fontSize: 11 }}
+                  >
+                    {pin.image ? '画像を差し替え' : '+ 画像を追加'}
+                  </button>
+                  {pin.image && (
+                    <button
+                      type="button"
+                      onClick={() => updatePin(pin.id, { image: undefined })}
+                      style={{ ...S.btn, fontSize: 11, color: '#dc2626' }}
+                    >画像を削除</button>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginBottom: 6 }}>
+                  配置一覧 ({placementCount}箇所)
+                  {placementCount === 0 && <span style={{ marginLeft: 8, color: tokens.color.textFaint, fontWeight: 500 }}>未配置 — タイトル行をドラッグでプレビューに配置</span>}
+                </div>
+                {placements.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {placements.map((pl) => {
+                      const vpLabel = activePlan?.viewpoints.find((v) => v.id === pl.viewpointId)?.label ?? '不明な視点';
+                      const isMoving = moveTargetId?.pinId === pin.id && moveTargetId?.placementId === pl.id;
+                      return (
+                        <div key={pl.id} style={placementRowStyle}>
+                          <span style={placementVpLabel}>{vpLabel}</span>
+                          <span style={placementCoord}>({pl.position.map((c) => c.toFixed(1)).join(', ')})</span>
+                          <button
+                            type="button"
+                            title={isMoving ? 'クリックして位置変更モードを解除' : 'プレビューをクリックでこの配置の位置を変更'}
+                            onClick={() => isMoving ? onCancelMove() : onStartMove(pin.id, pl.id)}
+                            style={{ ...S.iconBtn, ...(isMoving ? { background: tokens.gradient.success, borderColor: tokens.color.successBorder } : null) }}
+                          >📍</button>
+                          <button
+                            type="button"
+                            title="この配置位置にジャンプ"
+                            onClick={() => {
+                              const p = pl.position;
+                              smRef.current?.jumpToPose?.({
+                                position: [p[0], p[1] + 1.2, p[2] + 1.5],
+                                target: p,
+                                fov: 60,
+                              });
+                            }}
+                            style={S.iconBtn}
+                          >🎯</button>
+                          <button
+                            type="button"
+                            title="この配置だけ削除 (タグ自体は残る)"
+                            onClick={() => removePinPlacement(pin.id, pl.id)}
+                            style={{ ...S.iconBtn, color: '#dc2626' }}
+                          >✕</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              </>
+              )}
+            </div>
+            );
+          })}
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleImageFile(f);
+          e.target.value = '';
+          fileTargetRef.current = null;
+        }}
+      />
+    </Section>
+  );
+}
+
+const pinCardStyle: React.CSSProperties = {
+  padding: 10,
+  background: tokens.gradient.surface,
+  borderWidth: 1,
+  borderStyle: 'solid' as const,
+  borderColor: tokens.color.border,
+  borderRadius: tokens.radius.md,
+  boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
+};
+
+const pinThumbStyle: React.CSSProperties = {
+  width: 56,
+  height: 56,
+  borderRadius: tokens.radius.md,
+  objectFit: 'cover' as const,
+  background: 'rgba(0,0,0,0.06)',
+  borderWidth: 1,
+  borderStyle: 'solid' as const,
+  borderColor: tokens.color.border,
+  flexShrink: 0,
+};
+
+const pinHeaderRow: React.CSSProperties = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: 0,
+  background: 'transparent',
+  border: 'none',
+  outline: 'none',
+  cursor: 'pointer',
+  textAlign: 'left' as const,
+  fontFamily: tokens.font.family,
+  color: tokens.color.text,
+};
+
+const pinHeaderChevron: React.CSSProperties = {
+  fontSize: 10,
+  color: tokens.color.textMute,
+  width: 12,
+  flexShrink: 0,
+};
+
+const pinHeaderTitle: React.CSSProperties = {
+  flex: 1,
+  fontSize: 13,
+  fontWeight: 700,
+  whiteSpace: 'nowrap' as const,
+  overflow: 'hidden' as const,
+  textOverflow: 'ellipsis' as const,
+};
+
+const pinHeaderHint: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 500,
+  color: tokens.color.textFaint,
+  flexShrink: 0,
+};
+
+const placementRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '4px 6px',
+  background: 'rgba(0,0,0,0.03)',
+  borderRadius: tokens.radius.md,
+};
+
+const placementVpLabel: React.CSSProperties = {
+  flex: 1,
+  fontSize: 11.5,
+  fontWeight: 600,
+  color: tokens.color.text,
+  whiteSpace: 'nowrap' as const,
+  overflow: 'hidden' as const,
+  textOverflow: 'ellipsis' as const,
+};
+
+const placementCoord: React.CSSProperties = {
+  fontSize: 10,
+  color: tokens.color.textFaint,
+  fontFamily: tokens.font.mono,
+  flexShrink: 0,
+};
+
+const pinPlacementBanner: React.CSSProperties = {
+  padding: '8px 10px',
+  marginBottom: 10,
+  background: tokens.gradient.success,
+  borderWidth: 1,
+  borderStyle: 'solid' as const,
+  borderColor: tokens.color.successBorder,
+  borderRadius: tokens.radius.md,
+  fontSize: 11.5,
+  fontWeight: 600,
+  color: tokens.color.text,
+  boxShadow: tokens.shadow.glassSuccess,
+};
+
 /**
  * FPS overlay shown only inside the Debug preview pane (not in the public Viewer).
  * Reads `useUIStore.fps` which is updated ~5 Hz from the SceneManager's `update`
@@ -2582,7 +3161,7 @@ function VisRow({ label, checked, onChange, disabled = false }: { label: string;
  * updates flow into the store, and an inline-defined component would be unmounted /
  * remounted on every one of those, eating the user's mouse events.
  */
-type ToolbarKey = 'type' | 'overview' | 'viewpoints' | 'color' | 'map' | 'audio' | 'fullscreen' | 'movement' | 'demo' | 'quality' | 'aiGenerate';
+type ToolbarKey = 'type' | 'overview' | 'viewpoints' | 'color' | 'map' | 'audio' | 'fullscreen' | 'movement' | 'demo' | 'quality' | 'aiGenerate' | 'pins';
 type ToolbarOrderPatch = { order?: OrderableSidebarBlock[] };
 type SidebarSizeOpt = 'large' | 'small';
 type ToolbarPatch = Partial<Record<ToolbarKey, boolean>> & { size?: SidebarSizeOpt } & ToolbarOrderPatch;
@@ -2677,6 +3256,7 @@ function ViewerToolbarSection({
       <ToolbarRow tb={tb} keyName="color"      label="カラー (素材バリエーション)" hint={isOtherProject ? '— その他では非対応' : '— 既定 OFF'} disabled={isOtherProject} defaultOff onChange={onChange} />
       <ToolbarRow tb={tb} keyName="aiGenerate" label="AI 画像生成" hint="— 既定 OFF" defaultOff onChange={onChange} />
       <ToolbarRow tb={tb} keyName="map"        label={isOtherProject ? 'MAP' : 'FLOOR MAP'} hint="— 既定 OFF" defaultOff onChange={onChange} />
+      <ToolbarRow tb={tb} keyName="pins"       label="タグ (3D ピン / リンク付き)" hint="— 既定 OFF" defaultOff onChange={onChange} />
 
       <div style={S.toolbarGroupHead}>オーバーレイ / アイコン</div>
       <ToolbarRow tb={tb} keyName="audio"      label="環境音アイコン (タイトル右)" hint={isVRMode ? '— 360° では非対応' : '— 既定 OFF'} disabled={isVRMode} defaultOff onChange={onChange} />
@@ -2708,7 +3288,7 @@ function ViewerToolbarSection({
       )}
 
       <div style={S.toolbarGroupHead}>並び替え</div>
-      <SidebarOrderEditor tb={tb} onChange={onChange} />
+      <SidebarOrderEditor tb={tb} isVRMode={isVRMode} onChange={onChange} />
     </Section>
   );
 }
@@ -2733,13 +3313,15 @@ const ORDER_LABELS: Record<OrderableSidebarBlock, string> = {
  * **default ON** (visible unless explicitly turned off), `tracking` reads
  * `tb.demo` (legacy storage name) and is default OFF.
  */
-function isBlockVisible(id: OrderableSidebarBlock, tb: ToolbarPatch): boolean {
+function isBlockVisible(id: OrderableSidebarBlock, tb: ToolbarPatch, isVRMode: boolean): boolean {
   // `mobile` lives on `ViewerToolbarConfig` but isn't in the local
   // `ToolbarKey` union (no checkbox row), so reach in via the bag type.
   const bag = tb as Record<string, unknown>;
+  // `mobile` (移動スピード) は 3DGS 専用 — 360° モードでは LeftPanel 側でも出ないので
+  // 並び替えリストにも載せない。
+  if (id === 'mobile')   return !isVRMode && bag.mobile !== false;
   if (id === 'tracking') return tb.demo === true;
   if (id === 'quality')  return tb.quality !== false;
-  if (id === 'mobile')   return bag.mobile !== false;
   return bag[id] === true;
 }
 
@@ -2749,12 +3331,12 @@ function isBlockVisible(id: OrderableSidebarBlock, tb: ToolbarPatch): boolean {
  * (visible items first in their new order, then any hidden items in their default
  * positions) so toggling something back on inserts it sensibly.
  */
-function SidebarOrderEditor({ tb, onChange }: { tb: ToolbarPatch; onChange: (patch: ToolbarPatch) => void }) {
+function SidebarOrderEditor({ tb, isVRMode, onChange }: { tb: ToolbarPatch; isVRMode: boolean; onChange: (patch: ToolbarPatch) => void }) {
   const userOrder = (tb.order ?? []).filter((id): id is OrderableSidebarBlock => DEFAULT_SIDEBAR_ORDER.includes(id as OrderableSidebarBlock));
   const seen = new Set(userOrder);
   const fullOrdered: OrderableSidebarBlock[] = [...userOrder, ...DEFAULT_SIDEBAR_ORDER.filter((id) => !seen.has(id))];
-  const visibleOrdered = fullOrdered.filter((id) => isBlockVisible(id, tb));
-  const hiddenOrdered = fullOrdered.filter((id) => !isBlockVisible(id, tb));
+  const visibleOrdered = fullOrdered.filter((id) => isBlockVisible(id, tb, isVRMode));
+  const hiddenOrdered = fullOrdered.filter((id) => !isBlockVisible(id, tb, isVRMode));
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropIdx, setDropIdx] = useState<number | null>(null);
@@ -2948,6 +3530,7 @@ function RenderQualitySection({
   onApply,
   onReset,
   onSwitchEngine,
+  isVRMode,
 }: {
   cfg: import('../core/types').RenderQualityConfig;
   onPatch: (patch: Partial<import('../core/types').RenderQualityConfig>) => void;
@@ -2955,6 +3538,8 @@ function RenderQualitySection({
   onReset: () => void;
   /** 即時 engine 切替: manifest を同期保存してからフルリロードする */
   onSwitchEngine: (engine: 'mkkellogg' | 'spark' | 'playcanvas') => Promise<void> | void;
+  /** パノラマモードでは splat エンジン (PlayCanvas / Spark) の選択は無関係なので非表示。 */
+  isVRMode: boolean;
 }) {
   const ev = cfg.exposureEV ?? 0;
   const cc = cfg.clearColor ?? [0.1, 0.1, 0.15];
@@ -2978,25 +3563,30 @@ function RenderQualitySection({
         露出 / 背景色は両エンジン反映。彩度・コントラスト・明るさ・トーンマップは PlayCanvas のみ反映。
       </div>
 
-      {/* ビューアエンジン切替 — 各ボタンは「保存 + 即リロード」で切替を即時反映。 */}
-      <div style={S.toolbarGroupHead}>ビューアエンジン</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4 }}>
-        <EngineSwitchButton
-          label="PlayCanvas"
-          sub="PLY / SOG (既定)"
-          isActive={(cfg.engine ?? 'playcanvas') === 'playcanvas'}
-          onClick={() => onSwitchEngine('playcanvas')}
-        />
-        <EngineSwitchButton
-          label="Spark"
-          sub="SPZ 軽量 / 高速"
-          isActive={cfg.engine === 'spark'}
-          onClick={() => onSwitchEngine('spark')}
-        />
-      </div>
-      <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginTop: 6, lineHeight: 1.4 }}>
-        ボタンを押すと自動でリロードしてエンジンが切り替わります。
-      </div>
+      {/* ビューアエンジン切替 — 各ボタンは「保存 + 即リロード」で切替を即時反映。
+          パノラマモードでは splat エンジン選択は意味が無いので非表示。 */}
+      {!isVRMode && (
+        <>
+          <div style={S.toolbarGroupHead}>ビューアエンジン</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4 }}>
+            <EngineSwitchButton
+              label="PlayCanvas"
+              sub="PLY / SOG (既定)"
+              isActive={(cfg.engine ?? 'playcanvas') === 'playcanvas'}
+              onClick={() => onSwitchEngine('playcanvas')}
+            />
+            <EngineSwitchButton
+              label="Spark"
+              sub="SPZ 軽量 / 高速"
+              isActive={cfg.engine === 'spark'}
+              onClick={() => onSwitchEngine('spark')}
+            />
+          </div>
+          <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginTop: 6, lineHeight: 1.4 }}>
+            ボタンを押すと自動でリロードしてエンジンが切り替わります。
+          </div>
+        </>
+      )}
 
       <Slider label="露出 (EV)" min={-3} max={3} step={0.1} value={ev} onChange={(v) => patch({ exposureEV: +v.toFixed(2) })} />
 
@@ -4472,6 +5062,13 @@ const S: Record<string, React.CSSProperties> = {
     transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
     boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
   },
+  vpRowDropTarget: {
+    // Highlight while a file is dragged over this row. Same accent family
+    // as the active state so the row clearly says "I'll receive this drop."
+    background: tokens.gradient.success,
+    borderColor: tokens.color.successBorder,
+    boxShadow: `inset 0 0 0 2px ${tokens.color.successBorder}, ${tokens.shadow.glassSuccess}`,
+  } as React.CSSProperties,
   vpRowActive: {
     background: tokens.gradient.accent,
     borderColor: tokens.color.accentBorder,
