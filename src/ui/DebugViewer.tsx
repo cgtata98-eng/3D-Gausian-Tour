@@ -1599,8 +1599,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   {hasSplatData && (
                     <Slider
                       label="初期高さ (m)"
-                      min={0.3}
-                      max={3.0}
+                      min={-10}
+                      max={10}
                       step={0.05}
                       value={manifest?.settings.initialHeight ?? manifest?.settings.cameraHeight ?? 1.6}
                       onChange={(v) => {
