@@ -1744,13 +1744,17 @@ function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'lef
     : isRight
       ? { borderLeft: `1px solid ${tokens.color.border}` }
       : { borderRight: `1px solid ${tokens.color.border}` };
+  // スマホはセクションが多いと画面いっぱいになるので、上限を画面の約半分にして
+  // 下部 (キャンバス / 操作領域) を必ず見えるようにする。残りはスクロール。
+  // PC は従来通り 100dvh まで許容。
+  const isMobile = isPortrait || isRight;
   return {
     sidebar: {
       position: 'absolute',
       // 横向きスマホ等で viewport 高が低い時に下部が見切れないよう、必ず viewport 内に収め
       // 中身は `sidebarScrollArea` 側でスクロールさせる。`100dvh` は iOS Safari のアドレスバー
       // 出入りに追従する viewport 単位 (fallback で 100vh)。
-      maxHeight: '100dvh',
+      maxHeight: isMobile ? '50dvh' : '100dvh',
       ...anchors,
       width,
       background: tokens.glass.surfaceStrong,
