@@ -1567,6 +1567,35 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   document.body.appendChild(overlay);
                   setTimeout(() => window.location.reload(), 600);
                 }}
+                onToggleBypassPipeline={async (next) => {
+                  // CameraFrame と gsplatOutputVS は init 時固定。トグル変更は
+                  // manifest を保存してからフルリロードしないと反映されない。
+                  console.info(`[bypass] toggle bypassColorPipeline=${next}`);
+                  const cur = useSceneStore.getState().manifest?.settings.render ?? {};
+                  const nextRender = { ...cur, bypassColorPipeline: next };
+                  useSceneStore.getState().updateSettings({ render: nextRender });
+                  const m = useSceneStore.getState().manifest;
+                  if (m) {
+                    try {
+                      await idb.saveManifest(m.id, m);
+                    } catch (e) {
+                      console.error('[bypass] save FAILED:', e);
+                      alert('カラーパイプライン設定の保存失敗: ' + (e instanceof Error ? e.message : String(e)));
+                      return;
+                    }
+                  }
+                  const overlay = document.createElement('div');
+                  overlay.textContent = next ? '色調整なしで再起動中…' : 'SuperSplat 同等処理に戻して再起動中…';
+                  overlay.style.cssText = `
+                    position: fixed; inset: 0; display: flex;
+                    align-items: center; justify-content: center;
+                    background: rgba(0,0,0,0.85); color: #fff;
+                    font-size: 22px; font-weight: 700; font-family: ui-monospace, monospace;
+                    z-index: 9999; letter-spacing: 1px;
+                  `;
+                  document.body.appendChild(overlay);
+                  setTimeout(() => window.location.reload(), 600);
+                }}
               />
             )}
 
@@ -3547,6 +3576,7 @@ function RenderQualitySection({
   onApply,
   onReset,
   onSwitchEngine,
+  onToggleBypassPipeline,
   isVRMode,
 }: {
   cfg: import('../core/types').RenderQualityConfig;
@@ -3555,6 +3585,8 @@ function RenderQualitySection({
   onReset: () => void;
   /** 即時 engine 切替: manifest を同期保存してからフルリロードする */
   onSwitchEngine: (engine: 'mkkellogg' | 'spark' | 'playcanvas') => Promise<void> | void;
+  /** カラーパイプライン bypass トグル: CameraFrame は init 時固定なので保存→リロード。 */
+  onToggleBypassPipeline: (next: boolean) => Promise<void> | void;
   /** パノラマモードでは splat エンジン (PlayCanvas / Spark) の選択は無関係なので非表示。 */
   isVRMode: boolean;
 }) {
@@ -3624,7 +3656,27 @@ function RenderQualitySection({
         <span style={{ fontSize: 10.5, fontFamily: tokens.font.mono, color: tokens.color.textMute }}>{colorHex}</span>
       </div>
 
-      {/* カラー調整 — PlayCanvas (CameraFrame) でのみ反映。Spark / mkkellogg では無視される。 */}
+      {/* カラーパイプライン bypass — ON で SuperSplat 同等処理 (HDR + tonemap +
+          gsplat ガンマ passthrough) を全部スキップし、PLY/SOG の色をそのまま出す。
+          下のカラー調整スライダーは bypass 中は効かない (CameraFrame が無いため)。
+          切替は init 時固定の CameraFrame に依存するので保存→リロード扱い。
+          PlayCanvas エンジンのときだけ意味があるので Spark 中は隠す。 */}
+      {!isVRMode && (cfg.engine ?? 'playcanvas') === 'playcanvas' && (
+        <>
+          <div style={S.toolbarGroupHead}>カラーパイプライン</div>
+          <label style={{ ...S.toggle, marginTop: 4 }} title="ON で SuperSplat 同等の色補正を全てスキップし、PLY/SOG の元の色をそのまま表示します">
+            <input
+              type="checkbox"
+              checked={cfg.bypassColorPipeline === true}
+              onChange={(e) => onToggleBypassPipeline(e.target.checked)}
+            />
+            <span>色調整なし (素のデータを表示) <span style={S.toolbarHint}>※リロードします</span></span>
+          </label>
+        </>
+      )}
+
+      {/* カラー調整 — PlayCanvas (CameraFrame) でのみ反映。Spark / mkkellogg では無視される。
+          bypass ON 中は CameraFrame が無いので、これらのスライダーは保存はされるが描画には反映されない。 */}
       <div style={S.toolbarGroupHead}>カラー調整 (PlayCanvas)</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
         <span style={{ fontSize: 11, color: tokens.color.textMute, width: 80 }}>トーン</span>
