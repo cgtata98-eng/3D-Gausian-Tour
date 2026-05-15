@@ -58,7 +58,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // mobile placement だけが上書きとして効くようにする。
   const isTouchDevice = useTouchDevice();
   const isPortrait = usePortraitOrientation();
-  const placement: SidebarPlacement = !isTouchDevice ? 'left' : (isPortrait ? 'bottom-right' : 'right');
+  const placement: SidebarPlacement = !isTouchDevice ? 'left' : (isPortrait ? 'portrait' : 'right');
   const sStyles = sidebarSizeStyles(sidebarSize, placement);
   // 既定はすべて OFF（顧客向けに最小限の UI を配信したい想定）。制作者が Debug →
   // ツールバー表示で必要な項目を明示的にチェックして出します。
@@ -1443,7 +1443,7 @@ function usePortraitOrientation(): boolean {
  * セッション中ずっと維持される (リロードまで)。
  */
 const MOBILE_SPEED_MIN = 0.5;
-const MOBILE_SPEED_MAX = 15;
+const MOBILE_SPEED_MAX = 20;
 
 function MobileToolsBlock({ onClose }: { onClose: () => void }) {
   const speed = useUIStore((s) => s.mobileMoveSpeed);
@@ -1715,28 +1715,30 @@ import type { SidebarSize } from '../core/types';
  *   (no `bottom`, `height: auto`). The bottom edge floats with a soft shadow so
  *   the panel reads as a card rather than a full-height bar.
  */
-type SidebarPlacement = 'left' | 'right' | 'bottom-right';
+type SidebarPlacement = 'left' | 'right' | 'portrait';
 
 function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'left') {
   const isSmall = size === 'small';
   // placement ごとのアンカー / 幅 / 縁取り。
-  //  - left          : 従来 (PC) — 左に張り付き。
-  //  - right         : スマホ横向き — 右側フル高。
-  //  - bottom-right  : スマホ縦向き — 右下にフロート、幅は左下ジョイスティック(≈126px帯)
-  //                    と被らない範囲にクランプ。`small` 時は高さ自動で下から積み上がる。
+  //  - left      : 従来 (PC) — 左に張り付き。
+  //  - right     : スマホ横向き — 右側フル高。
+  //  - portrait  : スマホ縦向き — **右上**にフロート (`top:0; right:0`)。
+  //                展開状態は上部から下へ伸び、ビューポート幅をある程度残してキャンバスを
+  //                見られるよう幅をクランプ。閉じハンドルだけは別 `collapsedHandleStyle` 側で
+  //                右下に置く (= ユーザー指定: 開いた本体は上、閉じアイコンは下)。
   const isRight = placement === 'right';
-  const isBR = placement === 'bottom-right';
-  const anchors: React.CSSProperties = isBR
-    ? { top: 'auto', left: 'auto', right: 0, ...(isSmall ? { bottom: 0, height: 'auto' as const } : { bottom: 0, top: 0 }) }
+  const isPortrait = placement === 'portrait';
+  const anchors: React.CSSProperties = isPortrait
+    ? { top: 0, left: 'auto', right: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) }
     : isRight
       ? { top: 0, left: 'auto', right: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) }
       : { top: 0, left: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) };
-  // 縦向きはジョイスティック(左 16 + 幅 110 + マージン)を避けるため幅をビューポート幅から削る。
-  // 横向きは画面幅が広いので 320 固定。デスクトップも 320。
-  const width: React.CSSProperties['width'] = isBR ? 'min(320px, calc(100vw - 150px))' : 320;
+  // 縦向きは画面幅が狭いので、キャンバスが見える領域を残すため幅をクランプ。
+  // 横向き / デスクトップは 320 固定。
+  const width: React.CSSProperties['width'] = isPortrait ? 'min(320px, calc(100vw - 80px))' : 320;
   // 縁取り: 区切り線は「キャンバスと接する辺」だけに引く。
-  //   left → 右辺、right / bottom-right → 左辺。
-  const borderEdge = (isRight || isBR)
+  //   left → 右辺、right / portrait → 左辺。
+  const borderEdge = (isRight || isPortrait)
     ? { borderLeft: `1px solid ${tokens.color.border}` }
     : { borderRight: `1px solid ${tokens.color.border}` };
   return {
@@ -1752,8 +1754,8 @@ function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'lef
       backdropFilter: tokens.backdrop,
       WebkitBackdropFilter: tokens.backdrop,
       ...borderEdge,
-      // 右下フロート時は上端にも線を入れる (=`borderTop`)、それ以外の `small` は下端に線。
-      ...(isBR ? { borderTop: `1px solid ${tokens.color.border}` } : (isSmall ? { borderBottom: `1px solid ${tokens.color.border}` } : {})),
+      // `small` は浮いた下端の見切りに `borderBottom` を入れる。
+      ...(isSmall ? { borderBottom: `1px solid ${tokens.color.border}` } : {}),
       boxShadow: tokens.shadow.glass,
       display: 'flex',
       flexDirection: 'column',
@@ -1834,10 +1836,12 @@ const collapsedHandle: React.CSSProperties = {
   outline: 'none',
 };
 
-/** placement に応じて閉じハンドルの上下左右を切り替える。スマホ縦の `bottom-right` は
- *  ジョイスティック(左下)と被らないよう「右下」、横向き `right` は「右上」へ寄せる。 */
+/** placement に応じて閉じハンドルの上下左右を切り替える。
+ *  - `portrait` : サイドバー本体は右上だが、閉じハンドルだけは「右下」固定 (ユーザー指定)。
+ *  - `right`    : 横向き — 右上。
+ *  - `left`     : PC — 左上 (既定)。 */
 function collapsedHandleStyle(placement: SidebarPlacement): React.CSSProperties {
-  if (placement === 'bottom-right') {
+  if (placement === 'portrait') {
     return { ...collapsedHandle, top: 'auto', left: 'auto', right: 16, bottom: 16 };
   }
   if (placement === 'right') {
