@@ -1724,25 +1724,26 @@ function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'lef
   // placement ごとのアンカー / 幅 / 縁取り。
   //  - left      : 従来 (PC) — 左に張り付き。
   //  - right     : スマホ横向き — 右側フル高。
-  //  - portrait  : スマホ縦向き — **右上**にフロート (`top:0; right:0`)。
-  //                展開状態は上部から下へ伸び、ビューポート幅をある程度残してキャンバスを
-  //                見られるよう幅をクランプ。閉じハンドルだけは別 `collapsedHandleStyle` 側で
-  //                右下に置く (= ユーザー指定: 開いた本体は上、閉じアイコンは下)。
+  //  - portrait  : スマホ縦向き — **上端フル幅のトップバー** (`top:0; left:0; right:0`)。
+  //                左右に隙間を作らない (ユーザー指定: 右寄せの隙間を消す = 横一杯)。
+  //                閉じハンドルだけは別 `collapsedHandleStyle` 側で右下に置く。
   const isRight = placement === 'right';
   const isPortrait = placement === 'portrait';
   const anchors: React.CSSProperties = isPortrait
-    ? { top: 0, left: 'auto', right: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) }
+    ? { top: 0, left: 0, right: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) }
     : isRight
       ? { top: 0, left: 'auto', right: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) }
       : { top: 0, left: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) };
-  // 縦向きは画面幅が狭いので、キャンバスが見える領域を残すため幅をクランプ。
+  // 縦向きはトップバーなので `auto` で left/right に吸い付かせる。
   // 横向き / デスクトップは 320 固定。
-  const width: React.CSSProperties['width'] = isPortrait ? 'min(320px, calc(100vw - 80px))' : 320;
+  const width: React.CSSProperties['width'] = isPortrait ? 'auto' : 320;
   // 縁取り: 区切り線は「キャンバスと接する辺」だけに引く。
-  //   left → 右辺、right / portrait → 左辺。
-  const borderEdge = (isRight || isPortrait)
-    ? { borderLeft: `1px solid ${tokens.color.border}` }
-    : { borderRight: `1px solid ${tokens.color.border}` };
+  //   left → 右辺、right → 左辺、portrait → 下辺 (トップバー)。
+  const borderEdge: React.CSSProperties = isPortrait
+    ? { borderBottom: `1px solid ${tokens.color.border}` }
+    : isRight
+      ? { borderLeft: `1px solid ${tokens.color.border}` }
+      : { borderRight: `1px solid ${tokens.color.border}` };
   return {
     sidebar: {
       position: 'absolute',
