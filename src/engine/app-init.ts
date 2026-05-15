@@ -27,12 +27,8 @@ import { applyRenderConfig } from './render-presets';
 export interface AppContext {
   app: AppBase;
   camera: Entity;
-  /**
-   * SuperSplat-equivalent post pipeline. Owned by initApp; cleaned up on app destroy.
-   * `null` when `init.render?.bypassColorPipeline === true` — caller must tolerate
-   * a missing CameraFrame and skip grading writes in that case.
-   */
-  cameraFrame: CameraFrame | null;
+  /** SuperSplat-equivalent post pipeline. Owned by initApp; cleaned up on app destroy. */
+  cameraFrame: CameraFrame;
 }
 
 /**
@@ -117,42 +113,39 @@ export async function initApp(canvas: HTMLCanvasElement, init?: AppInitOptions):
   // through 8-bit framebuffers and noticeably yellows / softens splats. Step 1 of
   // `docs/playcanvas-supersplat-quality-migration.md`.
   //
-  // Skipped when `bypassColorPipeline` is on — caller wants the raw PLY/SOG colors
-  // through PlayCanvas's default gsplat output with no grading on top.
-  const bypass = init?.render?.bypassColorPipeline === true;
-  let cameraFrame: CameraFrame | null = null;
-  if (!bypass) {
-    cameraFrame = new CameraFrame(app, camera.camera!);
-    cameraFrame.rendering.toneMapping = TONEMAP_LINEAR;
-    cameraFrame.rendering.renderFormats = [PIXELFORMAT_RGBA16F, PIXELFORMAT_RGBA32F];
-    cameraFrame.update();
+  // `bypassColorPipeline` は CameraFrame 自体は維持し (= HDR 浮動小数バッファで
+  // バンディングを抑える)、`applyRenderConfig` 側で grading / exposure / toneMapping
+  // 上書きをスキップする方針に変更。CameraFrame 経路を捨てて LDR 8bit に落とすと
+  // 暗部にバンディング (= ユーザー報告の「もやもや」) が乗るのを避けるため。
+  const cameraFrame = new CameraFrame(app, camera.camera!);
+  cameraFrame.rendering.toneMapping = TONEMAP_LINEAR;
+  cameraFrame.rendering.renderFormats = [PIXELFORMAT_RGBA16F, PIXELFORMAT_RGBA32F];
+  cameraFrame.update();
 
-    // Step 2: replace the gsplat fragment's gamma encode with a passthrough — the
-    // post pipeline above handles gamma at the end so the gsplat shader must NOT
-    // re-encode. Always paired with the CameraFrame above; mismatched and colors go
-    // washed out / over-saturated.
-    //
-    // PlayCanvas's current gsplat shader calls `prepareOutputFromGamma` with **one**
-    // argument (`prepareOutputFromGamma(max(clr.xyz, 0.0))`), but earlier versions and
-    // some upstream samples use the two-argument `(vec3, float)` form. Defining both
-    // overloads keeps the chunk drop-in compatible across PlayCanvas v2 minors —
-    // emitting only the 2-arg form crashes shader compile with "no matching overloaded
-    // function found" and the splat renders nothing.
-    ShaderChunks
-      .get(app.graphicsDevice, SHADERLANGUAGE_GLSL)
-      .set('gsplatOutputVS', `
-        vec3 prepareOutputFromGamma(vec3 gammaColor) {
-            return gammaColor;
-        }
-        vec3 prepareOutputFromGamma(vec3 gammaColor, float depth) {
-            return gammaColor;
-        }
-      `);
-  }
+  // Step 2: replace the gsplat fragment's gamma encode with a passthrough — the
+  // post pipeline above handles gamma at the end so the gsplat shader must NOT
+  // re-encode. Always paired with the CameraFrame above; mismatched and colors go
+  // washed out / over-saturated.
+  //
+  // PlayCanvas's current gsplat shader calls `prepareOutputFromGamma` with **one**
+  // argument (`prepareOutputFromGamma(max(clr.xyz, 0.0))`), but earlier versions and
+  // some upstream samples use the two-argument `(vec3, float)` form. Defining both
+  // overloads keeps the chunk drop-in compatible across PlayCanvas v2 minors —
+  // emitting only the 2-arg form crashes shader compile with "no matching overloaded
+  // function found" and the splat renders nothing.
+  ShaderChunks
+    .get(app.graphicsDevice, SHADERLANGUAGE_GLSL)
+    .set('gsplatOutputVS', `
+      vec3 prepareOutputFromGamma(vec3 gammaColor) {
+          return gammaColor;
+      }
+      vec3 prepareOutputFromGamma(vec3 gammaColor, float depth) {
+          return gammaColor;
+      }
+    `);
 
   // Step 3: radial-distance sort instead of view-direction dot. Suppresses the
-  // brief "unsorted" artifact during fast yaw/pitch changes. Kept on in bypass
-  // mode too — it's a sort-order fix, not color processing.
+  // brief "unsorted" artifact during fast yaw/pitch changes.
   app.scene.gsplat.radialSorting = true;
 
   // Boot-time render config (tone mapping, exposure, gamma, splat scale, etc.). MSAA
@@ -194,12 +187,10 @@ export async function initApp(canvas: HTMLCanvasElement, init?: AppInitOptions):
   app.start();
 
   // Make sure the post pipeline is torn down with the app — leaks the offscreen
-  // float framebuffer otherwise. No-op when bypassed (no CameraFrame to destroy).
-  if (cameraFrame) {
-    app.on('destroy', () => {
-      try { cameraFrame!.destroy(); } catch { /* ignore */ }
-    });
-  }
+  // float framebuffer otherwise.
+  app.on('destroy', () => {
+    try { cameraFrame.destroy(); } catch { /* ignore */ }
+  });
 
   return { app, camera, cameraFrame };
 }
