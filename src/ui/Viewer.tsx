@@ -67,7 +67,11 @@ export function Viewer({ sceneId }: ViewerProps) {
         const manifest = await loadSceneManifest(sceneId);
         if (destroyed) return;
         useSceneStore.getState().setManifest(manifest);
-        const renderCfg = manifest.settings.render;
+        // ユーザー側 bypass 上書き (画質ブロックのトグル) — null なら manifest 値そのまま。
+        const userBypass = useUIStore.getState().bypassColorPipeline;
+        const renderCfg = userBypass === null
+          ? manifest.settings.render
+          : { ...(manifest.settings.render ?? {}), bypassColorPipeline: userBypass };
         // Default flipped to PlayCanvas — the SuperSplat-quality migration in
         // `app-init.ts` + `gsplat-loader.ts` (CameraFrame post pipeline, gamma
         // passthrough, radialSorting, SH define, splatScale chunk) brings PlayCanvas
