@@ -69,7 +69,9 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   const showViewpoints = tb.viewpoints === true;
   const showColor      = tb.color      === true && !isOther;
   const showMap        = tb.map        === true;
-  const showFullscreen = tb.fullscreen === true;
+  // 拡大 (fullscreen) はデスクトップ専用。スマホ (touch) は OS 側の全画面 UI と
+   // 衝突するうえ、サイドバー幅が限られるのでアイコンを出さない。
+  const showFullscreen = tb.fullscreen === true && !isTouchDevice;
   // タグ (ピン) は viewerToolbar.pins で制作者が opt-in したときだけアイコンが出る。
   // タップで `useUIStore.showPins` が反転 → ScenePinsOverlay の出し分けに使う。
   const showPinsToggle = tb.pins === true;

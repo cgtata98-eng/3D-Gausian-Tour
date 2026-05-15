@@ -97,6 +97,13 @@ interface SceneState {
   isLoaded: boolean;
   error: string | null;
   /**
+   * Splat ダウンロード進捗 (0..1)。`null` のときは未開始 / 進捗不明 (Content-Length 無し)。
+   * LoadingScreen が % 表示に使う。fetch 中の splat 本体だけを対象 — manifest や
+   * collision GLB の小さなフェッチは含めない。
+   */
+  loadProgress: number | null;
+  setLoadProgress: (v: number | null) => void;
+  /**
    * Auto-captured viewpoint thumbnails keyed by **plan id** then viewpoint id.
    * Auto thumbnails are runtime-only (regenerated each session); manual overrides
    * live on `Plan.thumbnails` so they persist with the manifest.
@@ -366,6 +373,8 @@ export const useSceneStore = create<SceneState>((set) => ({
   setLoading: (isLoading) => set({ isLoading }),
   setLoaded: (isLoaded) => set({ isLoaded }),
   setError: (error) => set({ error }),
+  loadProgress: null,
+  setLoadProgress: (loadProgress) => set({ loadProgress }),
 
   // ── Active-plan-scoped (write to current plan's content) ───────────
   addViewpoint: (vp) => set((s) => withActivePlan(s, (p) => ({

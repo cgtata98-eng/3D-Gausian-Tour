@@ -46,6 +46,43 @@ void modifySplatColor(vec3 center, inout vec4 color) {}
 const DEFAULT_SPLAT_SCALE = 1.15; // SuperSplat-feel default; 1.15〜1.25 is usable.
 const DEFAULT_SH_BANDS = 3;       // 0..3, full SH at load time.
 
+/** ロード% を上位 (LoadingScreen) に伝えるためのコールバック。`progress` は 0..1、
+ *  Content-Length が取れず正確な分母が分からないときは `null` (= ステータス不明)。 */
+export type LoadProgress = (progress: number | null) => void;
+
+/**
+ * `fetch` を呼びつつ Reader API で逐次バイト数を集計、`onProgress(0..1)` を発火しながら
+ * 全バイトを 1 個の Blob にまとめて返す。Content-Length が無い (= 圧縮転送など) 場合は
+ * 1 度だけ `null` を発火してから黙々と読む — 上位は「ダウンロード中だが %未確定」として
+ * スピナーだけ出せばよい。
+ */
+async function fetchWithProgress(url: string, onProgress?: LoadProgress): Promise<Blob> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText} (${url})`);
+  const totalHdr = res.headers.get('content-length');
+  const total = totalHdr ? parseInt(totalHdr, 10) : 0;
+  if (!res.body || !total) {
+    // 進捗を取れないケース: Blob だけ返して null を流す。
+    onProgress?.(null);
+    return res.blob();
+  }
+  const reader = res.body.getReader();
+  const chunks: BlobPart[] = [];
+  let received = 0;
+  onProgress?.(0);
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    // Uint8Array<SharedArrayBuffer> 含みの型と Blob ctor の BlobPart 期待型が
+    // 噛み合わないので、安全に ArrayBuffer 側にコピーして詰める (`slice().buffer`)。
+    chunks.push(value.slice().buffer);
+    received += value.byteLength;
+    onProgress?.(Math.min(1, received / total));
+  }
+  onProgress?.(1);
+  return new Blob(chunks);
+}
+
 /**
  * Load a .ply/.splat file and add it to the scene as a GSplat entity.
  * High quality spherical harmonics enabled.
@@ -59,10 +96,23 @@ export async function loadGSplat(
   url: string,
   name: string = 'gsplat',
   transform?: SplatTransform,
+  onProgress?: LoadProgress,
 ): Promise<Entity> {
+  // バイト進捗が欲しいので一旦 fetch で全バイトを取得 → Blob → object URL を Asset に渡す。
+  // (`data:` / `blob:` / `mem://` 等はそのまま PlayCanvas に投げる — 進捗は出ない)
+  let assetUrl = url;
+  let revoke: string | null = null;
+  if (/^https?:|^\//.test(url)) {
+    const blob = await fetchWithProgress(url, onProgress);
+    assetUrl = URL.createObjectURL(blob);
+    revoke = assetUrl;
+  } else {
+    onProgress?.(null);
+  }
   return new Promise((resolve, reject) => {
-    const asset = new Asset(name, 'gsplat', { url });
+    const asset = new Asset(name, 'gsplat', { url: assetUrl });
     asset.on('load', () => {
+      if (revoke) URL.revokeObjectURL(revoke);
       const entity = new Entity(name);
       entity.addComponent('gsplat', {
         asset: asset,
@@ -94,6 +144,7 @@ export async function loadGSplat(
       resolve(entity);
     });
     asset.on('error', (err: string) => {
+      if (revoke) URL.revokeObjectURL(revoke);
       reject(new Error(`Failed to load GSplat: ${err}`));
     });
     app.assets.add(asset);
@@ -200,10 +251,10 @@ export async function loadSogFromUrl(
   sogUrl: string,
   name: string = 'gsplat',
   transform?: SplatTransform,
+  onProgress?: LoadProgress,
 ): Promise<Entity> {
-  const res = await fetch(sogUrl);
-  if (!res.ok) throw new Error(`SOG fetch failed: ${res.status} ${res.statusText} (${sogUrl})`);
-  const buf = new Uint8Array(await res.arrayBuffer());
+  const blob = await fetchWithProgress(sogUrl, onProgress);
+  const buf = new Uint8Array(await blob.arrayBuffer());
   const entries = unzipSync(buf);
 
   const urlMap = new Map<string, string>();

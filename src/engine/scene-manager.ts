@@ -148,6 +148,9 @@ export class SceneManager {
     const store = useSceneStore.getState();
     store.setLoading(true);
     store.setError(null);
+    store.setLoadProgress(0);
+    // splat ローダーから呼ばれるバイト進捗コールバック。0..1 / null をそのまま流す。
+    const onProgress = (p: number | null) => useSceneStore.getState().setLoadProgress(p);
 
     try {
       const existing = store.manifest;
@@ -181,10 +184,11 @@ export class SceneManager {
           sogUrl,
           `splat-${sceneId}-${activePlan.id}`,
           activePlan.splatTransform,
+          onProgress,
         );
       } else if (activePlan?.splat) {
         const splatUrl = await resolveAssetUrl(activePlan.splat, sceneId);
-        this.splatEntity = await loadGSplat(this.app, splatUrl, `splat-${sceneId}-${activePlan.id}`, activePlan.splatTransform);
+        this.splatEntity = await loadGSplat(this.app, splatUrl, `splat-${sceneId}-${activePlan.id}`, activePlan.splatTransform, onProgress);
       }
       // Apply the user's saved quality preset now that the splat material exists.
       this.applyQualityMode(useUIStore.getState().qualityMode);
@@ -274,9 +278,11 @@ export class SceneManager {
 
       store.setLoaded(true);
       store.setLoading(false);
+      store.setLoadProgress(null);
     } catch (err) {
       store.setError(err instanceof Error ? err.message : String(err));
       store.setLoading(false);
+      store.setLoadProgress(null);
     }
   }
 

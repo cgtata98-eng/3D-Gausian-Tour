@@ -1,10 +1,21 @@
+import { useSceneStore } from '../store/scene-store';
 import { tokens } from './design-tokens';
 
 export function LoadingScreen() {
+  // splat ダウンロード進捗。null = 進捗不明 (Content-Length 無し、または初期化前)。
+  const progress = useSceneStore((s) => s.loadProgress);
+  const pct = progress === null ? null : Math.round(Math.max(0, Math.min(1, progress)) * 100);
   return (
     <div style={wrap}>
       <div style={spinner} />
-      <p style={label}>Loading scene…</p>
+      <p style={label}>
+        Loading scene{pct !== null ? `… ${pct}%` : '…'}
+      </p>
+      {pct !== null && (
+        <div style={barTrack}>
+          <div style={{ ...barFill, width: `${pct}%` }} />
+        </div>
+      )}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
@@ -43,4 +54,20 @@ const label: React.CSSProperties = {
   letterSpacing: 0.5,
   color: tokens.color.textMute,
   fontFamily: tokens.font.family,
+  fontVariantNumeric: 'tabular-nums',
+};
+
+const barTrack: React.CSSProperties = {
+  marginTop: 12,
+  width: 200,
+  height: 4,
+  background: tokens.color.border,
+  borderRadius: 2,
+  overflow: 'hidden',
+};
+
+const barFill: React.CSSProperties = {
+  height: '100%',
+  background: tokens.color.accent,
+  transition: 'width 120ms ease-out',
 };
