@@ -18,6 +18,9 @@ export function FootstepAudio() {
   const muted = useUIStore((s) => s.audioMuted);
   const viewMode = useUIStore((s) => s.viewMode);
   const movementMode = useUIStore((s) => s.movementMode);
+  // モバイル: MobileJoystick がデッドゾーン外で押されている間 true。
+  // キーボード / ゲームパッドが無いスマホでも足音が鳴る経路を追加。
+  const joystickActive = useUIStore((s) => s.mobileJoystickActive);
   const enabled = useSceneStore((s) => s.manifest?.settings.footstepEnabled);
   const volumeSetting = useSceneStore((s) => s.manifest?.settings.footstepVolume);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -88,16 +91,18 @@ export function FootstepAudio() {
   const src = running ? RUN_URL : WALK_URL;
   const isEnabled = enabled !== false; // default ON
   const volume = Math.max(0, Math.min(1, volumeSetting ?? DEFAULT_VOLUME));
+  // moving の最終値 = キーボード/ゲームパッド入力 OR モバイルジョイスティック入力。
+  const isMoving = moving || joystickActive;
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
     el.volume = volume;
-    if (muted || !moving || !isEnabled || viewMode === '360' || movementMode === 'fly') {
+    if (muted || !isMoving || !isEnabled || viewMode === '360' || movementMode === 'fly') {
       el.pause();
     } else {
       el.play().catch(() => { /* autoplay block etc. */ });
     }
-  }, [muted, moving, isEnabled, viewMode, movementMode, src, volume]);
+  }, [muted, isMoving, isEnabled, viewMode, movementMode, src, volume]);
 
   if (!isEnabled) return null;
   return (
@@ -106,6 +111,8 @@ export function FootstepAudio() {
       src={src}
       loop
       preload="auto"
+      // AmbientAudio の prime ハンドラがこの要素を找って autoplay ロックを解除する。
+      data-footstep="1"
       style={{ display: 'none' }}
       aria-hidden="true"
     />

@@ -116,6 +116,17 @@ export function Viewer({ sceneId }: ViewerProps) {
   useEffect(() => { if (ready) sceneManagerRef.current?.setViewMode(viewMode); }, [ready, viewMode]);
   useEffect(() => { if (ready) sceneManagerRef.current?.setMovementMode(movementMode); }, [ready, movementMode]);
 
+  // タッチ端末: シーン準備完了後 / モバイル設定値変更時に moveSpeed を強制適用。
+  // manifest.settings.moveSpeed が新しい CameraController の初期値として焼き込まれるため、
+  // セッションでユーザーが選んだ値を消さないようここで上書きしておく。
+  const mobileMoveSpeed = useUIStore((s) => s.mobileMoveSpeed);
+  useEffect(() => {
+    if (!ready) return;
+    if (typeof window === 'undefined') return;
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    sceneManagerRef.current?.setMoveSpeed(mobileMoveSpeed);
+  }, [ready, mobileMoveSpeed]);
+
   // Demo mode (Xrealtracking): start WebSocket + push head-tracking offsets to camera.
   useDemoModeCamera(ready ? sceneManagerRef.current : null);
   // Debug grid toggle.
@@ -192,7 +203,13 @@ export function Viewer({ sceneId }: ViewerProps) {
             showDebugLink={false}
             onPlanSwitch={(planId) => { void sceneManagerRef.current?.setActivePlan(planId); }}
           />
-          <MobileJoystick onChange={(x, y) => sceneManagerRef.current?.setTouchJoystick?.(x, y)} />
+          <MobileJoystick onChange={(x, y) => {
+            sceneManagerRef.current?.setTouchJoystick?.(x, y);
+            // ジョイスティックを動かしたら左サイドバーを閉じる (スマホのみ。
+            // MobileJoystick 自体が pointer:coarse 端末でしか描画されないので、
+            // ここに来た時点で touch device 確定)。閉じる操作は冪等なので毎フレーム呼んで OK。
+            if (x !== 0 || y !== 0) useUIStore.getState().setSidebarCollapsed(true);
+          }} />
           <PinsOverlayGate containerRef={wrapRef} />
         </>
       )}

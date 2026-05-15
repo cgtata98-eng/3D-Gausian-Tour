@@ -146,6 +146,20 @@ interface UIState {
    *  flag is the runtime per-session show/hide the customer can flip. Default ON. */
   showPins: boolean;
   setShowPins: (v: boolean) => void;
+  /**
+   * モバイル (touch) の移動スピード m/s。manifest.settings.moveSpeed が
+   * リセット既定 (3.0) を強いるのを避け、セッション中はユーザー設定値を保持する。
+   * メモリのみ (リロードで初期値 5.0 に戻る) — 永続化はしない。
+   */
+  mobileMoveSpeed: number;
+  setMobileMoveSpeed: (v: number) => void;
+  /**
+   * MobileJoystick がデッドゾーンを超えて入力されている間 true。FootstepAudio が
+   * これを参照して足音 ON/OFF を切り替える (スマホはキーボード/ゲームパッドが
+   * 無いので、joystick がそのまま「移動中」フラグになる)。
+   */
+  mobileJoystickActive: boolean;
+  setMobileJoystickActive: (v: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -217,4 +231,8 @@ export const useUIStore = create<UIState>((set) => ({
   setAiBusy: (aiBusy) => set({ aiBusy }),
   showPins: true,
   setShowPins: (showPins) => set({ showPins }),
+  mobileMoveSpeed: 5,
+  setMobileMoveSpeed: (mobileMoveSpeed) => set({ mobileMoveSpeed }),
+  mobileJoystickActive: false,
+  setMobileJoystickActive: (mobileJoystickActive) => set({ mobileJoystickActive }),
 }));

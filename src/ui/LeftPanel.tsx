@@ -53,7 +53,13 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // Default flipped to 'small' — keeps the panel compact unless the
   // author explicitly opts into the full-height "大" preset.
   const sidebarSize = tb.size ?? 'small';
-  const sStyles = sidebarSizeStyles(sidebarSize);
+  // スマホ配置: 縦向き → 右下フロート (left ジョイスティックと干渉しない幅にクランプ)、
+  // 横向き → 右側フル高。デスクトップは従来通り左側。`useTouchDevice` を先に評価して
+  // mobile placement だけが上書きとして効くようにする。
+  const isTouchDevice = useTouchDevice();
+  const isPortrait = usePortraitOrientation();
+  const placement: SidebarPlacement = !isTouchDevice ? 'left' : (isPortrait ? 'bottom-right' : 'right');
+  const sStyles = sidebarSizeStyles(sidebarSize, placement);
   // 既定はすべて OFF（顧客向けに最小限の UI を配信したい想定）。制作者が Debug →
   // ツールバー表示で必要な項目を明示的にチェックして出します。
   // 例外: `quality` だけは既定 ON — 描画品質はビューア側で見る人の端末性能に応じて
@@ -75,15 +81,19 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // Mobile-only block: only relevant on touch devices, so we gate by
   // `pointer: coarse` regardless of the toolbar config. The author can still
   // suppress it explicitly with `tb.mobile === false`.
-  const isTouchDevice = useTouchDevice();
+  // `isTouchDevice` は上で placement のために評価済みなので再代入はしない。
   const showMobile     = tb.mobile     !== false && viewMode === 'splat' && isTouchDevice;
 
   // Collapsed: render only a tiny floating button to bring the sidebar back.
+  // 折りたたみハンドルの位置はサイドバーと同側に揃える (PC 左上 / スマホ縦 右下 / スマホ横 右上)。
   if (sidebarCollapsed) {
+    const handleStyle = collapsedHandleStyle(placement);
+    // 左/右上で「>」、右下では「<」のような感じだと意味が逆になるので、向きも合わせて反転。
+    const chevronD = placement === 'left' ? 'M9 18l6-6-6-6' : 'M15 18l-6-6 6-6';
     return (
-      <button onClick={() => setSidebarCollapsed(false)} style={collapsedHandle} title={`${sceneName} を表示`}>
+      <button onClick={() => setSidebarCollapsed(false)} style={handleStyle} title={`${sceneName} を表示`}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 18l6-6-6-6" />
+          <path d={chevronD} />
         </svg>
       </button>
     );
@@ -109,6 +119,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
           </button>
         </div>
 
+        <div style={sidebarScrollArea}>
         {(() => {
           // Render blocks in the order defined by `viewerToolbar.order` (with the
           // default order filling in any missing ids). Each block is gated by its
@@ -185,6 +196,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
           ];
           return finalOrder.map((id) => <React.Fragment key={id}>{blocks[id]}</React.Fragment>);
         })()}
+        </div>
 
       </div>
 
@@ -1404,18 +1416,39 @@ function useTouchDevice(): boolean {
   return match;
 }
 
+/** Portrait (= 縦向き) なら true。回転で値が切り替わるので useMobileSidebarPlacement の
+ *  根拠に使う。デスクトップは isTouch=false 経由で無効化される想定なので素直に
+ *  `(orientation: portrait)` の真偽だけ拾う。 */
+function usePortraitOrientation(): boolean {
+  const [match, setMatch] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(orientation: portrait)');
+    setMatch(mq.matches);
+    const onChange = () => setMatch(mq.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  return match;
+}
+
 /**
  * Mobile-only sidebar block. Mouse-wheel / keyboard speed controls don't exist
  * on phones, so we surface a continuous slider for walk speed. The active
  * SceneManager exposes `setMoveSpeed` via the `window.__sceneManager` global,
  * which both engines write into the controller's `options.moveSpeed`.
+ *
+ * 値は `useUIStore.mobileMoveSpeed` に保持 — 他セクションの開閉や設定変更で
+ * 当ブロックがアンマウント／再マウントしても、ユーザーが設定した値が
+ * セッション中ずっと維持される (リロードまで)。
  */
 const MOBILE_SPEED_MIN = 0.5;
-const MOBILE_SPEED_MAX = 10;
-const MOBILE_SPEED_DEFAULT = 3;
+const MOBILE_SPEED_MAX = 15;
+const MOBILE_SPEED_DEFAULT = 5;
 
 function MobileToolsBlock({ onClose }: { onClose: () => void }) {
-  const [speed, setSpeed] = useState(MOBILE_SPEED_DEFAULT);
+  const speed = useUIStore((s) => s.mobileMoveSpeed);
+  const setSpeed = useUIStore((s) => s.setMobileMoveSpeed);
 
   const apply = (s: number) => {
     setSpeed(s);
@@ -1423,10 +1456,13 @@ function MobileToolsBlock({ onClose }: { onClose: () => void }) {
     sm?.setMoveSpeed?.(s);
   };
 
-  // Push the default into the engine on first render so the first move uses
-  // a known speed regardless of whatever the manifest had.
+  // Push the current stored speed into the engine whenever this block remounts.
+  // Reading from the store (not a constant) means a re-mount after closing /
+  // re-opening the section preserves the user's last value instead of snapping
+  // back to the default.
   useEffect(() => {
-    apply(MOBILE_SPEED_DEFAULT);
+    const sm = (window as unknown as { __sceneManager?: { setMoveSpeed?: (s: number) => void } }).__sceneManager;
+    sm?.setMoveSpeed?.(speed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1680,19 +1716,45 @@ import type { SidebarSize } from '../core/types';
  *   (no `bottom`, `height: auto`). The bottom edge floats with a soft shadow so
  *   the panel reads as a card rather than a full-height bar.
  */
-function sidebarSizeStyles(size: SidebarSize) {
+type SidebarPlacement = 'left' | 'right' | 'bottom-right';
+
+function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'left') {
   const isSmall = size === 'small';
+  // placement ごとのアンカー / 幅 / 縁取り。
+  //  - left          : 従来 (PC) — 左に張り付き。
+  //  - right         : スマホ横向き — 右側フル高。
+  //  - bottom-right  : スマホ縦向き — 右下にフロート、幅は左下ジョイスティック(≈126px帯)
+  //                    と被らない範囲にクランプ。`small` 時は高さ自動で下から積み上がる。
+  const isRight = placement === 'right';
+  const isBR = placement === 'bottom-right';
+  const anchors: React.CSSProperties = isBR
+    ? { top: 'auto', left: 'auto', right: 0, ...(isSmall ? { bottom: 0, height: 'auto' as const } : { bottom: 0, top: 0 }) }
+    : isRight
+      ? { top: 0, left: 'auto', right: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) }
+      : { top: 0, left: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) };
+  // 縦向きはジョイスティック(左 16 + 幅 110 + マージン)を避けるため幅をビューポート幅から削る。
+  // 横向きは画面幅が広いので 320 固定。デスクトップも 320。
+  const width: React.CSSProperties['width'] = isBR ? 'min(320px, calc(100vw - 150px))' : 320;
+  // 縁取り: 区切り線は「キャンバスと接する辺」だけに引く。
+  //   left → 右辺、right / bottom-right → 左辺。
+  const borderEdge = (isRight || isBR)
+    ? { borderLeft: `1px solid ${tokens.color.border}` }
+    : { borderRight: `1px solid ${tokens.color.border}` };
   return {
     sidebar: {
       position: 'absolute',
-      top: 0, left: 0,
-      ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }),
-      width: 320,
+      // 横向きスマホ等で viewport 高が低い時に下部が見切れないよう、必ず viewport 内に収め
+      // 中身は `sidebarScrollArea` 側でスクロールさせる。`100dvh` は iOS Safari のアドレスバー
+      // 出入りに追従する viewport 単位 (fallback で 100vh)。
+      maxHeight: '100dvh',
+      ...anchors,
+      width,
       background: tokens.glass.surfaceStrong,
       backdropFilter: tokens.backdrop,
       WebkitBackdropFilter: tokens.backdrop,
-      borderRight: `1px solid ${tokens.color.border}`,
-      borderBottom: isSmall ? `1px solid ${tokens.color.border}` : undefined,
+      ...borderEdge,
+      // 右下フロート時は上端にも線を入れる (=`borderTop`)、それ以外の `small` は下端に線。
+      ...(isBR ? { borderTop: `1px solid ${tokens.color.border}` } : (isSmall ? { borderBottom: `1px solid ${tokens.color.border}` } : {})),
       boxShadow: tokens.shadow.glass,
       display: 'flex',
       flexDirection: 'column',
@@ -1701,6 +1763,16 @@ function sidebarSizeStyles(size: SidebarSize) {
     } as React.CSSProperties,
   };
 }
+
+/** タイトルは固定したまま、下のブロック群だけスクロールさせるラッパー。
+ *  `minHeight: 0` がないと flex 子要素は内容分まで膨らんで `overflow` が効かない。 */
+const sidebarScrollArea: React.CSSProperties = {
+  flex: '1 1 auto',
+  minHeight: 0,
+  overflowY: 'auto',
+  overscrollBehavior: 'contain',
+  WebkitOverflowScrolling: 'touch',
+};
 
 const sidebarTitleBlock: React.CSSProperties = {
   padding: '12px 14px 12px 16px',
@@ -1762,6 +1834,18 @@ const collapsedHandle: React.CSSProperties = {
   zIndex: 6,
   outline: 'none',
 };
+
+/** placement に応じて閉じハンドルの上下左右を切り替える。スマホ縦の `bottom-right` は
+ *  ジョイスティック(左下)と被らないよう「右下」、横向き `right` は「右上」へ寄せる。 */
+function collapsedHandleStyle(placement: SidebarPlacement): React.CSSProperties {
+  if (placement === 'bottom-right') {
+    return { ...collapsedHandle, top: 'auto', left: 'auto', right: 16, bottom: 16 };
+  }
+  if (placement === 'right') {
+    return { ...collapsedHandle, left: 'auto', right: 16 };
+  }
+  return collapsedHandle;
+}
 
 const sidebarBlock: React.CSSProperties = {
   padding: '10px 16px',

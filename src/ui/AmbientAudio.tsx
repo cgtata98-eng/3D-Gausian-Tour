@@ -155,5 +155,35 @@ export function AmbientAudio() {
     };
   }, []);
 
+  // モバイル/iOS Safari は AudioContext を生成直後 `suspended` で保持し、user gesture
+  // 内で resume() しないと音が出ない。React effect 経由の resume はミュート切替の
+  // クリックハンドラより遅れて走るため、user activation が切れて失敗するケースがある。
+  // 対策: 初回 pointerdown / touchstart / keydown を document でつかみ、その同期内で
+  // resume() を呼ぶ。リスナは初回発火で自動解除 (`once: true`)。
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const prime = () => {
+      const ctx = ctxRef.current;
+      if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => { /* ignore */ });
+      // 足音 <audio> の autoplay ロックを解くために、一瞬だけ play→pause しておく
+      // (mobile Safari/Chrome は user gesture 内の play() を 1 度通すと以降の
+      //  プログラマティック play() を許可する)。
+      const a = document.querySelector('audio[data-footstep="1"]') as HTMLAudioElement | null;
+      if (a) {
+        a.muted = true;
+        a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; }).catch(() => { a.muted = false; });
+      }
+    };
+    const opts: AddEventListenerOptions = { once: true, capture: true, passive: true };
+    document.addEventListener('pointerdown', prime, opts);
+    document.addEventListener('touchstart', prime, opts);
+    document.addEventListener('keydown', prime, opts);
+    return () => {
+      document.removeEventListener('pointerdown', prime, true);
+      document.removeEventListener('touchstart', prime, true);
+      document.removeEventListener('keydown', prime, true);
+    };
+  }, []);
+
   return null;
 }

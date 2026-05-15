@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { useUIStore } from '../store/ui-store';
 import { tokens } from './design-tokens';
+
+/** スティック中心からのオフセットがこれ未満なら「動いていない」扱いにする。
+ *  足音判定 (`mobileJoystickActive`) はこの値の外側でのみ true。
+ *  THUMB が中心から少し揺れる程度では誤検知しないように緩めに 0.15。 */
+const FOOTSTEP_DEADZONE = 0.15;
 
 interface Props {
   /** Called every frame the joystick is touched. `x` / `y` are normalised
@@ -58,6 +64,7 @@ export function MobileJoystick({ onChange }: Props) {
     activeIdRef.current = null;
     setThumb({ x: 0, y: 0 });
     onChange(0, 0);
+    useUIStore.getState().setMobileJoystickActive(false);
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   };
 
@@ -75,7 +82,12 @@ export function MobileJoystick({ onChange }: Props) {
       dy = (dy / dist) * MAX_OFFSET;
     }
     setThumb({ x: dx, y: dy });
-    onChange(dx / MAX_OFFSET, dy / MAX_OFFSET);
+    const nx = dx / MAX_OFFSET;
+    const ny = dy / MAX_OFFSET;
+    onChange(nx, ny);
+    // 足音用フラグ — デッドゾーン外なら「歩行中」。set 自体は冪等なので、
+    // ストア値が同じなら zustand は再描画をトリガーしない (subscribe 側は浅い比較)。
+    useUIStore.getState().setMobileJoystickActive(Math.hypot(nx, ny) > FOOTSTEP_DEADZONE);
   };
 
   if (!isTouchDevice) return null;
