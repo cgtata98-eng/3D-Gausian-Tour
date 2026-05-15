@@ -590,24 +590,31 @@ export class SceneManager {
     // Wrap with `setLoading` so the LoadingScreen overlay covers plan-switch / reupload time
     // (it can take several seconds for big PLYs / SOGs).
     const hasSplat = !!plan.splatSog || !!plan.splat;
-    if (hasSplat) useSceneStore.getState().setLoading(true);
+    if (hasSplat) {
+      useSceneStore.getState().setLoading(true);
+      useSceneStore.getState().setLoadProgress(0);
+    }
+    const onProgress = (p: number | null) => useSceneStore.getState().setLoadProgress(p);
     try {
       if (plan.splatSog && isSogIdbRef(plan.splatSog)) {
         this.splatEntity = await loadSogFromIdb(this.app, m.id, planId, `splat-${m.id}-${planId}`, plan.splatTransform);
         if (this.viewMode === '360') this.splatEntity.enabled = false;
       } else if (plan.splatSog) {
         const sogUrl = await resolveAssetUrl(plan.splatSog, m.id);
-        this.splatEntity = await loadSogFromUrl(this.app, sogUrl, `splat-${m.id}-${planId}`, plan.splatTransform);
+        this.splatEntity = await loadSogFromUrl(this.app, sogUrl, `splat-${m.id}-${planId}`, plan.splatTransform, onProgress);
         if (this.viewMode === '360') this.splatEntity.enabled = false;
       } else if (plan.splat) {
         const newUrl = await resolveAssetUrl(plan.splat, m.id);
-        this.splatEntity = await loadGSplat(this.app, newUrl, `splat-${m.id}-${planId}`, plan.splatTransform);
+        this.splatEntity = await loadGSplat(this.app, newUrl, `splat-${m.id}-${planId}`, plan.splatTransform, onProgress);
         if (this.viewMode === '360') this.splatEntity.enabled = false;
       }
     } catch (err) {
       console.error(`plan splat load failed (${planId}):`, err);
     } finally {
-      if (hasSplat) useSceneStore.getState().setLoading(false);
+      if (hasSplat) {
+        useSceneStore.getState().setLoading(false);
+        useSceneStore.getState().setLoadProgress(null);
+      }
     }
     // Re-apply quality preset (SH bands / radial sort / DPR) to the freshly-loaded splat.
     this.applyQualityMode(useUIStore.getState().qualityMode);
