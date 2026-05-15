@@ -1444,7 +1444,6 @@ function usePortraitOrientation(): boolean {
  */
 const MOBILE_SPEED_MIN = 0.5;
 const MOBILE_SPEED_MAX = 15;
-const MOBILE_SPEED_DEFAULT = 5;
 
 function MobileToolsBlock({ onClose }: { onClose: () => void }) {
   const speed = useUIStore((s) => s.mobileMoveSpeed);
