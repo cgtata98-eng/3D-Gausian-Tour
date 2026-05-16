@@ -68,30 +68,46 @@ export function applyRenderConfig(
   type CamWithRender = { clearColor: Color };
   const cam = (camera?.camera ?? null) as CamWithRender | null;
 
-  if (cfg.exposureEV !== undefined) {
+  // bypass ON: exposure / toneMapping / grading の上書きはすべて無視。
+  // gsplatOutputVS の上書きが効いていないので、シェーダ既定の gamma 経路を素通しさせる。
+  // 既定 (undefined) は bypass 扱い — 色調整は明示的に `false` を入れたときだけ有効。
+  const bypass = cfg.bypassColorPipeline !== false;
+
+  if (!bypass && cfg.exposureEV !== undefined) {
     app.scene.exposure = Math.pow(2, cfg.exposureEV);
+  } else if (bypass) {
+    app.scene.exposure = 1;
   }
   if (cfg.clearColor !== undefined && cam) {
     cam.clearColor = new Color(cfg.clearColor[0], cfg.clearColor[1], cfg.clearColor[2]);
   }
 
-  // CameraFrame-based grading. Skipped silently when no CameraFrame is attached
-  // (= non-PlayCanvas path, or bypassColorPipeline is on).
   if (cameraFrame) {
     let dirty = false;
-    if (cfg.toneMapping !== undefined) {
-      cameraFrame.rendering.toneMapping = TONEMAP_BY_NAME[cfg.toneMapping] ?? TONEMAP_LINEAR;
+    if (bypass) {
+      cameraFrame.rendering.toneMapping = TONEMAP_LINEAR;
+      if (cameraFrame.grading.enabled) {
+        cameraFrame.grading.enabled = false;
+        cameraFrame.grading.saturation = 1;
+        cameraFrame.grading.contrast = 1;
+        cameraFrame.grading.brightness = 1;
+      }
       dirty = true;
-    }
-    const wantsGrading = cfg.saturation !== undefined
-      || cfg.contrast !== undefined
-      || cfg.brightness !== undefined;
-    if (wantsGrading) {
-      cameraFrame.grading.enabled = true;
-      if (cfg.saturation !== undefined) cameraFrame.grading.saturation = cfg.saturation;
-      if (cfg.contrast !== undefined) cameraFrame.grading.contrast = cfg.contrast;
-      if (cfg.brightness !== undefined) cameraFrame.grading.brightness = cfg.brightness;
-      dirty = true;
+    } else {
+      if (cfg.toneMapping !== undefined) {
+        cameraFrame.rendering.toneMapping = TONEMAP_BY_NAME[cfg.toneMapping] ?? TONEMAP_LINEAR;
+        dirty = true;
+      }
+      const wantsGrading = cfg.saturation !== undefined
+        || cfg.contrast !== undefined
+        || cfg.brightness !== undefined;
+      if (wantsGrading) {
+        cameraFrame.grading.enabled = true;
+        if (cfg.saturation !== undefined) cameraFrame.grading.saturation = cfg.saturation;
+        if (cfg.contrast !== undefined) cameraFrame.grading.contrast = cfg.contrast;
+        if (cfg.brightness !== undefined) cameraFrame.grading.brightness = cfg.brightness;
+        dirty = true;
+      }
     }
     if (dirty) cameraFrame.update();
   }

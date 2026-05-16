@@ -27,12 +27,8 @@ import { applyRenderConfig } from './render-presets';
 export interface AppContext {
   app: AppBase;
   camera: Entity;
-  /**
-   * SuperSplat-equivalent post pipeline. Owned by initApp; cleaned up on app destroy.
-   * `null` when `init.render?.bypassColorPipeline === true` — caller must tolerate
-   * a missing CameraFrame and skip grading writes in that case.
-   */
-  cameraFrame: CameraFrame | null;
+  /** SuperSplat-equivalent post pipeline. Owned by initApp; cleaned up on app destroy. */
+  cameraFrame: CameraFrame;
 }
 
 /**
@@ -117,16 +113,18 @@ export async function initApp(canvas: HTMLCanvasElement, init?: AppInitOptions):
   // through 8-bit framebuffers and noticeably yellows / softens splats. Step 1 of
   // `docs/playcanvas-supersplat-quality-migration.md`.
   //
-  // Skipped when `bypassColorPipeline` is on — caller wants the raw PLY/SOG colors
-  // through PlayCanvas's default gsplat output with no grading on top.
-  const bypass = init?.render?.bypassColorPipeline === true;
-  let cameraFrame: CameraFrame | null = null;
-  if (!bypass) {
-    cameraFrame = new CameraFrame(app, camera.camera!);
-    cameraFrame.rendering.toneMapping = TONEMAP_LINEAR;
-    cameraFrame.rendering.renderFormats = [PIXELFORMAT_RGBA16F, PIXELFORMAT_RGBA32F];
-    cameraFrame.update();
+  // `bypassColorPipeline` ON のときは CameraFrame は作るが (= HDR float バッファで
+  // 8bit バンディング = 「もやもや」を回避)、`gsplatOutputVS` の passthrough 上書きは
+  // **行わない** → gsplat シェーダのデフォルトのガンマ経路 (= 学習時の色味そのまま) を
+  // 通す。grading / exposure は applyRenderConfig 側でスキップ。
+  // 既定 (undefined) は bypass 扱い — 色調整は明示的に `false` を入れたときだけ有効。
+  const bypass = init?.render?.bypassColorPipeline !== false;
+  const cameraFrame = new CameraFrame(app, camera.camera!);
+  cameraFrame.rendering.toneMapping = TONEMAP_LINEAR;
+  cameraFrame.rendering.renderFormats = [PIXELFORMAT_RGBA16F, PIXELFORMAT_RGBA32F];
+  cameraFrame.update();
 
+  if (!bypass) {
     // Step 2: replace the gsplat fragment's gamma encode with a passthrough — the
     // post pipeline above handles gamma at the end so the gsplat shader must NOT
     // re-encode. Always paired with the CameraFrame above; mismatched and colors go
@@ -194,12 +192,10 @@ export async function initApp(canvas: HTMLCanvasElement, init?: AppInitOptions):
   app.start();
 
   // Make sure the post pipeline is torn down with the app — leaks the offscreen
-  // float framebuffer otherwise. No-op when bypassed (no CameraFrame to destroy).
-  if (cameraFrame) {
-    app.on('destroy', () => {
-      try { cameraFrame!.destroy(); } catch { /* ignore */ }
-    });
-  }
+  // float framebuffer otherwise.
+  app.on('destroy', () => {
+    try { cameraFrame.destroy(); } catch { /* ignore */ }
+  });
 
   return { app, camera, cameraFrame };
 }

@@ -3637,6 +3637,27 @@ function RenderQualitySection({
         </>
       )}
 
+      {/* カラーパイプライン トグル — チェック = 色調整 ON = SuperSplat 同等パイプライン
+          (HDR + gsplatOutputVS passthrough + 露出/トーン/grading 反映)。
+          チェック外し = 学習時色味でそのまま (bypass=true)。
+          下のカラー調整スライダー (露出 / トーン / 彩度等) は OFF 中描画に反映されないので
+          視覚的ヒントとして露出スライダーより**上**に置く。
+          切替は init 時固定なので内部的に保存→リロード。
+          PlayCanvas エンジンのときだけ意味があるので Spark 中は隠す。 */}
+      {!isVRMode && (cfg.engine ?? 'playcanvas') === 'playcanvas' && (
+        <>
+          <div style={S.toolbarGroupHead}>カラーパイプライン</div>
+          <label style={{ ...S.toggle, marginTop: 4 }} title="チェックを入れると露出 / トーン / カラー補正が描画に反映されます。外すと学習時の色味のまま表示します。">
+            <input
+              type="checkbox"
+              checked={cfg.bypassColorPipeline === false}
+              onChange={(e) => onToggleBypassPipeline(!e.target.checked)}
+            />
+            <span>色調整 ON</span>
+          </label>
+        </>
+      )}
+
       <Slider label="露出 (EV)" min={-3} max={3} step={0.1} value={ev} onChange={(v) => patch({ exposureEV: +v.toFixed(2) })} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
@@ -3655,25 +3676,6 @@ function RenderQualitySection({
         />
         <span style={{ fontSize: 10.5, fontFamily: tokens.font.mono, color: tokens.color.textMute }}>{colorHex}</span>
       </div>
-
-      {/* カラーパイプライン bypass — ON で SuperSplat 同等処理 (HDR + tonemap +
-          gsplat ガンマ passthrough) を全部スキップし、PLY/SOG の色をそのまま出す。
-          下のカラー調整スライダーは bypass 中は効かない (CameraFrame が無いため)。
-          切替は init 時固定の CameraFrame に依存するので保存→リロード扱い。
-          PlayCanvas エンジンのときだけ意味があるので Spark 中は隠す。 */}
-      {!isVRMode && (cfg.engine ?? 'playcanvas') === 'playcanvas' && (
-        <>
-          <div style={S.toolbarGroupHead}>カラーパイプライン</div>
-          <label style={{ ...S.toggle, marginTop: 4 }} title="ON で SuperSplat 同等の色補正を全てスキップし、PLY/SOG の元の色をそのまま表示します">
-            <input
-              type="checkbox"
-              checked={cfg.bypassColorPipeline === true}
-              onChange={(e) => onToggleBypassPipeline(e.target.checked)}
-            />
-            <span>色調整なし (素のデータを表示) <span style={S.toolbarHint}>※リロードします</span></span>
-          </label>
-        </>
-      )}
 
       {/* カラー調整 — PlayCanvas (CameraFrame) でのみ反映。Spark / mkkellogg では無視される。
           bypass ON 中は CameraFrame が無いので、これらのスライダーは保存はされるが描画には反映されない。 */}

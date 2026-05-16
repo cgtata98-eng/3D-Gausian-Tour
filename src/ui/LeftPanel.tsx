@@ -1383,15 +1383,15 @@ function QualityBlock() {
   const bypass = useUIStore((s) => s.bypassColorPipeline);
   const setBypass = useUIStore((s) => s.setBypassColorPipeline);
   const setSectionHidden = useUIStore((s) => s.setSectionHidden);
-  // 「色調整なし」トグル: 現状は manifest 既定 (= null) か強制 ON (= true) の 2 値。
-  // CameraFrame と gsplatOutputVS chunk は initApp 内で 1 回だけ組まれるため、
-  // トグル切替は overlay → reload で適用する (Debug 側と同じパターン)。
-  const bypassOn = bypass === true;
+  // 色調整トグル: 既定 (= null) は OFF (= bypass)、ユーザーが ON にすると false を保存して
+  // 色補正パイプラインに切り替える。CameraFrame と gsplatOutputVS chunk は initApp 内で
+  // 1 回だけ組まれるので、トグル切替は overlay → reload で適用 (Debug 側と同じパターン)。
+  const adjustOn = bypass === false;
   const toggleBypass = () => {
-    const next = bypassOn ? null : true;
+    const next = adjustOn ? true : false; // ON → OFF (bypass=true) / OFF → ON (bypass=false)
     setBypass(next);
     const overlay = document.createElement('div');
-    overlay.textContent = next === true ? '色調整なしで再起動中…' : '色補正ありに戻して再起動中…';
+    overlay.textContent = next === true ? '色調整 OFF で再起動中…' : '色調整 ON で再起動中…';
     overlay.style.cssText = `
       position: fixed; inset: 0; display: flex;
       align-items: center; justify-content: center;
@@ -1418,18 +1418,17 @@ function QualityBlock() {
           { id: 'high', label: 'High' },
         ]}
       />
-      <label
-        style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 11.5, color: tokens.color.textMute, cursor: 'pointer', userSelect: 'none' }}
-        title="ON でトーン/露出/カラー補正をすべてスキップし、PLY/SOG の元の色をそのまま表示します。切替時にページがリロードされます。"
-      >
-        <input
-          type="checkbox"
-          checked={bypassOn}
-          onChange={toggleBypass}
-          style={{ accentColor: tokens.color.accent }}
+      <div style={{ marginTop: 10 }} title="ON で露出 / トーン / カラー補正を反映、OFF で学習時の色味のまま表示します。">
+        <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 4, letterSpacing: 0.3 }}>色調整</div>
+        <SegmentedToggle
+          value={adjustOn ? 'on' : 'off'}
+          onChange={(v) => { if ((v === 'on') !== adjustOn) toggleBypass(); }}
+          options={[
+            { id: 'on',  label: 'ON' },
+            { id: 'off', label: 'OFF' },
+          ]}
         />
-        <span>色調整なし (素の色味で表示)</span>
-      </label>
+      </div>
     </div>
   );
 }
