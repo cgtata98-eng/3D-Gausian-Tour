@@ -136,17 +136,12 @@ export function Viewer({ sceneId }: ViewerProps) {
   // Debug grid toggle.
   useEffect(() => { if (ready) sceneManagerRef.current?.setGridVisible(showGrid); }, [ready, showGrid]);
   // Live-apply render-quality settings whenever they change (toolbar / preset clicks).
-  // ui-store の `bypassColorPipeline` 上書きを毎回合成しなおして再適用する。CameraFrame は
-  // 永続なので、トグル変更だけでリロード不要にできる。
-  const userBypass = useUIStore((s) => s.bypassColorPipeline);
+  // bypassColorPipeline は CameraFrame の有無を切り替えるので、トグルは reload で反映する
+  // (= 初期化時の `initApp` だけが見る)。ここでは触らない。
   useEffect(() => {
     if (!ready) return;
-    const baseCfg = manifest?.settings.render;
-    const merged = userBypass === null
-      ? baseCfg
-      : { ...(baseCfg ?? {}), bypassColorPipeline: userBypass };
-    sceneManagerRef.current?.applyRenderConfig(merged);
-  }, [ready, manifest?.settings.render, userBypass]);
+    sceneManagerRef.current?.applyRenderConfig(manifest?.settings.render);
+  }, [ready, manifest?.settings.render]);
   useEffect(() => { if (ready) void sceneManagerRef.current?.applyActiveColor(); }, [ready, activeColor]);
   // AI variant: only kind='screen' is supported now — `AiScreenOverlay` paints
   // the 2D result on top of the canvas. No engine-side mode switching needed.

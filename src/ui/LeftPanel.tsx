@@ -1384,14 +1384,23 @@ function QualityBlock() {
   const setBypass = useUIStore((s) => s.setBypassColorPipeline);
   const setSectionHidden = useUIStore((s) => s.setSectionHidden);
   // 「色調整なし」トグル: 現状は manifest 既定 (= null) か強制 ON (= true) の 2 値。
-  // 強制 OFF (false) は author 側ユースケースで、viewer 側 UI は提供しない。
-  // CameraFrame は常設 (HDR バッファ維持) なので、トグルは applyRenderConfig 再適用だけで
-  // ランタイム反映する — リロードは不要。
+  // CameraFrame と gsplatOutputVS chunk は initApp 内で 1 回だけ組まれるため、
+  // トグル切替は overlay → reload で適用する (Debug 側と同じパターン)。
   const bypassOn = bypass === true;
   const toggleBypass = () => {
     const next = bypassOn ? null : true;
     setBypass(next);
-    // Viewer.tsx 側で ui-store の変化を購読して applyRenderConfig を再呼び出しする。
+    const overlay = document.createElement('div');
+    overlay.textContent = next === true ? '色調整なしで再起動中…' : '色補正ありに戻して再起動中…';
+    overlay.style.cssText = `
+      position: fixed; inset: 0; display: flex;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.85); color: #fff;
+      font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace;
+      z-index: 9999; letter-spacing: 0.5px; text-align: center; padding: 0 20px;
+    `;
+    document.body.appendChild(overlay);
+    setTimeout(() => window.location.reload(), 600);
   };
   return (
     <div style={sidebarBlock}>
@@ -1411,7 +1420,7 @@ function QualityBlock() {
       />
       <label
         style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 11.5, color: tokens.color.textMute, cursor: 'pointer', userSelect: 'none' }}
-        title="ON でトーン/露出/カラー補正をすべてスキップし、PLY/SOG の元の色をそのまま表示します。"
+        title="ON でトーン/露出/カラー補正をすべてスキップし、PLY/SOG の元の色をそのまま表示します。切替時にページがリロードされます。"
       >
         <input
           type="checkbox"
