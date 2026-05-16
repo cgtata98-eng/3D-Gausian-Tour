@@ -509,9 +509,9 @@ export class ThreeSceneManager {
   async setVariant(_f: 'on' | 'off', _l: 'day' | 'night'): Promise<void> { /* noop */ }
   setRenderMode(_m: 'default' | 'sharp' | 'highq') { /* preset is applied via applyRenderConfig */ }
   async setViewpointPanorama(_viewpointId: string, _dataUrl: string): Promise<void> { /* noop — 360 不対応 */ }
-  async loadHdri(_dataUrl: string): Promise<boolean> { return false; /* noop — 360 不対応 */ }
+  async loadHdri(_file: File): Promise<true | string> { return '360 モード未対応エンジンです'; }
   removeHdri(): void { /* noop — 360 不対応 */ }
-  setHdriIntensity(_v: number) { /* noop — 360 不対応 */ }
+  setStudioColor(_c: [number, number, number]): void { /* noop — 360 不対応 */ }
   /** PlayCanvas SceneManager がカメラを最後にレンダリングした位置でフレームをキャプチャする
    *  機能の three.js 等価。ここでは renderer の preserveDrawingBuffer 経由でキャンバスを
    *  toDataURL して返すだけ。マニフェストへの保存は呼び出し側で行う。 */

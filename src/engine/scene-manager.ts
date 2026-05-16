@@ -23,7 +23,8 @@ import type { SplatTransform, RenderQualityConfig } from '../core/types';
 import { applyRenderConfig, getRenderPreset } from './render-presets';
 import { extractTrianglesFromEntity } from './mesh-raycaster';
 import { loadCollisionGlb, setCollisionOpacity as setColOp, setCollisionVisible as setColVis } from './collision-loader';
-import { applyHdri, removeHdri, setHdriIntensity } from './hdri-loader';
+import { applyHdri, applyHdriFromFile, removeHdri } from './hdri-loader';
+import { setStudioColor } from './studio';
 import type { CollisionEntity } from './collision-loader';
 import { CameraController } from './camera-controller';
 import type { MovementMode } from './camera-controller';
@@ -1052,13 +1053,13 @@ export class SceneManager {
     if (this.collisionBlock) setColOp(this.collisionBlock, opacity);
   }
 
-  async loadHdri(dataUrl: string): Promise<boolean> {
+  async loadHdri(file: File): Promise<true | string> {
     try {
-      await applyHdri(this.app, dataUrl);
+      await applyHdriFromFile(this.app, file);
       return true;
     } catch (e) {
       console.error('Failed to load HDRI:', e);
-      return false;
+      return e instanceof Error ? e.message : String(e);
     }
   }
 
@@ -1066,8 +1067,11 @@ export class SceneManager {
     removeHdri(this.app);
   }
 
-  setHdriIntensity(intensity: number) {
-    setHdriIntensity(this.app, intensity);
+  /** Studio = camera background color. Always-on (no mode toggle). HDRI, when
+   *  loaded, draws over it via the SKYBOX layer; removing HDRI re-exposes this
+   *  color. */
+  setStudioColor(color: [number, number, number]) {
+    setStudioColor(this.app, color);
   }
 
   getManifest() {

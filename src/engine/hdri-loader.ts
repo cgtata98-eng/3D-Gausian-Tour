@@ -1,12 +1,13 @@
 import { AppBase, Quat, Vec3 } from 'playcanvas';
-import { applyEquirectSkybox, removeEquirectSkybox } from './equirect-skybox';
+import { applyEquirectSkybox, applyEquirectSkyboxFromBlob, removeEquirectSkybox } from './equirect-skybox';
 
 /** 180° rotation around +Y, baked once. Aligns equirect u=0.5 with camera yaw=0. */
 const SKYBOX_Y_FLIP = new Quat().setFromAxisAngle(Vec3.UP, 180);
 
 /**
- * Load a panorama image (PNG/JPG; HDR/EXR not supported in this path) and apply
- * it as the visible 360° skybox.
+ * Load a panorama image by URL (PNG/JPG only — the Image() decoder can't read
+ * Radiance .hdr / OpenEXR). Use `applyHdriFromFile` for the upload path which
+ * supports .hdr in addition to PNG/JPG.
  *
  * The visible skybox is rendered by `equirect-skybox.ts` — a custom mesh that
  * samples the equirect texture directly via spherical UVs from the view
@@ -42,14 +43,25 @@ export async function applyHdri(app: AppBase, url: string): Promise<void> {
   app.scene.skyboxRotation = SKYBOX_Y_FLIP;
 }
 
+/**
+ * Upload-path variant — accepts the raw File so the Radiance .hdr decoder can
+ * see the original bytes (data: URLs round-trip through Image() which silently
+ * fails on .hdr).
+ */
+export async function applyHdriFromFile(app: AppBase, file: File): Promise<void> {
+  app.scene.envAtlas = null;
+  app.scene.skybox = null;
+
+  await applyEquirectSkyboxFromBlob(app, file, file.name);
+
+  app.scene.skyboxIntensity = 1.0;
+  app.scene.skyboxMip = 0;
+  app.scene.skyboxRotation = SKYBOX_Y_FLIP;
+}
+
 /** Remove the current skybox */
 export function removeHdri(app: AppBase) {
   removeEquirectSkybox(app);
   app.scene.skybox = null;
   app.scene.envAtlas = null;
-}
-
-/** Set skybox intensity */
-export function setHdriIntensity(app: AppBase, intensity: number) {
-  app.scene.skyboxIntensity = intensity;
 }

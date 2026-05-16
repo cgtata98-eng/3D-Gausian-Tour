@@ -11,6 +11,7 @@ import { publishScene, repackSogBundle } from '../utils/publish';
 import { ThreeSceneManager } from '../engine/three/three-scene-manager';
 import { SceneManager } from '../engine/scene-manager';
 import { initApp } from '../engine/app-init';
+import { DEFAULT_STUDIO_COLOR } from '../engine/studio';
 
 /** Either renderer satisfies the methods DebugViewer calls. */
 type AnySceneManager = ThreeSceneManager | SceneManager;
@@ -34,6 +35,19 @@ import { getPinPlacements } from '../core/pin-placements';
 import { tokens } from './design-tokens';
 import * as idb from '../utils/idb';
 import { unzipSync } from 'fflate';
+
+function rgbToHex([r, g, b]: [number, number, number]): string {
+  const toHex = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [
+    parseInt(h.slice(0, 2), 16) / 255,
+    parseInt(h.slice(2, 4), 16) / 255,
+    parseInt(h.slice(4, 6), 16) / 255,
+  ];
+}
 
 export function DebugViewer({ sceneId }: { sceneId: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -74,8 +88,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const blockRef = useRef<HTMLInputElement>(null);
   const [hdriLoading, setHdriLoading] = useState(false);
   const [hdriName, setHdriName] = useState<string | null>(null);
-  const [hdriIntensity, setHdriIntensityState] = useState(1.0);
   const hdriInputRef = useRef<HTMLInputElement>(null);
+  const [studioBgColor, setStudioBgColor] = useState(rgbToHex(DEFAULT_STUDIO_COLOR));
   const [panoLoading, setPanoLoading] = useState<string | null>(null);
   const panoInputRef = useRef<HTMLInputElement>(null);
   const [panoTargetVp, setPanoTargetVp] = useState<string | null>(null);
@@ -618,23 +632,27 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     }
   };
 
-  const handleHdriFile = (file: File) => {
+  const handleHdriFile = async (file: File) => {
     const sm = smRef.current; if (!sm) return;
     setHdriLoading(true);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const d = e.target?.result as string;
-      if (d) {
-        const ok = await sm.loadHdri(d);
-        if (ok) setHdriName(file.name);
-      }
+    try {
+      const result = await sm.loadHdri(file);
+      if (result === true) setHdriName(file.name);
+      else alert(`HDRI の読み込みに失敗しました: ${file.name}\n${result}`);
+    } finally {
       setHdriLoading(false);
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const handleHdriRemove = () => { smRef.current?.removeHdri(); setHdriName(null); };
-  const handleHdriIntensity = (val: number) => { setHdriIntensityState(val); smRef.current?.setHdriIntensity(val); };
+
+  // Apply the background color to the camera whenever it changes. HDRI, when
+  // loaded, draws on top via the SKYBOX layer; removing HDRI re-exposes this
+  // color.
+  useEffect(() => {
+    if (!ready) return;
+    smRef.current?.setStudioColor?.(hexToRgb(studioBgColor));
+  }, [ready, studioBgColor]);
 
   // Apply view mode to the engine when it changes
   useEffect(() => {
@@ -2195,18 +2213,24 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             {/* ===== Environment (HDRI) — プランタブ最下部 ===== */}
             {debugTab === 'plan' && (
             <Section title="環境" subtitle="ENVIRONMENT" defaultOpen={false}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginTop: 4, marginBottom: 4 }}>HDRI (360° 背景)</div>
               <button onClick={() => hdriInputRef.current?.click()} style={S.fileBtn}>
-                {hdriLoading ? '読み込み中…' : (hdriName || '画像ファイルを選択 (HDR / EXR / PNG / JPG)')}
+                {hdriLoading ? '読み込み中…' : (hdriName || '画像ファイルを選択 (HDR / PNG / JPG)')}
               </button>
-              <input ref={hdriInputRef} type="file" accept=".hdr,.exr,.png,.jpg,.jpeg" style={{ display: 'none' }}
+              <input ref={hdriInputRef} type="file" accept=".hdr,.png,.jpg,.jpeg" style={{ display: 'none' }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleHdriFile(f); e.target.value = ''; }}
               />
               {hdriName && (
-                <>
-                  <Slider label="強度" min={0} max={3} step={0.05} value={hdriIntensity} onChange={handleHdriIntensity} />
-                  <button onClick={handleHdriRemove} style={S.btnDanger}>HDRI を削除</button>
-                </>
+                <button onClick={handleHdriRemove} style={S.btnDanger}>HDRI を削除</button>
               )}
+
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginBottom: 4 }}>背景色</div>
+                <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
+                  HDRI 未設定時に見える背景の色。HDRI を読み込むとその裏側になります。
+                </div>
+                <StudioColorRow label="背景色" value={studioBgColor} onChange={setStudioBgColor} />
+              </div>
             </Section>
             )}
 
@@ -3741,6 +3765,26 @@ function Slider({ label, min, max, step, value, onChange }: { label: string; min
       <input type="range" min={min} max={max} step={step} value={value}
         onChange={e => onChange(parseFloat(e.target.value))}
         style={S.slider} />
+    </div>
+  );
+}
+
+function StudioColorRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0' }}>
+      <span style={{ flex: 1, fontSize: 12, color: tokens.color.textMute }}>{label}</span>
+      <input
+        type="color"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ width: 36, height: 24, padding: 0, border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4, cursor: 'pointer' }}
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ ...S.input, width: 84, marginBottom: 0, fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace', fontSize: 11 }}
+      />
     </div>
   );
 }
