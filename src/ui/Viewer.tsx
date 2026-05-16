@@ -209,13 +209,17 @@ export function Viewer({ sceneId }: ViewerProps) {
             showDebugLink={false}
             onPlanSwitch={(planId) => { void sceneManagerRef.current?.setActivePlan(planId); }}
           />
-          <MobileJoystick onChange={(x, y) => {
-            sceneManagerRef.current?.setTouchJoystick?.(x, y);
-            // ジョイスティックを動かしたら左サイドバーを閉じる (スマホのみ。
-            // MobileJoystick 自体が pointer:coarse 端末でしか描画されないので、
-            // ここに来た時点で touch device 確定)。閉じる操作は冪等なので毎フレーム呼んで OK。
-            if (x !== 0 || y !== 0) useUIStore.getState().setSidebarCollapsed(true);
-          }} />
+          {/* 移動が無い product (showroom) ではジョイスティックを出さない。OrbitCameraController が
+              キャンバスの touch / pointer をそのまま使うので joystick オーバーレイは邪魔。 */}
+          {useUIStore.getState().projectType !== 'product' && (
+            <MobileJoystick onChange={(x, y) => {
+              sceneManagerRef.current?.setTouchJoystick?.(x, y);
+              // ジョイスティックを動かしたら左サイドバーを閉じる (スマホのみ。
+              // MobileJoystick 自体が pointer:coarse 端末でしか描画されないので、
+              // ここに来た時点で touch device 確定)。閉じる操作は冪等なので毎フレーム呼んで OK。
+              if (x !== 0 || y !== 0) useUIStore.getState().setSidebarCollapsed(true);
+            }} />
+          )}
           <PinsOverlayGate containerRef={wrapRef} />
         </>
       )}

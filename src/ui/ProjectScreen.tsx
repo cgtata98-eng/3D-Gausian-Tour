@@ -325,7 +325,7 @@ function ProjectCard({ project, onOpen, onDelete, onEdit }: {
   onDelete: () => void;
   onEdit: () => void;
 }) {
-  const typeLabel = project.type === 'mansion' ? '住居・店舗' : 'その他';
+  const typeLabel = project.type === 'mansion' ? '住居・店舗' : project.type === 'product' ? 'showroom' : 'その他';
   const modeLabel = project.viewMode === 'splat' ? '3DGS' : '360VR';
   const isMansion = project.type === 'mansion';
   const [copied, setCopied] = useState(false);
@@ -505,6 +505,7 @@ function ProjectDialog({ mode, initial, onCancel, onSubmit }: {
               options={[
                 { value: 'mansion', title: '住居・店舗', sub: '住宅 / マンション / 店舗' },
                 { value: 'other',   title: 'その他',     sub: '展示 / 屋外 / 任意の空間' },
+                { value: 'product', title: 'showroom',  sub: '家具など 1 点を回して見る' },
               ]}
             />
           </Field>
@@ -625,6 +626,17 @@ function ThumbPlaceholder({ type }: { type: ProjectType }) {
       <svg viewBox="0 0 64 64" width="56" height="56" style={S.thumbIcon}>
         <path d="M8 32 L32 12 L56 32 V52 H40 V36 H24 V52 H8 Z" fill="none" stroke="#c8d3e8" strokeWidth="2.5" strokeLinejoin="round" />
         <path d="M28 22 H36" stroke="#c8d3e8" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === 'product') {
+    // 単体 showroom: 台座 + 回転矢印で「ターンテーブル」表現
+    return (
+      <svg viewBox="0 0 64 64" width="56" height="56" style={S.thumbIcon}>
+        <ellipse cx="32" cy="46" rx="22" ry="6" fill="none" stroke="#a3c7c2" strokeWidth="2.5" />
+        <rect x="22" y="22" width="20" height="20" rx="2" fill="#a3c7c2" opacity="0.35" stroke="#a3c7c2" strokeWidth="2" />
+        <path d="M14 18 A20 8 0 0 1 50 16" fill="none" stroke="#a3c7c2" strokeWidth="2" strokeLinecap="round" />
+        <path d="M48 14 L52 16 L48 20" fill="none" stroke="#a3c7c2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }

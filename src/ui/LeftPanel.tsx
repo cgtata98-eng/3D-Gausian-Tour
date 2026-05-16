@@ -42,8 +42,10 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useUIStore((s) => s.setSidebarCollapsed);
   // 「その他」(展示 / 屋外 / 任意の空間) のときは住居・店舗向けの項目 (間取り概要) を出さない
+  // 「product」(単体 showroom) はさらに視点 / 図面 / 移動モードも丸ごと不要。
   const projectType = useUIStore((s) => s.projectType);
   const isOther = projectType === 'other';
+  const isProduct = projectType === 'product';
   const viewMode = useUIStore((s) => s.viewMode);
   // 制作者が Debug → ツールバー表示 で消した項目はそもそも DOM に出さない。
   // 既定 (= undefined) は表示扱い。
@@ -64,18 +66,18 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // ツールバー表示で必要な項目を明示的にチェックして出します。
   // 例外: `quality` だけは既定 ON — 描画品質はビューア側で見る人の端末性能に応じて
   // 切り替えたい操作なので、毎回チェックさせると面倒。
-  const showType       = tb.type       === true;
-  const showOverview   = tb.overview   === true && !isOther;
-  const showViewpoints = tb.viewpoints === true;
+  const showType       = tb.type       === true && !isProduct;
+  const showOverview   = tb.overview   === true && !isOther && !isProduct;
+  const showViewpoints = tb.viewpoints === true && !isProduct;
   const showColor      = tb.color      === true && !isOther;
-  const showMap        = tb.map        === true;
+  const showMap        = tb.map        === true && !isProduct;
   // 拡大 (fullscreen) はデスクトップ専用。スマホ (touch) は OS 側の全画面 UI と
    // 衝突するうえ、サイドバー幅が限られるのでアイコンを出さない。
   const showFullscreen = tb.fullscreen === true && !isTouchDevice;
   // タグ (ピン) は viewerToolbar.pins で制作者が opt-in したときだけアイコンが出る。
   // タップで `useUIStore.showPins` が反転 → ScenePinsOverlay の出し分けに使う。
   const showPinsToggle = tb.pins === true;
-  const showMovement   = tb.movement   === true && viewMode === 'splat';
+  const showMovement   = tb.movement   === true && viewMode === 'splat' && !isProduct;
   // ヘッドトラッキングは VR モードでも有効 (パノラマ視点回転に使える)。
   const showDemo       = tb.demo       === true;
   const showQuality    = tb.quality    !== false && viewMode === 'splat';
@@ -84,7 +86,8 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // `pointer: coarse` regardless of the toolbar config. The author can still
   // suppress it explicitly with `tb.mobile === false`.
   // `isTouchDevice` は上で placement のために評価済みなので再代入はしない。
-  const showMobile     = tb.mobile     !== false && viewMode === 'splat' && isTouchDevice;
+  // showroom (product) は移動が無いので「移動スピード」スライダーも出さない。
+  const showMobile     = tb.mobile     !== false && viewMode === 'splat' && isTouchDevice && !isProduct;
 
   // Collapsed: render only a tiny floating button to bring the sidebar back.
   // 折りたたみハンドルの位置はサイドバーと同側に揃える (PC 左上 / スマホ縦 右下 / スマホ横 右上)。

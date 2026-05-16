@@ -27,6 +27,13 @@ import { applyHdri, removeHdri, setHdriIntensity } from './hdri-loader';
 import type { CollisionEntity } from './collision-loader';
 import { CameraController } from './camera-controller';
 import type { MovementMode } from './camera-controller';
+import { OrbitCameraController } from './orbit-camera-controller';
+import { useProjectStore } from '../store/project-store';
+
+/** Either walk/fly controller (room tour) or orbit controller (showroom). The
+ *  two classes are structurally compatible so SceneManager can hold either via
+ *  the same field. */
+type AnyCameraController = CameraController | OrbitCameraController;
 import { useSceneStore } from '../store/scene-store';
 import { useCameraStore } from '../store/camera-store';
 import { useUIStore } from '../store/ui-store';
@@ -53,7 +60,7 @@ interface SkyboxSnapshot {
 export class SceneManager {
   private app: AppBase;
   private camera: Entity;
-  private cameraController: CameraController | null = null;
+  private cameraController: AnyCameraController | null = null;
   private splatEntity: Entity | null = null;
   private manifest: SceneManifest | null = null;
   private debugSyncHandler: ((dt: number) => void) | null = null;
@@ -193,22 +200,36 @@ export class SceneManager {
       // Apply the user's saved quality preset now that the splat material exists.
       this.applyQualityMode(useUIStore.getState().qualityMode);
 
+      // `product` (= 単体 showroom) はオービットカメラで回して見るモード。床コリジョンや
+      // 視点 (viewpoint) は使わないため、CameraController 経路を丸ごとスキップして
+      // OrbitCameraController を入れる。それ以外は従来の walk/fly カメラ。
+      const project = useProjectStore.getState().getProject(sceneId);
+      const isProduct = project?.type === 'product';
+
       // Auto-load collision GLBs (walkable / block) if the active plan declares
       // them. References can be IDB blobs (Debug-side authoring) or relative
-      // paths resolved against R2 (customer viewer).
-      if (activePlan?.collision?.walkable) {
+      // paths resolved against R2 (customer viewer). 製品 showroom では使用しない。
+      if (!isProduct && activePlan?.collision?.walkable) {
         void this.loadCollisionFromManifestRef(activePlan.collision.walkable, 'walkable');
       }
-      if (activePlan?.collision?.block) {
+      if (!isProduct && activePlan?.collision?.block) {
         void this.loadCollisionFromManifestRef(activePlan.collision.block, 'block');
       }
 
-      this.cameraController = new CameraController(this.app, this.camera, {
-        moveSpeed: manifest.settings.moveSpeed,
-        cameraHeight: manifest.settings.initialHeight ?? manifest.settings.cameraHeight,
-        zoomFovMin: manifest.settings.zoomFovMin ?? 25,
-        zoomFovMax: manifest.settings.zoomFovMax ?? 100,
-      });
+      if (isProduct) {
+        this.cameraController = new OrbitCameraController(this.app, this.camera, {
+          fov: manifest.settings.zoomFovMax ?? 45,
+          zoomFovMin: manifest.settings.zoomFovMin ?? 20,
+          zoomFovMax: manifest.settings.zoomFovMax ?? 90,
+        });
+      } else {
+        this.cameraController = new CameraController(this.app, this.camera, {
+          moveSpeed: manifest.settings.moveSpeed,
+          cameraHeight: manifest.settings.initialHeight ?? manifest.settings.cameraHeight,
+          zoomFovMin: manifest.settings.zoomFovMin ?? 25,
+          zoomFovMax: manifest.settings.zoomFovMax ?? 100,
+        });
+      }
       if (typeof manifest.settings.pitchMaxUp === 'number') {
         this.cameraController.setPitchMaxUp(manifest.settings.pitchMaxUp);
       }
@@ -216,19 +237,46 @@ export class SceneManager {
       // viewpoint's saved direction. The user now commits an orientation explicitly via the
       // 📷 button (`captureCurrentFrameAsManualThumbnail`) or the yaw slider in 図面設定.
 
-      this.createPlayerMarker();
+      if (!isProduct) {
+        this.createPlayerMarker();
 
-      // Capture a thumbnail at each viewpoint's start position while still on the loading screen.
-      if (activePlan && activePlan.splat) {
-        const thumbs = await this.captureViewpointThumbnails();
-        if (activePlan.id) store.setViewpointThumbnails(activePlan.id, thumbs);
-      }
+        // Capture a thumbnail at each viewpoint's start position while still on the loading screen.
+        if (activePlan && activePlan.splat) {
+          const thumbs = await this.captureViewpointThumbnails();
+          if (activePlan.id) store.setViewpointThumbnails(activePlan.id, thumbs);
+        }
 
-      // Initial pose is always the first viewpoint (= the thumbnail the user sees first).
-      // Any legacy `fixedPosition` / `initialPositionMode` data on the manifest is ignored.
-      const vps = activePlan?.viewpoints ?? [];
-      if (vps.length > 0) {
-        this.jumpToViewpoint(vps[0]);
+        // Initial pose is always the first viewpoint (= the thumbnail the user sees first).
+        // Any legacy `fixedPosition` / `initialPositionMode` data on the manifest is ignored.
+        const vps = activePlan?.viewpoints ?? [];
+        if (vps.length > 0) {
+          this.jumpToViewpoint(vps[0]);
+        }
+      } else if (this.splatEntity && this.cameraController instanceof OrbitCameraController) {
+        // showroom: orbit カメラを splat に合わせる。PlayCanvas v2 の gsplat instance では
+        // AABB を `.instance.aabb` で読めるが、ビルドによってフィールド名がブレるので
+        // 複数経路を試す。AABB が取れなければ splat entity のワールド位置をターゲットに
+        // フォールバック (= 少なくとも entity の方向は向く)。
+        const splatEnt = this.splatEntity;
+        const gs = splatEnt.gsplat as unknown as {
+          instance?: { aabb?: { center: Vec3; halfExtents: Vec3 } | null; customAabb?: { center: Vec3; halfExtents: Vec3 } | null };
+          aabb?: { center: Vec3; halfExtents: Vec3 } | null;
+          customAabb?: { center: Vec3; halfExtents: Vec3 } | null;
+        } | null;
+        const aabb = gs?.instance?.aabb ?? gs?.instance?.customAabb ?? gs?.aabb ?? gs?.customAabb ?? null;
+        if (aabb && aabb.center && aabb.halfExtents) {
+          // AABB はローカル空間想定 — splatTransform が当たった entity でワールド変換する。
+          const worldCenter = splatEnt.getWorldTransform().transformPoint(aabb.center.clone());
+          this.cameraController.setTarget(worldCenter.x, worldCenter.y, worldCenter.z);
+          const radius = Math.max(aabb.halfExtents.x, aabb.halfExtents.y, aabb.halfExtents.z);
+          this.cameraController.frameRadius(Math.max(0.5, radius * 1.6));
+          console.info('[showroom] orbit target =', worldCenter, ' radius =', radius);
+        } else {
+          // フォールバック: entity の現在ワールド座標を target に。距離は既定 2.5m。
+          const p = splatEnt.getPosition();
+          this.cameraController.setTarget(p.x, p.y, p.z);
+          console.warn('[showroom] gsplat AABB not available, using entity position', p);
+        }
       }
 
       // Sync camera to store + sample FPS. PlayCanvas passes `dt` (seconds since last

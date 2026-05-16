@@ -14,8 +14,13 @@ export type ViewMode = 'splat' | '360';
  *   for vertical. Block collision still applies in both modes (walls stop you).
  */
 export type MovementMode = 'walk' | 'fly';
-/** Top-level project category: residential mansion or generic non-mansion content. */
-export type ProjectType = 'mansion' | 'other';
+/**
+ * Top-level project category:
+ *  - `mansion` 住居・店舗ツアー (= 既定)
+ *  - `other`   展示・屋外などの汎用空間 (= ルームツアー UI を一部省略)
+ *  - `product` 単体モデル showroom (= ターンテーブル / orbit カメラ。家具など 1 点を回して見る)
+ */
+export type ProjectType = 'mansion' | 'other' | 'product';
 
 /** Big sidebar sections that the user can hide / restore individually via the × on each. */
 export type SidebarSection = 'type' | 'color' | 'viewpoints' | 'map' | 'tools' | 'movement' | 'tracking' | 'quality' | 'aiGenerate' | 'mobile';
