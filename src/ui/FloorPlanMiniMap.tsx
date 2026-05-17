@@ -18,11 +18,20 @@ interface FloorPlanMiniMapProps {
    * Receives world (x, z) coordinates. The caller decides which viewpoint to move.
    */
   onMapClick?: (worldX: number, worldZ: number) => void;
+  /**
+   * Dot-drag delegate. When provided, dragging a dot routes through this callback
+   * INSTEAD of writing `mapPosition` directly — the caller decides whether to also
+   * sync the camera-anchor `position` (GS mode) or keep them separate (VR mode).
+   */
+  onMoveViewpoint?: (vpId: string, worldX: number, worldZ: number) => void;
+  /** Fired once on mouseup at the end of a dot drag. Caller can use this to
+   *  finalize side-effects (e.g. jump the camera to the new pose). */
+  onMoveViewpointEnd?: (vpId: string) => void;
 }
 
 function isImageFile(f: string): boolean { return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f); }
 
-export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: overrideStyle, editable = false, collapsible = false, defaultCollapsed = false, onMapClick }: FloorPlanMiniMapProps) {
+export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: overrideStyle, editable = false, collapsible = false, defaultCollapsed = false, onMapClick, onMoveViewpoint, onMoveViewpointEnd }: FloorPlanMiniMapProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const manifest = useSceneStore((s) => s.manifest);
   const activePlanId = useSceneStore((s) => s.activePlanId);
@@ -109,8 +118,13 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
     const dwz = ((pt.y - d.sy) / (dH - PADDING * 2)) * worldH;
     const newX = +(d.ox + dwx).toFixed(3);
     const newZ = +(d.oz + dwz).toFixed(3);
-    // Update only the map override, never the camera-anchor position. Keeps the panorama /
-    // thumbnail aligned with the actual capture pose.
+    // If the caller wants to own the move semantics (e.g. GS mode also syncs
+    // `position`), delegate. Otherwise fall back to the legacy "only `mapPosition`"
+    // path so VR-only callers keep working.
+    if (onMoveViewpoint) {
+      onMoveViewpoint(d.vpId, newX, newZ);
+      return;
+    }
     if (!activePlanId) return;
     useSceneStore.setState((s) => {
       if (!s.manifest?.plans) return s;
@@ -124,9 +138,14 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
         },
       };
     });
-  }, [getSvgPt, dW, dH, worldW, worldH, activePlanId]);
+  }, [getSvgPt, dW, dH, worldW, worldH, activePlanId, onMoveViewpoint]);
 
-  const onDE = useCallback(() => { dragRef.current = null; setDraggingId(null); }, []);
+  const onDE = useCallback(() => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    setDraggingId(null);
+    if (d && onMoveViewpointEnd) onMoveViewpointEnd(d.vpId);
+  }, [onMoveViewpointEnd]);
 
   /** Convert a screen click on the SVG to world (x, z) using the same toMX/toMY mapping. */
   const onSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {

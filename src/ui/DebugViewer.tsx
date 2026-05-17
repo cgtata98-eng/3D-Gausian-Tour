@@ -466,7 +466,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
    *   平行移動して「向きを保ったまま位置だけ移動」する。`mapPosition` も同期するので MAP の
    *   dot と実ジャンプ先が一致する。アクティブ視点ならクリック直後にカメラを新位置へ jump。
    */
-  const placeViewpointAt = (vpId: string, worldX: number, worldZ: number) => {
+  const placeViewpointAt = (vpId: string, worldX: number, worldZ: number, opts: { jump?: boolean } = {}) => {
+    const shouldJump = opts.jump ?? true;
     if (!activePlanId) return;
     const x = +worldX.toFixed(3);
     const z = +worldZ.toFixed(3);
@@ -509,7 +510,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     });
     // GS で active 視点を動かしたら、即座にカメラを新しい位置へジャンプして
     // 「MAP で配置 = ジャンプ先が変わる」が即体感できるようにする。
-    if (updatedVp && activeVp === vpId) {
+    // ドラッグ中 (jump:false) は呼ばないので、ガクガク追従にならない。
+    if (shouldJump && updatedVp && activeVp === vpId) {
       smRef.current?.jumpToViewpoint(updatedVp);
     }
   };
@@ -2197,6 +2199,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           style={S.floorPlanEditor}
                           onMapClick={(wx, wz) => {
                             if (activeVp) placeViewpointAt(activeVp, wx, wz);
+                          }}
+                          onMoveViewpoint={(id, wx, wz) => placeViewpointAt(id, wx, wz, { jump: false })}
+                          onMoveViewpointEnd={(id) => {
+                            const plan = useSceneStore.getState().manifest?.plans?.find(p => p.id === activePlanId);
+                            const vp = plan?.viewpoints.find(v => v.id === id);
+                            if (vp && activeVp === id) smRef.current?.jumpToViewpoint(vp);
                           }}
                         />
                       </div>
