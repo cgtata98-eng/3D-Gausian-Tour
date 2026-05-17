@@ -133,7 +133,10 @@ async function loadEquirectTextureFromUrl(app: AppBase, url: string): Promise<Lo
 function loadEquirectTextureFromHdrBuffer(app: AppBase, buffer: ArrayBuffer): LoadedTexture {
   const loader = new HDRLoader();
   loader.type = HalfFloatType;
-  const parsed = loader.parse(buffer) as { width: number; height: number; data: Uint16Array };
+  // `HDRLoader.parse()` の戻り型は `data: Uint8Array | Float32Array` だが、`type = HalfFloatType`
+  // を設定したときは実体が Uint16Array (= half-float ビット表現) になる。TS 型は追随できない
+  // ので unknown 経由でキャスト。
+  const parsed = loader.parse(buffer) as unknown as { width: number; height: number; data: Uint16Array };
   const device = app.graphicsDevice;
   const maxSize = (device as unknown as { maxTextureSize?: number }).maxTextureSize ?? 8192;
   if (parsed.width > maxSize || parsed.height > maxSize) {
