@@ -9,21 +9,6 @@ import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types
 import * as idb from '../utils/idb';
 import { tokens } from './design-tokens';
 
-/**
- * Constrain pan so the zoomed image still covers the viewport (no empty letterbox edges).
- * Transform is `translate(panX, panY) scale(scale)` on a `dW × dH` content; clamp panX into
- * `[-(scale-1)*dW, 0]` and panY likewise.
- */
-function clampZoom(z: { scale: number; panX: number; panY: number }, dW: number, dH: number) {
-  const minX = -(z.scale - 1) * dW;
-  const minY = -(z.scale - 1) * dH;
-  return {
-    scale: z.scale,
-    panX: Math.max(minX, Math.min(0, z.panX)),
-    panY: Math.max(minY, Math.min(0, z.panY)),
-  };
-}
-
 interface LeftPanelProps {
   onViewpointClick: (id: string) => void;
   /** Switch the active plan (= type). Required to render the タイプ block. */
@@ -215,32 +200,9 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
 function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => void }) {
   const manifest = useSceneStore((s) => s.manifest);
   const activePlanId = useSceneStore((s) => s.activePlanId);
-  const yaw = useCameraStore((s) => s.yaw);
   const activeVp = useCameraStore((s) => s.activeViewpoint);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [imgFailed, setImgFailed] = useState(false);
-  const mapRef = useRef<HTMLDivElement>(null);
-  /** Pan + zoom in CSS-pixel space relative to the map's top-left. scale ∈ [1, 8]. */
-  const [zoom, setZoom] = useState({ scale: 1, panX: 0, panY: 0 });
-  // Suppress the synthetic click that fires after a pan-drag so the user doesn't accidentally
-  // teleport to a viewpoint right after panning.
-  const suppressNextClickRef = useRef(false);
-  // The green live-look cone starts visually anchored at the blue cone's direction (`mapYaw`
-  // / saved direction) when the user enters a viewpoint. Once the user mouse-drags to look
-  // around, it switches to following live camera yaw. Reset on viewpoint change. Pure display
-  // — does not touch the live camera or the manifest.
-  const [followLive, setFollowLive] = useState(false);
-  const lastVpRef = useRef<string | null>(null);
-  const baseYawRef = useRef<number>(0);
-  useEffect(() => {
-    if (lastVpRef.current !== activeVp) {
-      lastVpRef.current = activeVp;
-      baseYawRef.current = yaw;
-      setFollowLive(false);
-    } else if (!followLive && Math.abs(yaw - baseYawRef.current) > 0.5) {
-      setFollowLive(true);
-    }
-  }, [activeVp, yaw, followLive]);
 
   const activePlan = manifest?.plans?.find((p) => p.id === activePlanId);
   const floorPlan = activePlan?.floorPlan;
@@ -258,36 +220,6 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
     img.src = imageUrl;
   }, [imageUrl, hasFile]);
 
-  // Reset zoom when the underlying floor plan changes (different plan or scene).
-  useEffect(() => {
-    setZoom({ scale: 1, panX: 0, panY: 0 });
-  }, [imageUrl, activePlanId]);
-
-  // Native non-passive wheel listener so we can preventDefault and stop the panel scrolling.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const handler = (e: WheelEvent) => {
-      if (e.deltaY === 0) return;
-      e.preventDefault();
-      const rect = map.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      setZoom((z) => {
-        const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
-        const newScale = Math.max(1, Math.min(8, z.scale * factor));
-        if (Math.abs(newScale - z.scale) < 1e-3) return z;
-        const ratio = newScale / z.scale;
-        // Solve: keep the cursor anchor (mx, my) at the same screen pixel after zoom.
-        const newPanX = mx * (1 - ratio) + z.panX * ratio;
-        const newPanY = my * (1 - ratio) + z.panY * ratio;
-        return clampZoom({ scale: newScale, panX: newPanX, panY: newPanY }, rect.width, rect.height);
-      });
-    };
-    map.addEventListener('wheel', handler, { passive: false });
-    return () => map.removeEventListener('wheel', handler);
-  }, []);
-
   if (!manifest || !floorPlan) {
     return (
       <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 12, textAlign: 'center' }}>
@@ -296,7 +228,6 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
     );
   }
 
-  // Sized to fit within the new sidebar's MAP block (sidebar 320 − padding/border ~24).
   const size = 280;
   const worldW = floorPlan.bounds.max[0] - floorPlan.bounds.min[0];
   const worldH = floorPlan.bounds.max[1] - floorPlan.bounds.min[1];
@@ -304,57 +235,18 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
   let dW = size, dH = size;
   if (aspect > 1) dH = size / aspect; else dW = size * aspect;
 
-  // No padding inset — the floor plan image fills the panel completely. SVG dots can sit
-  // right at the edges; the wrapping div has overflow:visible so labels aren't clipped.
   const toMX = (wx: number) => ((wx - floorPlan.bounds.min[0]) / worldW) * dW;
   const toMY = (wz: number) => ((wz - floorPlan.bounds.min[1]) / worldH) * dH;
 
   const hasImage = hasFile && !imgFailed;
   const viewpoints = activePlan?.viewpoints ?? [];
 
-  const onPanStart = (e: React.MouseEvent) => {
-    if (zoom.scale <= 1.001) return; // nothing to pan when at base scale
-    // Do not start a pan if the mousedown was on a clickable viewpoint dot.
-    const target = e.target as Element | null;
-    if (target?.closest('[data-vp-dot="1"]')) return;
-    const startX = e.clientX, startY = e.clientY;
-    const startPanX = zoom.panX, startPanY = zoom.panY;
-    let moved = false;
-    const rect = mapRef.current?.getBoundingClientRect();
-    const onMove = (ev: MouseEvent) => {
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
-      if (!moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) moved = true;
-      setZoom((z) => clampZoom({ scale: z.scale, panX: startPanX + dx, panY: startPanY + dy }, rect?.width ?? 0, rect?.height ?? 0));
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      if (moved) suppressNextClickRef.current = true;
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
-
-  const onDoubleClick = () => setZoom({ scale: 1, panX: 0, panY: 0 });
-
   return (
-    <div
-      ref={mapRef}
-      onMouseDown={onPanStart}
-      onDoubleClick={onDoubleClick}
-      style={{
-        position: 'relative', width: dW, height: dH, borderRadius: 6,
-        overflow: 'hidden',
-        cursor: zoom.scale > 1.001 ? 'grab' : 'default',
-        userSelect: 'none',
-      }}
-    >
-    <div style={{ position: 'absolute', top: 0, left: 0, width: dW, height: dH, transform: `translate(${zoom.panX}px, ${zoom.panY}px) scale(${zoom.scale})`, transformOrigin: '0 0' }}>
+    <div style={{ position: 'relative', width: dW, height: dH, borderRadius: 6, overflow: 'hidden', userSelect: 'none' }}>
       {hasImage && <img src={imageUrl} alt="" style={{ position: 'absolute', top: 0, left: 0, width: dW, height: dH, objectFit: 'fill', display: 'block', borderRadius: 6 }} />}
       <svg width={dW} height={dH} viewBox={`0 0 ${dW} ${dH}`} style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible' }}>
         {!hasImage && <rect x={0} y={0} width={dW} height={dH} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" strokeWidth={1} rx={4} />}
-        {/* Sort: inactive first, active last so the active dot + its live cone always sit on top. */}
+        {/* Sort: inactive first, active last so the active dot sits on top. */}
         {[...viewpoints].sort((a, b) => (a.id === activeVp ? 1 : 0) - (b.id === activeVp ? 1 : 0)).map((vp) => {
           const mx = vp.mapPosition ? vp.mapPosition[0] : 0;
           const mz = vp.mapPosition ? vp.mapPosition[1] : 0;
@@ -364,81 +256,21 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
           const stroke = '#fff';
           const r = isA ? 6 : 5;
           const sw = isA ? 2 : 1.5;
-          // Main cone — manual direction from the 図面 yaw slider (`mapYaw`). Same source
-          // as the debug 図面 so both maps' main cones agree. Independent of `target`,
-          // so saving the VR thumbnail / initial direction never spins the cone.
-          const vpYaw = typeof vp.mapYaw === 'number' ? vp.mapYaw : 0;
-          const yawRad = (vpYaw + 90) * Math.PI / 180;
-          const cl = Math.min(dW, dH) * (isA ? 0.11 : 0.08);
-          const cTip = { x: cx + Math.cos(yawRad) * cl, y: cy - Math.sin(yawRad) * cl };
-          const cLL = { x: cx + Math.cos(yawRad + 0.45) * cl * 0.65, y: cy - Math.sin(yawRad + 0.45) * cl * 0.65 };
-          const cRR = { x: cx + Math.cos(yawRad - 0.45) * cl * 0.65, y: cy - Math.sin(yawRad - 0.45) * cl * 0.65 };
-          // Main cone is kept in the DOM but rendered transparent — we may want to bring
-          // it back as a visible "saved direction" indicator later, so the structure stays.
-          const mainCone = (
-            <polygon
-              points={`${cx},${cy} ${cLL.x},${cLL.y} ${cTip.x},${cTip.y} ${cRR.x},${cRR.y}`}
-              fill="transparent"
-              stroke="transparent"
-            />
-          );
-          // Live-look cone, only on the active viewpoint. Green so it reads as
-          // "where you're currently looking" — independent from the manual mapYaw.
-          // Initial direction matches the blue cone (mapYaw / derive); after the user
-          // mouse-drags, it follows live yaw. The live camera itself is never touched.
-          let liveCone: React.ReactNode = null;
-          if (isA) {
-            const initialYaw = typeof vp.mapYaw === 'number' ? vp.mapYaw : 0;
-            const lYawDeg = followLive ? yaw : initialYaw;
-            const lYawRad = (lYawDeg + 90) * Math.PI / 180;
-            const ll = Math.min(dW, dH) * 0.11;
-            // Live-look fan (sector) — uniform radius gives a true circular leading edge.
-            const fanSpread = 0.45; // half-angle in rad
-            const lL = { x: cx + Math.cos(lYawRad + fanSpread) * ll, y: cy - Math.sin(lYawRad + fanSpread) * ll };
-            const lR = { x: cx + Math.cos(lYawRad - fanSpread) * ll, y: cy - Math.sin(lYawRad - fanSpread) * ll };
-            const liveFanPath = `M ${cx},${cy} L ${lL.x},${lL.y} A ${ll},${ll} 0 0 0 ${lR.x},${lR.y} Z`;
-            liveCone = (
-              <path
-                d={liveFanPath}
-                fill="rgba(76,175,80,0.4)"
-                stroke="rgba(76,175,80,0.95)"
-                strokeWidth={1.2}
-                strokeLinejoin="round"
-              />
-            );
-          }
           return (
             <g
               key={vp.id}
-              data-vp-dot="1"
               style={{ cursor: 'pointer' }}
-              onClick={(e) => {
-                if (suppressNextClickRef.current) {
-                  suppressNextClickRef.current = false;
-                  e.stopPropagation();
-                  return;
-                }
-                onViewpointClick(vp.id);
-              }}
+              onClick={() => onViewpointClick(vp.id)}
               role="button"
               aria-label={`${vp.label} に移動`}
             >
-              {/* Invisible larger hit-target so the dot stays easy to click on touch / dense maps. */}
               <circle cx={cx} cy={cy} r={Math.max(r + 6, 12)} fill="transparent" />
-              {mainCone}
-              {liveCone}
               <circle cx={cx} cy={cy} r={r} fill={fill} stroke={stroke} strokeWidth={sw} />
               <text x={cx} y={cy - r - 4} textAnchor="middle" fill={isA ? '#4caf50' : '#f5f7fa'} fontSize={11} fontWeight={isA ? 'bold' : 600} stroke="rgba(0,0,0,0.75)" strokeWidth={3} paintOrder="stroke">{vp.label}</text>
             </g>
           );
         })}
       </svg>
-    </div>
-    {zoom.scale > 1.001 && (
-      <div style={zoomBadge} title="ダブルクリックで等倍に戻す">
-        ×{zoom.scale.toFixed(1)}
-      </div>
-    )}
     </div>
   );
 }
@@ -1383,28 +1215,7 @@ const aiCardActionBtn: React.CSSProperties = {
 function QualityBlock() {
   const value = useUIStore((s) => s.qualityMode);
   const setValue = useUIStore((s) => s.setQualityMode);
-  const bypass = useUIStore((s) => s.bypassColorPipeline);
-  const setBypass = useUIStore((s) => s.setBypassColorPipeline);
   const setSectionHidden = useUIStore((s) => s.setSectionHidden);
-  // 色調整トグル: 既定 (= null) は OFF (= bypass)、ユーザーが ON にすると false を保存して
-  // 色補正パイプラインに切り替える。CameraFrame と gsplatOutputVS chunk は initApp 内で
-  // 1 回だけ組まれるので、トグル切替は overlay → reload で適用 (Debug 側と同じパターン)。
-  const adjustOn = bypass === false;
-  const toggleBypass = () => {
-    const next = adjustOn ? true : false; // ON → OFF (bypass=true) / OFF → ON (bypass=false)
-    setBypass(next);
-    const overlay = document.createElement('div');
-    overlay.textContent = next === true ? '色調整 OFF で再起動中…' : '色調整 ON で再起動中…';
-    overlay.style.cssText = `
-      position: fixed; inset: 0; display: flex;
-      align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.85); color: #fff;
-      font-size: 18px; font-weight: 700; font-family: ui-monospace, monospace;
-      z-index: 9999; letter-spacing: 0.5px; text-align: center; padding: 0 20px;
-    `;
-    document.body.appendChild(overlay);
-    setTimeout(() => window.location.reload(), 600);
-  };
   return (
     <div style={sidebarBlock}>
       <div style={overviewHeaderRow}>
@@ -1421,17 +1232,6 @@ function QualityBlock() {
           { id: 'high', label: 'High' },
         ]}
       />
-      <div style={{ marginTop: 10 }} title="ON で露出 / トーン / カラー補正を反映、OFF で学習時の色味のまま表示します。">
-        <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 4, letterSpacing: 0.3 }}>色調整</div>
-        <SegmentedToggle
-          value={adjustOn ? 'on' : 'off'}
-          onChange={(v) => { if ((v === 'on') !== adjustOn) toggleBypass(); }}
-          options={[
-            { id: 'on',  label: 'ON' },
-            { id: 'off', label: 'OFF' },
-          ]}
-        />
-      </div>
     </div>
   );
 }
@@ -2079,21 +1879,6 @@ const vpLabelActive: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const zoomBadge: React.CSSProperties = {
-  position: 'absolute',
-  top: 6,
-  right: 6,
-  padding: '3px 8px',
-  fontSize: 10,
-  fontWeight: 700,
-  letterSpacing: 0.6,
-  color: tokens.color.text,
-  background: 'rgba(255,255,255,0.85)',
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: 4,
-  fontFamily: tokens.font.mono,
-  pointerEvents: 'none',
-};
 
 const infoSummary: React.CSSProperties = {
   marginLeft: 10,

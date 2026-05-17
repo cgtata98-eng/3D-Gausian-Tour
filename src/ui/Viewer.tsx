@@ -67,11 +67,9 @@ export function Viewer({ sceneId }: ViewerProps) {
         const manifest = await loadSceneManifest(sceneId);
         if (destroyed) return;
         useSceneStore.getState().setManifest(manifest);
-        // ユーザー側 bypass 上書き (画質ブロックのトグル) — null なら manifest 値そのまま。
-        const userBypass = useUIStore.getState().bypassColorPipeline;
-        const renderCfg = userBypass === null
-          ? manifest.settings.render
-          : { ...(manifest.settings.render ?? {}), bypassColorPipeline: userBypass };
+        // 色調整 (bypassColorPipeline) は Debug 側のオーサリングだけが決める。
+        // Viewer は manifest 値をそのまま使い、セッション上書きは持たない。
+        const renderCfg = manifest.settings.render;
         // Default flipped to PlayCanvas — the SuperSplat-quality migration in
         // `app-init.ts` + `gsplat-loader.ts` (CameraFrame post pipeline, gamma
         // passthrough, radialSorting, SH define, splatScale chunk) brings PlayCanvas

@@ -53,20 +53,6 @@ function loadInitialQuality(): QualityMode {
   return detectDefaultQuality();
 }
 
-/** 色調整 bypass (CameraFrame + gsplat gamma chunk スキップ → トレーニング元の色そのまま)
- *  をユーザー側で固定 ON にしたいケース用。`null` = manifest 値に従う (= 既定)、
- *  `true` = 強制 bypass。`false` = 強制 OFF (manifest が bypass=true でも色補正を有効化)。
- *  PlayCanvas 初期化時にしか効かないので、トグル切替はページリロードで反映する想定。 */
-const BYPASS_STORAGE_KEY = '3droomtour:bypassColorPipeline';
-function loadInitialBypass(): boolean | null {
-  try {
-    const v = localStorage.getItem(BYPASS_STORAGE_KEY);
-    if (v === 'true') return true;
-    if (v === 'false') return false;
-  } catch { /* ignore */ }
-  return null;
-}
-
 interface UIState {
   isDeveloper: boolean;
   /** Active color variant id (`Plan.colorVariants[*].id`). null = use the plan's default panoramas. */
@@ -179,14 +165,6 @@ interface UIState {
    */
   mobileJoystickActive: boolean;
   setMobileJoystickActive: (v: boolean) => void;
-  /**
-   * ユーザー側の色調整 bypass 上書き。`null` = manifest に従う / `true` = 強制 bypass
-   * (トレーニング元色そのまま) / `false` = 強制 OFF (色補正を効かせる)。
-   * Viewer.tsx で初期化時 renderCfg に合成される。CameraFrame は init 固定なので
-   * setter はリロードを促す側に倒している (UI 側で reload してから値を反映)。
-   */
-  bypassColorPipeline: boolean | null;
-  setBypassColorPipeline: (v: boolean | null) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -262,12 +240,4 @@ export const useUIStore = create<UIState>((set) => ({
   setMobileMoveSpeed: (mobileMoveSpeed) => set({ mobileMoveSpeed }),
   mobileJoystickActive: false,
   setMobileJoystickActive: (mobileJoystickActive) => set({ mobileJoystickActive }),
-  bypassColorPipeline: loadInitialBypass(),
-  setBypassColorPipeline: (bypassColorPipeline) => {
-    try {
-      if (bypassColorPipeline === null) localStorage.removeItem(BYPASS_STORAGE_KEY);
-      else localStorage.setItem(BYPASS_STORAGE_KEY, bypassColorPipeline ? 'true' : 'false');
-    } catch { /* ignore */ }
-    set({ bypassColorPipeline });
-  },
 }));
