@@ -395,6 +395,52 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     setFloorPlanImage('');
   };
 
+  /**
+   * 既存データの一括移行ユーティリティ。MAP クリック / dot ドラッグで `position` 同期する
+   * ロジックが入る前に作られた視点は `mapPosition` だけ書き換わり `position` が古いまま残る
+   * (= ジャンプ先が全部同じ場所になる) ことがある。この関数を 1 度叩くと、active plan の
+   * 全視点について `mapPosition` 値を `position.x / .z` に焼き込み、`target` も同じ delta だけ
+   * 平行移動して向きを保つ。`mapPosition` が未設定 / 既に position と一致するものはスキップ。
+   * isVRMode のチェックはしない — ユーザーが明示的に「焼き込み」と意思表示したケースなので
+   * VR/GS どちらの project type でも実行する。
+   */
+  const syncMapPositionsToCameraAnchors = () => {
+    if (!activePlanId) return;
+    let updated = 0;
+    useSceneStore.setState((s) => {
+      if (!s.manifest?.plans) return s;
+      return {
+        manifest: {
+          ...s.manifest,
+          plans: s.manifest.plans.map((p) => {
+            if (p.id !== activePlanId) return p;
+            return {
+              ...p,
+              viewpoints: p.viewpoints.map((v) => {
+                if (!v.mapPosition) return v;
+                const [mx, mz] = v.mapPosition;
+                if (Math.abs(mx - v.position[0]) < 1e-3 && Math.abs(mz - v.position[2]) < 1e-3) return v;
+                const dx = mx - v.position[0];
+                const dz = mz - v.position[2];
+                updated++;
+                return {
+                  ...v,
+                  position: [+mx.toFixed(3), v.position[1], +mz.toFixed(3)] as [number, number, number],
+                  target: [+(v.target[0] + dx).toFixed(3), v.target[1], +(v.target[2] + dz).toFixed(3)] as [number, number, number],
+                };
+              }),
+            };
+          }),
+        },
+      };
+    });
+    if (updated > 0 && activeVp) {
+      const av = useSceneStore.getState().manifest?.plans?.find(p => p.id === activePlanId)?.viewpoints.find(v => v.id === activeVp);
+      if (av) smRef.current?.jumpToViewpoint(av);
+    }
+    alert(`${updated} 件の視点を MAP 位置に同期しました`);
+  };
+
   const showCollision = useUIStore(s => s.showCollision);
   const toggleCollision = useUIStore(s => s.toggleCollision);
   const useCollisionWalkable = useUIStore(s => s.useCollisionWalkable);
@@ -2275,6 +2321,14 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         );
                       })()}
 
+                      <button
+                        type="button"
+                        onClick={syncMapPositionsToCameraAnchors}
+                        style={S.btn}
+                        title="MAP 上の dot 位置を、各視点の camera 位置 (position) に焼き込みます。古い視点 (= MAP ドラッグだけで配置してジャンプ先が同じ場所になってしまった視点) の一括移行に使用。target も同じ delta だけ平行移動して向きを保ちます。"
+                      >
+                        📍 MAP 位置で position を焼き直し
+                      </button>
                       <button
                         type="button"
                         onClick={clearFloorPlan}
