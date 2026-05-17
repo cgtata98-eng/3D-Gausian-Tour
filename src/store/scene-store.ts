@@ -144,6 +144,9 @@ interface SceneState {
   addViewpoint: (vp: Viewpoint) => void;
   removeViewpoint: (id: string) => void;
   updateViewpointLabel: (id: string, label: string) => void;
+  /** Reorder viewpoints in the active plan. Moves `fromId` to occupy `toId`'s
+   *  current index (other entries slide). No-op if either id is missing. */
+  reorderViewpoints: (fromId: string, toId: string) => void;
   setFloorPlanImage: (dataUrl: string) => void;
   updateInfo: (patch: Partial<SceneInfo>) => void;
   // ── Thumbnails ────────────────────────────────────────────────────
@@ -389,6 +392,16 @@ export const useSceneStore = create<SceneState>((set) => ({
     ...p,
     viewpoints: p.viewpoints.map((v) => (v.id === id ? { ...v, label } : v)),
   }))),
+  reorderViewpoints: (fromId, toId) => set((s) => withActivePlan(s, (p) => {
+    if (fromId === toId) return p;
+    const from = p.viewpoints.findIndex((v) => v.id === fromId);
+    const to = p.viewpoints.findIndex((v) => v.id === toId);
+    if (from < 0 || to < 0) return p;
+    const next = p.viewpoints.slice();
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    return { ...p, viewpoints: next };
+  })),
   setFloorPlanImage: (dataUrl) => set((s) => withActivePlan(s, (p) => ({
     ...p,
     floorPlan: { ...(p.floorPlan ?? DEFAULT_FLOOR_PLAN), image: dataUrl },

@@ -149,6 +149,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   // so a row only lights up while the cursor is over IT, not its sibling rows.
   const [planDragOverId, setPlanDragOverId] = useState<string | null>(null);
   const [vpDragOverId, setVpDragOverId] = useState<string | null>(null);
+  // Drag-reorder state for the viewpoint list. Separate from `vpDragOverId`
+  // (file drop) so the two highlights / drop effects never collide.
+  const [vpDragSrcId, setVpDragSrcId] = useState<string | null>(null);
+  const [vpReorderOverId, setVpReorderOverId] = useState<string | null>(null);
+  const vpRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const reorderViewpoints = useSceneStore(s => s.reorderViewpoints);
   // 「位置を変更」モード — { pinId, placementId } がセットされている間、preview を
   // クリックするとその placement の position が新しい床面交点に書き換えられる。
   // 新規タグ作成は「+ タグを追加」(未配置で list へ) → ドラッグで preview に配置。
@@ -454,26 +460,58 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   }, [ready]);
 
   /**
-   * Update only the floor-plan dot position for a viewpoint. The camera-anchor `position`
-   * (where the panorama / thumbnail was captured) is intentionally untouched so the
-   * preview / jump pose stays aligned with the captured frame.
+   * MAP クリックで視点を配置する。
+   * - VR (360°): `position` はパノラマ撮影位置として不変、`mapPosition` (= MAP 上の dot) だけ動かす。
+   * - GS (splat): `position.x / .z` を (worldX, worldZ) で上書き + `target` を同じ delta だけ
+   *   平行移動して「向きを保ったまま位置だけ移動」する。`mapPosition` も同期するので MAP の
+   *   dot と実ジャンプ先が一致する。アクティブ視点ならクリック直後にカメラを新位置へ jump。
    */
   const placeViewpointAt = (vpId: string, worldX: number, worldZ: number) => {
     if (!activePlanId) return;
     const x = +worldX.toFixed(3);
     const z = +worldZ.toFixed(3);
+    let updatedVp: { id: string; label: string; position: [number, number, number]; target: [number, number, number]; fov: number } | null = null;
     useSceneStore.setState((s) => {
       if (!s.manifest?.plans) return s;
       return {
         manifest: {
           ...s.manifest,
-          plans: s.manifest.plans.map((p) => p.id === activePlanId ? {
-            ...p,
-            viewpoints: p.viewpoints.map((v) => v.id === vpId ? { ...v, mapPosition: [x, z] as [number, number] } : v),
-          } : p),
+          plans: s.manifest.plans.map((p) => {
+            if (p.id !== activePlanId) return p;
+            return {
+              ...p,
+              viewpoints: p.viewpoints.map((v) => {
+                if (v.id !== vpId) return v;
+                if (isVRMode) {
+                  return { ...v, mapPosition: [x, z] as [number, number] };
+                }
+                const dx = x - v.position[0];
+                const dz = z - v.position[2];
+                const nextPos: [number, number, number] = [x, v.position[1], z];
+                const nextTarget: [number, number, number] = [
+                  +(v.target[0] + dx).toFixed(3),
+                  v.target[1],
+                  +(v.target[2] + dz).toFixed(3),
+                ];
+                const next = {
+                  ...v,
+                  position: nextPos,
+                  target: nextTarget,
+                  mapPosition: [x, z] as [number, number],
+                };
+                updatedVp = { id: next.id, label: next.label, position: nextPos, target: nextTarget, fov: next.fov };
+                return next;
+              }),
+            };
+          }),
         },
       };
     });
+    // GS で active 視点を動かしたら、即座にカメラを新しい位置へジャンプして
+    // 「MAP で配置 = ジャンプ先が変わる」が即体感できるようにする。
+    if (updatedVp && activeVp === vpId) {
+      smRef.current?.jumpToViewpoint(updatedVp);
+    }
   };
 
   /** Yaw (0–360°) of the cone for this viewpoint — purely from `mapYaw` (the slider).
@@ -900,8 +938,17 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   };
 
   const handleVpRowDragOver = (e: React.DragEvent, vpId: string) => {
+    const types = e.dataTransfer.types;
+    // Reorder takes precedence: a row dragged via its handle carries a custom
+    // type we set in `handleVpHandleDragStart` so file drops stay distinct.
+    if (types.indexOf('application/x-vp-reorder') >= 0) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (vpReorderOverId !== vpId) setVpReorderOverId(vpId);
+      return;
+    }
     if (!isVRMode) return; // panorama drop is VR-only.
-    if (e.dataTransfer.types.indexOf('Files') < 0) return;
+    if (types.indexOf('Files') < 0) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     if (vpDragOverId !== vpId) setVpDragOverId(vpId);
@@ -909,8 +956,17 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const handleVpRowDragLeave = (e: React.DragEvent) => {
     if (e.currentTarget.contains(e.relatedTarget as Node)) return;
     setVpDragOverId(null);
+    setVpReorderOverId(null);
   };
   const handleVpRowDrop = (e: React.DragEvent, vpId: string) => {
+    const sourceId = e.dataTransfer.getData('application/x-vp-reorder');
+    if (sourceId) {
+      e.preventDefault();
+      setVpReorderOverId(null);
+      setVpDragSrcId(null);
+      if (sourceId !== vpId) reorderViewpoints(sourceId, vpId);
+      return;
+    }
     if (!isVRMode) return;
     e.preventDefault();
     setVpDragOverId(null);
@@ -920,6 +976,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
       return;
     }
     handlePanoFile(file, vpId);
+  };
+  // Drag handle (☰) on each row initiates reorder. We don't make the whole
+  // row draggable so the label / buttons stay clickable as before.
+  const handleVpHandleDragStart = (e: React.DragEvent, vpId: string) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-vp-reorder', vpId);
+    const row = vpRowRefs.current[vpId];
+    if (row) e.dataTransfer.setDragImage(row, 12, row.offsetHeight / 2);
+    setVpDragSrcId(vpId);
+  };
+  const handleVpHandleDragEnd = () => {
+    setVpDragSrcId(null);
+    setVpReorderOverId(null);
   };
 
   /**
@@ -1839,18 +1908,33 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       const vpPanoSrc = activePlan?.panoramas?.[vp.id];
                       const showVrPreview = isA && isVRMode && !!vpPanoSrc && !!activePlanId;
                       const isVpDragOver = vpDragOverId === vp.id;
+                      const isReorderTarget = vpReorderOverId === vp.id && vpDragSrcId !== vp.id;
+                      const isDragSrc = vpDragSrcId === vp.id;
                       return (
                         <div key={vp.id}>
                         <div
+                          ref={(el) => { vpRowRefs.current[vp.id] = el; }}
                           style={{
                             ...S.vpRow,
                             ...(isA ? S.vpRowActive : null),
                             ...(isVpDragOver ? S.vpRowDropTarget : null),
+                            ...(isReorderTarget ? S.vpRowReorderTarget : null),
+                            ...(isDragSrc ? { opacity: 0.4 } : null),
                           }}
                           onDragOver={(e) => handleVpRowDragOver(e, vp.id)}
                           onDragLeave={handleVpRowDragLeave}
                           onDrop={(e) => handleVpRowDrop(e, vp.id)}
                         >
+                          <span
+                            draggable
+                            onDragStart={(e) => handleVpHandleDragStart(e, vp.id)}
+                            onDragEnd={handleVpHandleDragEnd}
+                            style={S.vpDragHandle}
+                            title="ドラッグで並び替え"
+                            aria-label="reorder"
+                          >
+                            ☰
+                          </span>
                           <button
                             onClick={() => handleVpClick(vp.id)}
                             style={S.vpThumb}
@@ -5183,6 +5267,17 @@ const S: Record<string, React.CSSProperties> = {
     background: tokens.gradient.success,
     borderColor: tokens.color.successBorder,
     boxShadow: `inset 0 0 0 2px ${tokens.color.successBorder}, ${tokens.shadow.glassSuccess}`,
+  } as React.CSSProperties,
+  vpRowReorderTarget: {
+    borderColor: tokens.color.accentBorder,
+    boxShadow: `inset 0 2px 0 0 ${tokens.color.accentBorder}`,
+  } as React.CSSProperties,
+  vpDragHandle: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 16, height: 28,
+    color: COLOR.textMute, fontSize: 14,
+    cursor: 'grab', userSelect: 'none' as const,
+    flexShrink: 0,
   } as React.CSSProperties,
   vpRowActive: {
     background: tokens.gradient.accent,
