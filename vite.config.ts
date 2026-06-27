@@ -19,6 +19,13 @@ function aiImageProxy(env: Record<string, string>) {
   return {
     name: 'ai-image-proxy',
     configureServer(server: { middlewares: { use: (path: string, fn: (req: IncomingMessage, res: ServerResponse) => void) => void } }) {
+      // Which providers have a server-side (.env.local) key — mirrors the Worker's
+      // /api/ai/config so the UI can offer key-free generation in dev too.
+      server.middlewares.use('/api/ai/config', (_req, res) => {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ gemini: !!env.GEMINI_API_KEY, openai: !!env.OPENAI_API_KEY }));
+      });
       server.middlewares.use('/api/ai/edit', async (req, res) => {
         const sendJson = (status: number, obj: unknown) => {
           res.statusCode = status;

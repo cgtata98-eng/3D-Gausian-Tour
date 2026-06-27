@@ -14,6 +14,13 @@ import { ADMIN_USERNAME, ADMIN_PASSWORD } from '../shared/admin-credentials';
 interface Env {
   ASSETS: Fetcher;
   BUCKET: R2Bucket;
+  /** Optional server-side prepaid API keys (set via `wrangler secret put GEMINI_API_KEY`).
+   *  Used ONLY as a fallback when the browser sends no X-*-Key header AND the request
+   *  passes the site Basic Auth — lets you share a spend-capped key without exposing it
+   *  to the recipient. The prepaid cap is the real protection; the password is bundled
+   *  (casual deterrence). */
+  GEMINI_API_KEY?: string;
+  OPENAI_API_KEY?: string;
 }
 
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024; // 500 MB per request
@@ -22,8 +29,12 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
+    if (url.pathname === '/api/ai/config') {
+      // Which providers have a server-side (embedded) key. Booleans only — no secret.
+      return jsonResponse({ gemini: !!env.GEMINI_API_KEY, openai: !!env.OPENAI_API_KEY });
+    }
     if (url.pathname === '/api/ai/edit') {
-      return handleAiEdit(request, url);
+      return handleAiEdit(request, url, env);
     }
     if (url.pathname.startsWith('/api/publish/')) {
       return handlePublish(request, env, url);
@@ -52,7 +63,7 @@ export default {
  * Cloudflare rate-limit rule on /api/ai/edit for volumetric abuse. The customer viewer
  * never calls this; only the authoring UI does.
  */
-async function handleAiEdit(request: Request, url: URL): Promise<Response> {
+async function handleAiEdit(request: Request, url: URL, env: Env): Promise<Response> {
   const json = (status: number, obj: unknown) =>
     new Response(JSON.stringify(obj), {
       status,
@@ -71,11 +82,15 @@ async function handleAiEdit(request: Request, url: URL): Promise<Response> {
     try { sameOrigin = new URL(originRef).host === url.host; } catch { sameOrigin = false; }
     if (!sameOrigin) return json(403, { error: { message: 'Forbidden origin' } });
   }
-  // 2. Require a provider key header so a keyless caller can't force a body parse.
+  // 2. Either a BYO key header, or pass the site Basic Auth (to use the embedded server
+  //    key). A keyless + unauthenticated caller can't force a body parse / use the
+  //    server key. NOTE: the password is bundled (casual deterrence); the prepaid spend
+  //    cap on the embedded key is the real protection against abuse.
   const oaKey = request.headers.get('x-openai-key')?.trim();
   const gemKey = request.headers.get('x-gemini-key')?.trim();
-  if (!oaKey && !gemKey) {
-    return json(401, { error: { message: 'API キーが未設定です。右上の ⚙ から OpenAI / Gemini キーを入力してください。' } });
+  const isAdmin = request.headers.get('Authorization') === 'Basic ' + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`);
+  if (!oaKey && !gemKey && !isAdmin) {
+    return json(401, { error: { message: 'API キーが未設定です。右上の ⚙ からキーを入力してください。' } });
   }
   // 3. Cap the declared body size (handlePublish caps too; this route previously had none).
   const MAX_BODY = 40 * 1024 * 1024; // 40 MB
@@ -103,7 +118,7 @@ async function handleAiEdit(request: Request, url: URL): Promise<Response> {
   const provider = body.provider === 'gemini' ? 'gemini' : 'openai';
   // The model id is interpolated into the Gemini request URL — restrict its charset
   // so a crafted value can't manipulate the path (this endpoint is publicly reachable).
-  if (body.model !== undefined && !/^[a-zA-Z0-9.\-]+$/.test(String(body.model))) {
+  if (body.model !== undefined && !/^[a-zA-Z0-9.-]+$/.test(String(body.model))) {
     return json(400, { error: { message: 'Invalid model id' } });
   }
 
@@ -125,7 +140,9 @@ async function handleAiEdit(request: Request, url: URL): Promise<Response> {
   const timer = setTimeout(() => ctrl.abort(), 90_000);
   try {
     if (provider === 'gemini') {
-      if (!gemKey) return json(401, { error: { message: 'Gemini API キーが未設定です。右上の ⚙ から Gemini キーを入力してください。' } });
+      // BYO header key, else the embedded server key (only for site-authed requests).
+      const key = gemKey || (isAdmin ? env.GEMINI_API_KEY?.trim() : undefined);
+      if (!key) return json(401, { error: { message: 'Gemini API キーが未設定です。右上の ⚙ から Gemini キーを入力してください。' } });
       const model = String(body.model ?? 'gemini-3.1-flash-image');
       // gemini-2.5-flash-image accepts only 3 input images total; clamp for safety.
       const imgs = model === 'gemini-2.5-flash-image' ? list.slice(0, 3) : list;
@@ -147,7 +164,7 @@ async function handleAiEdit(request: Request, url: URL): Promise<Response> {
       if (Object.keys(imageConfig).length > 0) generationConfig.imageConfig = imageConfig;
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': gemKey },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify({ contents: [{ parts }], generationConfig }),
         signal: ctrl.signal,
       });
@@ -168,7 +185,8 @@ async function handleAiEdit(request: Request, url: URL): Promise<Response> {
     }
 
     // OpenAI (default) — images/edits, multipart/form-data, Bearer auth.
-    if (!oaKey) return json(401, { error: { message: 'OpenAI API キーが未設定です。右上の ⚙ から OpenAI キーを入力してください。' } });
+    const key = oaKey || (isAdmin ? env.OPENAI_API_KEY?.trim() : undefined);
+    if (!key) return json(401, { error: { message: 'OpenAI API キーが未設定です。右上の ⚙ から OpenAI キーを入力してください。' } });
     const form = new FormData();
     list.forEach((dataUrl, i) => {
       const { mime, base64 } = parseDataUrl(dataUrl);
@@ -188,7 +206,7 @@ async function handleAiEdit(request: Request, url: URL): Promise<Response> {
     form.append('n', '1');
     const r = await fetch('https://api.openai.com/v1/images/edits', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${oaKey}` },
+      headers: { Authorization: `Bearer ${key}` },
       body: form,
       signal: ctrl.signal,
     });

@@ -9,6 +9,7 @@ import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types
 import * as idb from '../utils/idb';
 import { getOpenAIKey, getGeminiKey, getSelectedModelId, setSelectedModelId } from '../utils/api-keys';
 import { getModelById, PROVIDERS, modelsForProvider, firstModelForProvider, type AiProvider } from '../utils/ai-models';
+import { ADMIN_USERNAME, ADMIN_PASSWORD } from '../shared/admin-credentials';
 import { tokens } from './design-tokens';
 
 interface LeftPanelProps {
@@ -936,6 +937,20 @@ function AiImageGenBlock() {
     window.addEventListener('aiconfig-change', h);
     return () => window.removeEventListener('aiconfig-change', h);
   }, []);
+  // Server-side (embedded) keys — which providers the proxy can serve WITHOUT a local
+  // key (set via wrangler secret, gated by site auth). Lets a shared user generate
+  // without ever seeing/entering the key.
+  const [serverKeys, setServerKeys] = useState<{ openai: boolean; gemini: boolean }>({ openai: false, gemini: false });
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/ai/config')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c: { openai?: boolean; gemini?: boolean } | null) => {
+        if (alive && c) setServerKeys({ openai: !!c.openai, gemini: !!c.gemini });
+      })
+      .catch(() => { /* not available — fall back to local keys */ });
+    return () => { alive = false; };
+  }, []);
 
   // Multi-image API call. The first entry is treated by OpenAI as the primary
   // input; subsequent entries are additional references the model may sample
@@ -945,15 +960,22 @@ function AiImageGenBlock() {
     p: string,
     opts: { aspectRatio: string; imageSize: string },
   ): Promise<string | null> => {
-    // Pick provider + upstream model from the ⚙ selector, then the matching key.
+    // Pick provider + upstream model from the ⚙ selector. Use the locally-entered key
+    // if present, else rely on the embedded server key (the proxy decides, gated by auth).
     const model = getModelById(getSelectedModelId());
-    const key = model.provider === 'gemini' ? getGeminiKey() : getOpenAIKey();
-    if (!key) {
+    const localKey = model.provider === 'gemini' ? getGeminiKey() : getOpenAIKey();
+    const serverHas = model.provider === 'gemini' ? serverKeys.gemini : serverKeys.openai;
+    if (!localKey && !serverHas) {
       alert(`選択中のモデル「${model.label}」の API キーが未設定です。右上の ⚙ から ${model.provider === 'gemini' ? 'Gemini' : 'OpenAI'} キーを入力してください。`);
       return null;
     }
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    headers[model.provider === 'gemini' ? 'X-Gemini-Key' : 'X-OpenAI-Key'] = key;
+    // Always send site auth so the proxy may use the embedded server key; send the local
+    // key only if the user entered one (then it takes precedence over the server key).
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: 'Basic ' + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`),
+    };
+    if (localKey) headers[model.provider === 'gemini' ? 'X-Gemini-Key' : 'X-OpenAI-Key'] = localKey;
     const r = await fetch('/api/ai/edit', {
       method: 'POST',
       headers,
@@ -1077,7 +1099,10 @@ function AiImageGenBlock() {
 
   // Provider / model selection — keys gate which providers are pickable. Read fresh
   // each render; `bumpCfg` re-renders on the aiconfig-change event from ⚙.
-  const hasKey: Record<AiProvider, boolean> = { openai: getOpenAIKey() !== '', gemini: getGeminiKey() !== '' };
+  const hasKey: Record<AiProvider, boolean> = {
+    openai: getOpenAIKey() !== '' || serverKeys.openai,
+    gemini: getGeminiKey() !== '' || serverKeys.gemini,
+  };
   const selModelId = getSelectedModelId();
   const curProvider = getModelById(selModelId).provider;
   const onPickProvider = (p: AiProvider) => setSelectedModelId(firstModelForProvider(p).id);
