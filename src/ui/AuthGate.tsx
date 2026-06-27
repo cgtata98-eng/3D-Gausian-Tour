@@ -25,8 +25,9 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
     e.preventDefault();
     setSubmitting(true);
     setTimeout(() => {
-      if (verifyCredentials(username.trim(), password)) {
-        markAuthenticated();
+      const role = verifyCredentials(username.trim(), password);
+      if (role) {
+        markAuthenticated(role);
         onSuccess();
       } else {
         setError('ID またはパスワードが違います');

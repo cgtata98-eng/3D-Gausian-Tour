@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
-import { ADMIN_USERNAME, ADMIN_PASSWORD } from '../shared/admin-credentials';
+import { ADMIN_USERNAME, ADMIN_PASSWORD, SHARE_USERNAME, SHARE_PASSWORD } from '../shared/admin-credentials';
 
 /**
  * Cloudflare Worker entry. Routes:
@@ -88,8 +88,12 @@ async function handleAiEdit(request: Request, url: URL, env: Env): Promise<Respo
   //    cap on the embedded key is the real protection against abuse.
   const oaKey = request.headers.get('x-openai-key')?.trim();
   const gemKey = request.headers.get('x-gemini-key')?.trim();
-  const isAdmin = request.headers.get('Authorization') === 'Basic ' + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`);
-  if (!oaKey && !gemKey && !isAdmin) {
+  // Accept the personal admin OR the restricted "share" login for using the embedded key.
+  // (Publish/R2 routes stay admin-only, so the share role can't touch your data.)
+  const authVal = request.headers.get('Authorization') ?? '';
+  const isAuthed = authVal === 'Basic ' + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`)
+    || authVal === 'Basic ' + btoa(`${SHARE_USERNAME}:${SHARE_PASSWORD}`);
+  if (!oaKey && !gemKey && !isAuthed) {
     return json(401, { error: { message: 'API キーが未設定です。右上の ⚙ からキーを入力してください。' } });
   }
   // 3. Cap the declared body size (handlePublish caps too; this route previously had none).
@@ -141,7 +145,7 @@ async function handleAiEdit(request: Request, url: URL, env: Env): Promise<Respo
   try {
     if (provider === 'gemini') {
       // BYO header key, else the embedded server key (only for site-authed requests).
-      const key = gemKey || (isAdmin ? env.GEMINI_API_KEY?.trim() : undefined);
+      const key = gemKey || (isAuthed ? env.GEMINI_API_KEY?.trim() : undefined);
       if (!key) return json(401, { error: { message: 'Gemini API キーが未設定です。右上の ⚙ から Gemini キーを入力してください。' } });
       const model = String(body.model ?? 'gemini-3.1-flash-image');
       // gemini-2.5-flash-image accepts only 3 input images total; clamp for safety.
@@ -185,7 +189,7 @@ async function handleAiEdit(request: Request, url: URL, env: Env): Promise<Respo
     }
 
     // OpenAI (default) — images/edits, multipart/form-data, Bearer auth.
-    const key = oaKey || (isAdmin ? env.OPENAI_API_KEY?.trim() : undefined);
+    const key = oaKey || (isAuthed ? env.OPENAI_API_KEY?.trim() : undefined);
     if (!key) return json(401, { error: { message: 'OpenAI API キーが未設定です。右上の ⚙ から OpenAI キーを入力してください。' } });
     const form = new FormData();
     list.forEach((dataUrl, i) => {

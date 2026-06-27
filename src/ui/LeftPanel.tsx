@@ -9,7 +9,7 @@ import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types
 import * as idb from '../utils/idb';
 import { getOpenAIKey, getGeminiKey, getSelectedModelId, setSelectedModelId } from '../utils/api-keys';
 import { getModelById, PROVIDERS, modelsForProvider, firstModelForProvider, type AiProvider } from '../utils/ai-models';
-import { ADMIN_USERNAME, ADMIN_PASSWORD } from '../shared/admin-credentials';
+import { getAuthHeader } from '../utils/auth';
 import { tokens } from './design-tokens';
 
 interface LeftPanelProps {
@@ -973,7 +973,7 @@ function AiImageGenBlock() {
     // key only if the user entered one (then it takes precedence over the server key).
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Authorization: 'Basic ' + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`),
+      Authorization: getAuthHeader(),
     };
     if (localKey) headers[model.provider === 'gemini' ? 'X-Gemini-Key' : 'X-OpenAI-Key'] = localKey;
     const r = await fetch('/api/ai/edit', {

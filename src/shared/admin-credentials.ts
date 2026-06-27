@@ -13,3 +13,13 @@
  */
 export const ADMIN_USERNAME = 'takyu';
 export const ADMIN_PASSWORD = '1qaz1833';
+
+/**
+ * Share login (RESTRICTED role). Give this out to clients so they can use the embedded
+ * prepaid Gemini key WITHOUT the personal admin password. The `share` role can run AI
+ * image generation but CANNOT publish / delete R2 (those stay admin-only on the Worker).
+ * Bundled = casual deterrence; the prepaid spend cap on the embedded key is the real
+ * protection. Rotate by editing this value, then commit + push (auto-redeploys).
+ */
+export const SHARE_USERNAME = 'share';
+export const SHARE_PASSWORD = 'cggs-share-QzvmwX5JxL';

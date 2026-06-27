@@ -8,12 +8,12 @@
  *
  * Auth is HTTP Basic against the same credentials as the AuthGate.
  */
-import { ADMIN_USERNAME, ADMIN_PASSWORD } from '../shared/admin-credentials';
+import { getAuthHeader } from './auth';
 import { zip } from 'fflate';
 import * as idb from './idb';
 
 function authHeader(): string {
-  return 'Basic ' + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`);
+  return getAuthHeader();
 }
 
 /** Cloudflare Workers free-plan body limit is 100MB. Our chunk size leaves

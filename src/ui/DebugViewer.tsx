@@ -8,6 +8,7 @@ import * as clipLib from '../utils/clip-library';
 import type { ClipMeta } from '../utils/clip-library';
 import { navigate } from '../utils/url';
 import { publishScene } from '../utils/publish';
+import { getAuthRole } from '../utils/auth';
 import { ThreeSceneManager } from '../engine/three/three-scene-manager';
 import { SceneManager } from '../engine/scene-manager';
 import { initApp } from '../engine/app-init';
@@ -2557,6 +2558,9 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
       setProgress(null);
     }
   };
+
+  // Share-login users can't publish (publish/R2 is admin-only on the Worker).
+  if (getAuthRole() !== 'admin') return null;
 
   return (
     <>
