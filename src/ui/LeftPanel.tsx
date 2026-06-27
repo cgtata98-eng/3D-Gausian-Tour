@@ -7,6 +7,8 @@ import { calibrateHeadTracker } from '../utils/head-tracker';
 import { resolveScenePath } from '../core/scene-manifest';
 import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
 import * as idb from '../utils/idb';
+import { getOpenAIKey, getGeminiKey, getSelectedModelId, setSelectedModelId } from '../utils/api-keys';
+import { getModelById, PROVIDERS, modelsForProvider, firstModelForProvider, type AiProvider } from '../utils/ai-models';
 import { tokens } from './design-tokens';
 
 interface LeftPanelProps {
@@ -728,8 +730,6 @@ export function AiScreenOverlay() {
   };
   const onMouseUp = () => { draggingRef.current = null; };
 
-  const fit = () => setZoom({ scale: 1, panX: 0, panY: 0 });
-
   const onDownload = () => {
     if (!entry || !src) return;
     // `src` is either a blob URL (idb-resolved) or a data URL; both work as <a download>.
@@ -768,8 +768,13 @@ export function AiScreenOverlay() {
         }}
       />
       <div style={aiOverlayToolbar}>
-        <button type="button" onClick={onDownload} style={aiOverlayBtn} title="ダウンロード">⬇</button>
-        <button type="button" onClick={fit} style={aiOverlayBtn} title="フィット (1×)">⤢</button>
+        <button type="button" onClick={onDownload} style={{ ...aiOverlayBtn, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} title="ダウンロード" aria-label="ダウンロード">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
         <button type="button" onClick={() => setActiveAiId(null)} style={aiOverlayBtn} title="閉じる">×</button>
       </div>
       {zoom.scale > 1 && <div style={aiOverlayZoomHud}>{zoom.scale.toFixed(1)}×</div>}
@@ -893,6 +898,18 @@ const aiOverlayBtn: React.CSSProperties = {
  * ダミーエントリを履歴に積むだけで、本物の画像差し替えは行わない。Cloudflare Worker +
  * OpenAI 接続が出来次第、`onGenerate` の中身だけ差し替える。
  */
+/** Map a pixel WxH to the nearest aspect-ratio string the image models accept. */
+function screenAspectRatio(w: number, h: number): string {
+  const r = w / Math.max(1, h);
+  const cands: [string, number][] = [
+    ['1:1', 1], ['4:3', 4 / 3], ['3:2', 3 / 2], ['16:9', 16 / 9], ['21:9', 21 / 9],
+    ['3:4', 3 / 4], ['2:3', 2 / 3], ['9:16', 9 / 16],
+  ];
+  let best = cands[0], bestD = Infinity;
+  for (const c of cands) { const d = Math.abs(Math.log(r / c[1])); if (d < bestD) { bestD = d; best = c; } }
+  return best[0];
+}
+
 function AiImageGenBlock() {
   const activePlanId = useSceneStore((s) => s.activePlanId);
   const manifest = useSceneStore((s) => s.manifest);
@@ -908,16 +925,48 @@ function AiImageGenBlock() {
   const [prompt, setPrompt] = useState('');
   const [refImages, setRefImages] = useState<string[]>([]);
   const refInputRef = useRef<HTMLInputElement>(null);
+  // Per-generation output options.
+  const [imageSize, setImageSize] = useState<'1K' | '2K' | '4K'>('2K');
+  const [genCount, setGenCount] = useState<1 | 2>(1);
+  const [aspect, setAspect] = useState<'screen' | 'pano'>('screen');
+  // Re-render when keys / selected model change (⚙ writes localStorage + fires this).
+  const [, bumpCfg] = useState(0);
+  useEffect(() => {
+    const h = () => bumpCfg((v) => v + 1);
+    window.addEventListener('aiconfig-change', h);
+    return () => window.removeEventListener('aiconfig-change', h);
+  }, []);
 
   // Multi-image API call. The first entry is treated by OpenAI as the primary
   // input; subsequent entries are additional references the model may sample
   // style / palette / texture from.
-  const callOpenAI = async (sources: string[], p: string): Promise<string | null> => {
+  const callImageGen = async (
+    sources: string[],
+    p: string,
+    opts: { aspectRatio: string; imageSize: string },
+  ): Promise<string | null> => {
+    // Pick provider + upstream model from the ⚙ selector, then the matching key.
+    const model = getModelById(getSelectedModelId());
+    const key = model.provider === 'gemini' ? getGeminiKey() : getOpenAIKey();
+    if (!key) {
+      alert(`選択中のモデル「${model.label}」の API キーが未設定です。右上の ⚙ から ${model.provider === 'gemini' ? 'Gemini' : 'OpenAI'} キーを入力してください。`);
+      return null;
+    }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    headers[model.provider === 'gemini' ? 'X-Gemini-Key' : 'X-OpenAI-Key'] = key;
     const r = await fetch('/api/ai/edit', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ images: sources, prompt: p }),
+      headers,
+      body: JSON.stringify({
+        provider: model.provider,
+        model: model.apiModelId,
+        images: sources,
+        prompt: p,
+        aspectRatio: opts.aspectRatio,
+        imageSize: opts.imageSize,
+      }),
     });
+    // Both providers are normalized by the proxy to { data: [{ b64_json }] }.
     const j = await r.json() as { data?: { b64_json?: string }[]; error?: { message?: string } };
     if (!r.ok) {
       alert('生成エラー: ' + (j.error?.message ?? r.statusText));
@@ -961,7 +1010,9 @@ function AiImageGenBlock() {
     const srcDataUrl = canvas.toDataURL('image/png');
     // Primary input = current screen, plus any reference images the user attached.
     const sources = [srcDataUrl, ...refImages];
-    const resultDataUrl = await callOpenAI(sources, p);
+    // Aspect: match the on-screen canvas, or a 2:1 equirectangular ratio for VR 360.
+    const aspectRatio = aspect === 'pano' ? '2:1' : screenAspectRatio(canvas.width, canvas.height);
+    const resultDataUrl = await callImageGen(sources, p, { aspectRatio, imageSize });
     if (!resultDataUrl) return;
     const resultBlob = await (await fetch(resultDataUrl)).blob();
     const id = `ai_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -1007,7 +1058,8 @@ function AiImageGenBlock() {
     }
     setAiBusy(true);
     try {
-      await generateScreen(p);
+      // 1 or 2 simultaneous variations of the same screen + prompt.
+      await Promise.all(Array.from({ length: genCount }, () => generateScreen(p)));
       setPrompt('');
       setRefImages([]);
     } catch (e) {
@@ -1022,6 +1074,13 @@ function AiImageGenBlock() {
     removeEntry(id);
     if (activeAiId === id) setActiveAiId(null);
   };
+
+  // Provider / model selection — keys gate which providers are pickable. Read fresh
+  // each render; `bumpCfg` re-renders on the aiconfig-change event from ⚙.
+  const hasKey: Record<AiProvider, boolean> = { openai: getOpenAIKey() !== '', gemini: getGeminiKey() !== '' };
+  const selModelId = getSelectedModelId();
+  const curProvider = getModelById(selModelId).provider;
+  const onPickProvider = (p: AiProvider) => setSelectedModelId(firstModelForProvider(p).id);
 
   return (
     <div style={sidebarBlock}>
@@ -1051,7 +1110,10 @@ function AiImageGenBlock() {
           disabled={aiBusy || refImages.length >= 3}
           style={aiRefAddBtn}
           title="参照画像を追加 (最大 3 枚)"
-        >+</button>
+        >
+          <span style={{ fontSize: 16, lineHeight: 1 }}>＋</span>
+          <span>参照画像</span>
+        </button>
         <input
           ref={refInputRef}
           type="file"
@@ -1060,6 +1122,51 @@ function AiImageGenBlock() {
           style={{ display: 'none' }}
           onChange={(e) => { void onPickRefs(e.target.files); e.target.value = ''; }}
         />
+      </div>
+      <div style={aiOptRow}>
+        <label style={aiOptLabel}><span style={aiOptCap}>プロバイダ</span>
+          <select value={curProvider} onChange={(e) => onPickProvider(e.target.value as AiProvider)} disabled={aiBusy} style={aiOptSelect}>
+            {PROVIDERS.map((pv) => (
+              <option key={pv.id} value={pv.id} disabled={!hasKey[pv.id]}>
+                {pv.label}{hasKey[pv.id] ? '' : '（API未設定）'}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ ...aiOptLabel, flex: 1.6 }}><span style={aiOptCap}>モデル</span>
+          <select value={selModelId} onChange={(e) => setSelectedModelId(e.target.value)} disabled={aiBusy} style={aiOptSelect}>
+            {modelsForProvider(curProvider).map((m) => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {!hasKey[curProvider] && (
+        <div style={aiKeyHint}>
+          <span>{curProvider === 'gemini' ? 'Gemini' : 'ChatGPT'} の API キーが未設定です。</span>
+          <button type="button" onClick={() => window.dispatchEvent(new Event('open-ai-settings'))} style={aiKeyHintBtn}>⚙ API を設定</button>
+        </div>
+      )}
+      <div style={aiOptRow}>
+        <label style={aiOptLabel}><span style={aiOptCap}>解像度</span>
+          <select value={imageSize} onChange={(e) => setImageSize(e.target.value as '1K' | '2K' | '4K')} disabled={aiBusy} style={aiOptSelect}>
+            <option value="1K">1K</option>
+            <option value="2K">2K</option>
+            <option value="4K">4K</option>
+          </select>
+        </label>
+        <label style={aiOptLabel}><span style={aiOptCap}>枚数</span>
+          <select value={genCount} onChange={(e) => setGenCount(Number(e.target.value) as 1 | 2)} disabled={aiBusy} style={aiOptSelect}>
+            <option value={1}>1枚</option>
+            <option value={2}>2枚</option>
+          </select>
+        </label>
+        <label style={aiOptLabel}><span style={aiOptCap}>比率</span>
+          <select value={aspect} onChange={(e) => setAspect(e.target.value as 'screen' | 'pano')} disabled={aiBusy} style={aiOptSelect}>
+            <option value="screen">画面</option>
+            <option value="pano">360°(2:1)</option>
+          </select>
+        </label>
       </div>
       <button
         type="button"
@@ -1132,21 +1239,58 @@ const aiRefRemove: React.CSSProperties = {
   fontFamily: 'inherit',
 };
 const aiRefAddBtn: React.CSSProperties = {
-  width: 40,
   height: 40,
-  fontSize: 18,
-  fontWeight: 300,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  padding: '0 14px',
+  fontSize: 12,
+  fontWeight: 600,
   lineHeight: 1,
   background: tokens.gradient.surface,
-  color: tokens.color.textFaint,
+  color: tokens.color.textMute,
   border: `1px dashed ${tokens.color.border}`,
   borderRadius: tokens.radius.sm,
   cursor: 'pointer',
   fontFamily: tokens.font.family,
-  padding: 0,
+  whiteSpace: 'nowrap',
   outline: 'none',
 };
 
+const aiKeyHint: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+  marginTop: 6, padding: '6px 10px',
+  fontSize: 11, color: tokens.color.warn,
+  background: tokens.gradient.warn,
+  border: `1px solid ${tokens.color.warnBorder}`,
+  borderRadius: tokens.radius.sm,
+};
+const aiKeyHintBtn: React.CSSProperties = {
+  fontSize: 11, fontWeight: 700, color: tokens.color.text,
+  background: tokens.glass.surfaceStrong,
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.pill,
+  padding: '3px 10px', cursor: 'pointer', outline: 'none',
+  fontFamily: tokens.font.family,
+};
+const aiOptRow: React.CSSProperties = {
+  display: 'flex', gap: 6, marginTop: 8,
+};
+const aiOptLabel: React.CSSProperties = {
+  flex: 1, display: 'flex', flexDirection: 'column', gap: 3,
+};
+const aiOptCap: React.CSSProperties = {
+  fontSize: 10, fontWeight: 700, color: tokens.color.textMute, letterSpacing: 0.3, paddingLeft: 2,
+};
+const aiOptSelect: React.CSSProperties = {
+  width: '100%', padding: '7px 8px',
+  background: tokens.gradient.track,
+  border: `1px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.sm,
+  color: tokens.color.text, fontSize: 12,
+  outline: 'none', fontFamily: tokens.font.family,
+  boxSizing: 'border-box', cursor: 'pointer',
+};
 const aiPromptStyle: React.CSSProperties = {
   width: '100%',
   resize: 'vertical',

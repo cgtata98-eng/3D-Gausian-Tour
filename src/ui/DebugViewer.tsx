@@ -7,7 +7,7 @@ import { interpolatePath, totalPathDurationSec } from '../core/viewpoint';
 import * as clipLib from '../utils/clip-library';
 import type { ClipMeta } from '../utils/clip-library';
 import { navigate } from '../utils/url';
-import { publishScene, repackSogBundle } from '../utils/publish';
+import { publishScene } from '../utils/publish';
 import { ThreeSceneManager } from '../engine/three/three-scene-manager';
 import { SceneManager } from '../engine/scene-manager';
 import { initApp } from '../engine/app-init';
@@ -22,6 +22,7 @@ import { useProjectStore } from '../store/project-store';
 import { LoadingScreen } from './LoadingScreen';
 import { AiScreenOverlay, AiGeneratingOverlay } from './LeftPanel';
 import { ViewerOverlay } from './ViewerOverlay';
+import { ApiKeySettings } from './ApiKeySettings';
 import { AmbientAudio } from './AmbientAudio';
 import { FootstepAudio } from './FootstepAudio';
 import { BGM_PRESETS } from '../core/audio-presets';
@@ -596,27 +597,25 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 
 
 
-  const handleColFile = async (file: File | Blob, type: 'walkable' | 'block', source: 'manual' | 'auto') => {
+  // Manual collision GLB upload. Auto-generation was removed, so manual is the only
+  // source — force the plan's collision source to 'manual' first so the upload always
+  // becomes the active mesh (including legacy plans previously left on 'auto').
+  const handleColFile = async (file: File | Blob, type: 'walkable' | 'block') => {
     const sm = smRef.current; if (!sm) return;
     const sceneId = manifest?.id;
     const planId = activePlanId;
     if (!sceneId || !planId) return;
     setColLoading(type);
     try {
-      // Source-scoped IDB key so manual and auto don't clobber each other.
-      const blobKey = `collision:${sceneId}:${planId}:${source}:${type}`;
+      const blobKey = `collision:${sceneId}:${planId}:manual:${type}`;
       const blob = file instanceof File ? file : new Blob([await file.arrayBuffer()], { type: 'model/gltf-binary' });
       await idb.saveBlob(blobKey, blob);
       const ref = `${idb.IDB_REF_PREFIX}${blobKey}`;
-      setPlanCollisionStore(planId, source, type, ref);
-      // Push to engine only when this source is the active one — otherwise
-      // we'd silently swap the live collision out from under the user.
-      const activeSource = manifest?.plans?.find(p => p.id === planId)?.collision?.source ?? 'manual';
-      if (source === activeSource) {
-        await sm.loadCollisionFromManifestRef(ref, type);
-        sm.setCollisionVisible(true);
-        if (!showCollision) toggleCollision();
-      }
+      setPlanCollisionSourceStore(planId, 'manual');
+      setPlanCollisionStore(planId, 'manual', type, ref);
+      await sm.loadCollisionFromManifestRef(ref, type);
+      sm.setCollisionVisible(true);
+      if (!showCollision) toggleCollision();
     } catch (e) {
       console.error(`collision ${type} upload failed:`, e);
       alert('コリジョン読込失敗: ' + (e instanceof Error ? e.message : String(e)));
@@ -625,98 +624,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     }
   };
 
-  /** Auto-generate walkable + block collision GLBs from the active plan's
-   *  splat. Runs the splat-transform voxel pipeline twice with different
-   *  recipes (see vite.config.ts:collisionGen JSDoc for the matrix). In dev
-   *  this hits the Vite middleware which spawns the CLI; in production it
-   *  falls back to the browser-side WASM path. Both paths share the same
-   *  recipe + seed semantics so output is identical regardless of route.
-   *
-   *  Seed position priority — the seed must sit inside the room, otherwise
-   *  carve / exterior-fill silently no-op. We pick the first available of:
-   *    1. plan.fixedPosition (user-set initial camera)
-   *    2. plan.viewpoints[0]  (first authored viewpoint)
-   *    3. live camera position (where the user is currently looking from)
-   *    4. [0,0,0] last-resort default. */
-  const handleAutoGenCollision = async () => {
-    const sm = smRef.current; if (!sm) return;
-    const sceneId = manifest?.id;
-    const planId = activePlanId;
-    if (!sceneId || !planId) return;
-    const plan = manifest?.plans?.find((p) => p.id === planId);
-    if (!plan) { alert('プランが見つかりません'); return; }
-
-    setColLoading('autogen');
-    try {
-      // Pick a splat source — prefer SOG (already chunked), then PLY, then SPZ.
-      let body: Blob | null = null;
-      let ext: 'sog' | 'ply' | 'spz' | null = null;
-      if (plan.splatSog && plan.splatSog.startsWith('sog-idb:')) {
-        body = await repackSogBundle(sceneId, planId);
-        ext = 'sog';
-      } else if (plan.splat && plan.splat.startsWith(idb.IDB_REF_PREFIX)) {
-        const key = plan.splat.slice(idb.IDB_REF_PREFIX.length);
-        body = await idb.loadBlob(key);
-        ext = 'ply';
-      } else if (plan.splatSpz && plan.splatSpz.startsWith(idb.IDB_REF_PREFIX)) {
-        const key = plan.splatSpz.slice(idb.IDB_REF_PREFIX.length);
-        body = await idb.loadBlob(key);
-        ext = 'spz';
-      }
-      if (!body || !ext) {
-        alert('スプラットファイルがアップロードされていません。先に PLY / SPZ / SOG をアップロードしてください。');
-        return;
-      }
-
-      const seed: [number, number, number] =
-        plan.fixedPosition?.position
-        ?? plan.viewpoints[0]?.position
-        ?? sm.getCurrentPose()?.position
-        ?? [0, 0, 0];
-      const seedHeader = seed.map((n) => Number(n).toFixed(4)).join(',');
-      console.log(`[gen-collision] seed=${seedHeader}`);
-
-      const runRecipe = async (recipe: 'walkable' | 'block'): Promise<Blob> => {
-        // Production builds skip the dev-only Vite middleware (it isn't there,
-        // and Cloudflare's edge would 413 the upload anyway). In dev we try
-        // the middleware first — Node CLI is much faster than the in-browser
-        // WASM path — and fall back to the browser pipeline on any failure.
-        if (import.meta.env.DEV && body && ext) {
-          try {
-            const res = await fetch('/api/gen-collision', {
-              method: 'POST',
-              headers: {
-                'X-Input-Ext': ext,
-                'X-Recipe': recipe,
-                'X-Seed': seedHeader,
-                'Content-Type': 'application/octet-stream',
-              },
-              body,
-            });
-            if (res.ok) return await res.blob();
-            console.warn(`[gen-collision] ${recipe} middleware returned ${res.status}; using browser fallback`);
-          } catch (e) {
-            console.warn(`[gen-collision] ${recipe} middleware unreachable, using browser fallback:`, e);
-          }
-        }
-        const { generateCollisionInBrowser } = await import('../utils/gen-collision-browser');
-        return generateCollisionInBrowser(body!, ext!, { recipe, seed });
-      };
-
-      // Run sequentially — the CLI / WebGPU device is GPU-bound and running
-      // both in parallel just thrashes the same hardware.
-      const walkableGlb = await runRecipe('walkable');
-      await handleColFile(new File([walkableGlb], 'auto-walkable.glb', { type: 'model/gltf-binary' }), 'walkable', 'auto');
-      const blockGlb = await runRecipe('block');
-      await handleColFile(new File([blockGlb], 'auto-block.glb', { type: 'model/gltf-binary' }), 'block', 'auto');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error('collision auto-gen failed:', e);
-      alert('コリジョン自動生成に失敗:\n' + msg);
-    } finally {
-      setColLoading(null);
-    }
-  };
+  // Collision auto-generation (splat-transform voxel pipeline) was removed by
+  // request — it was unreliable (sparse/blocky meshes → teleport/jitter). Manual
+  // GLB upload (handleColFile + the WALKABLE/BLOCK file pickers below) is the only
+  // source now.
 
   const handleHdriFile = async (file: File) => {
     const sm = smRef.current; if (!sm) return;
@@ -2089,79 +2000,6 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                  パノラマだけのプロジェクト (splat データ無し) でも歩かないので非表示。 */}
             {debugTab === 'plan' && viewMode === 'splat' && hasSplatData && (
             <Section title="コリジョン" subtitle="COLLISION" defaultOpen={false}>
-              {/* Source selector: manual upload vs auto-gen. Both sets are
-                  stashed independently so flipping doesn't cost a re-gen. */}
-              {(() => {
-                const planId = activePlanId;
-                const plan = manifest?.plans?.find(p => p.id === planId);
-                const cur = plan?.collision;
-                const source = cur?.source ?? 'manual';
-                const hasManual = !!(cur?.manualWalkable || cur?.manualBlock);
-                const hasAuto = !!(cur?.autoWalkable || cur?.autoBlock);
-                const choose = async (s: 'manual' | 'auto') => {
-                  if (!planId) return;
-                  setPlanCollisionSourceStore(planId, s);
-                  // Reload engine immediately so the active mesh matches the
-                  // freshly written manifest. Read it back from the store.
-                  const sm = smRef.current; if (!sm) return;
-                  const next = useSceneStore.getState().manifest?.plans?.find(p => p.id === planId)?.collision;
-                  if (next?.walkable) await sm.loadCollisionFromManifestRef(next.walkable, 'walkable');
-                  if (next?.block) await sm.loadCollisionFromManifestRef(next.block, 'block');
-                };
-                const segBase: React.CSSProperties = {
-                  flex: 1,
-                  padding: '8px 14px',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: 0.3,
-                  borderRadius: tokens.radius.pill,
-                  color: tokens.color.text,
-                  fontFamily: tokens.font.family,
-                  outline: 'none',
-                  transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
-                };
-                return (
-                  <div style={{
-                    display: 'flex', gap: 4, padding: 5, marginBottom: 8,
-                    background: tokens.glass.surfaceStrong,
-                    backdropFilter: tokens.backdrop,
-                    WebkitBackdropFilter: tokens.backdrop,
-                    borderRadius: tokens.radius.pill,
-                    border: `1px solid ${tokens.color.border}`,
-                    boxShadow: tokens.shadow.glass,
-                  }}>
-                    <button
-                      type="button"
-                      onClick={() => choose('manual')}
-                      disabled={!hasManual && source !== 'manual'}
-                      style={{
-                        ...segBase,
-                        background: source === 'manual' ? tokens.gradient.accent : 'transparent',
-                        border: `1px solid ${source === 'manual' ? tokens.color.accentBorder : 'transparent'}`,
-                        boxShadow: source === 'manual' ? tokens.shadow.glassAccent : 'none',
-                        cursor: (!hasManual && source !== 'manual') ? 'not-allowed' : 'pointer',
-                        opacity: (!hasManual && source !== 'manual') ? 0.45 : 1,
-                      }}
-                      title="アップロードした手動 GLB を使用"
-                    >手動を使用 {hasManual ? '✓' : '—'}</button>
-                    <button
-                      type="button"
-                      onClick={() => choose('auto')}
-                      disabled={!hasAuto && source !== 'auto'}
-                      style={{
-                        ...segBase,
-                        background: source === 'auto' ? tokens.gradient.processing : 'transparent',
-                        border: `1px solid ${source === 'auto' ? tokens.color.processingBorder : 'transparent'}`,
-                        boxShadow: source === 'auto' ? tokens.shadow.glassProcessing : 'none',
-                        cursor: (!hasAuto && source !== 'auto') ? 'not-allowed' : 'pointer',
-                        opacity: (!hasAuto && source !== 'auto') ? 0.45 : 1,
-                      }}
-                      title="splat-transform で自動生成した GLB を使用"
-                    >自動を使用 {hasAuto ? '✓' : '—'}</button>
-                  </div>
-                );
-              })()}
-
               <label style={S.toggle}>
                 <input type="checkbox" checked={useCollisionWalkable} onChange={toggleUseCollisionWalkable} />
                 <span>walkable を使用 <span style={{ fontSize: 10, color: tokens.color.textMute }}>（床スナップ／重力）</span></span>
@@ -2177,48 +2015,21 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               {showCollision && (
                 <Slider label="不透明度" min={0} max={1} step={0.05} value={collisionOpacity} onChange={setCollisionOpacity} />
               )}
-              {/* Auto-generate via splat-transform (dev only — Vite middleware) */}
-              <button
-                type="button"
-                onClick={handleAutoGenCollision}
-                disabled={colLoading !== null}
-                style={{
-                  marginTop: 10,
-                  width: '100%',
-                  padding: '12px 14px',
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  letterSpacing: 0.3,
-                  color: tokens.color.text,
-                  background: colLoading === 'autogen' ? tokens.gradient.neutral : tokens.gradient.processing,
-                  border: `1px solid ${colLoading === 'autogen' ? tokens.color.border : tokens.color.processingBorder}`,
-                  borderRadius: tokens.radius.pill,
-                  boxShadow: colLoading === 'autogen' ? tokens.shadow.glass : tokens.shadow.glassProcessing,
-                  cursor: colLoading !== null ? 'not-allowed' : 'pointer',
-                  fontFamily: tokens.font.family,
-                  outline: 'none',
-                }}
-                title="splat-transform を使ってスプラットからコリジョン GLB を自動生成（ローカル npm run dev 中のみ）"
-              >
-                {colLoading === 'autogen' ? '🤖 生成中…（数十秒〜1 分程度）' : '🤖 コリジョン自動生成'}
-              </button>
-              <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 6, lineHeight: 1.55 }}>
-                splat-transform v2 voxel pipeline で walkable / block を別々に生成（floor-fill + carve / external-fill）。
-                10cm voxel + 連結クラスタ抽出 + 10万粒キャップ。
-                seed-pos は固定カメラ→最初の視点→ライブカメラの順で自動採用。下から個別 GLB で上書き可。
+              <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 10, lineHeight: 1.55 }}>
+                コリジョンは手動 GLB アップロードのみ。walkable = 床（床スナップ／重力）、block = 壁（衝突）。
               </div>
               <div style={{ ...S.subTitle, marginTop: 14 }}><span style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
               <button onClick={() => walkableRef.current?.click()} style={S.fileBtn}>
                 {colLoading === 'walkable' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>
               <input ref={walkableRef} type="file" accept=".glb" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'walkable', 'manual'); e.target.value = ''; }} />
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'walkable'); e.target.value = ''; }} />
               <div style={{ ...S.subTitle, marginTop: 10 }}><span style={{ ...S.colorDot, background: '#ef4444' }} />BLOCK</div>
               <button onClick={() => blockRef.current?.click()} style={S.fileBtn}>
                 {colLoading === 'block' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>
               <input ref={blockRef} type="file" accept=".glb" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'block', 'manual'); e.target.value = ''; }} />
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'block'); e.target.value = ''; }} />
             </Section>
             )}
 
@@ -2507,6 +2318,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
           style={{ ...S.preview, ...(isDragOver ? S.previewDrag : null), ...(pinMoveTargetId ? { cursor: 'crosshair' } : null) }}
         >
           <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+          <ApiKeySettings />
           <AiScreenOverlay />
           <AiGeneratingOverlay />
           <FpsOverlay />
@@ -3820,7 +3632,7 @@ function RenderQualitySection({
           <label style={{ ...S.toggle, marginTop: 4 }} title="チェックを入れると露出 / トーン / カラー補正が描画に反映されます。外すと学習時の色味のまま表示します。">
             <input
               type="checkbox"
-              checked={cfg.bypassColorPipeline === false}
+              checked={cfg.bypassColorPipeline !== true}
               onChange={(e) => onToggleBypassPipeline(!e.target.checked)}
             />
             <span>色調整 ON</span>

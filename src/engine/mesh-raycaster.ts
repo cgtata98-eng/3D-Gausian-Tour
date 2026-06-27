@@ -84,12 +84,17 @@ export function extractTrianglesFromEntity(root: Entity): Triangle[] {
  * Möller–Trumbore ray vs triangle test. Returns the closest hit (smallest positive `t`)
  * within `[epsilon, maxT]`, or null. `dir` does not need to be normalized — `t` is in
  * units of `dir`, so passing a unit vector gives `t` in meters and is recommended.
+ *
+ * `minAbsNormalY` (0 = off) skips triangles whose face normal is not steep enough in Y,
+ * i.e. only accepts surfaces at least this horizontal (|ny| ≥ minAbsNormalY). Used by
+ * floor-snap to ignore vertical box faces / floater shells and find the real floor below.
  */
 export function raycastTriangles(
   originX: number, originY: number, originZ: number,
   dirX: number, dirY: number, dirZ: number,
   triangles: Triangle[],
   maxT: number = Infinity,
+  minAbsNormalY: number = 0,
 ): RayHit | null {
   const EPS = 1e-7;
   let bestT = maxT;
@@ -119,13 +124,17 @@ export function raycastTriangles(
     if (v < 0 || u + v > 1) continue;
     const t = f * (e2x * qx + e2y * qy + e2z * qz);
     if (t > EPS && t < bestT) {
-      bestT = t;
       // face normal = e1 × e2
       let nx = e1y * e2z - e1z * e2y;
       let ny = e1z * e2x - e1x * e2z;
       let nz = e1x * e2y - e1y * e2x;
       const len = Math.hypot(nx, ny, nz);
       if (len > 0) { nx /= len; ny /= len; nz /= len; }
+      // Surface-orientation filter (floor-snap): reject non-horizontal hits so a
+      // vertical box face / floater shell directly below is skipped and the real
+      // floor beyond it is found instead.
+      if (minAbsNormalY > 0 && Math.abs(ny) < minAbsNormalY) continue;
+      bestT = t;
       bestNX = nx; bestNY = ny; bestNZ = nz;
       found = true;
     }

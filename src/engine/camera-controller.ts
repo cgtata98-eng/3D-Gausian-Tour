@@ -57,6 +57,29 @@ const DEFAULT_OPTIONS: CameraControllerOptions = {
   dragTranslateSpeed: 0.01,
 };
 
+// ── Floor-snap tuning (walk mode) ───────────────────────────────────────────
+// These affect ONLY the vertical (Y) floor-follow math. yaw / pitch / target /
+// mapYaw are never read or written by the floor-snap code.
+/** Probe origin height above the feet — catches small steps UP. */
+const FLOOR_PROBE_UP = 0.6;
+/** Probe reach below the feet — catches small steps DOWN. */
+const FLOOR_PROBE_DOWN = 1.2;
+/** Generous straight-down probe to (re)acquire the floor on mode-switch /
+ *  collision-load / viewpoint-jump, where the eye may start well above the floor. */
+const SNAP_PROBE_DOWN = 30;
+/** Floor hits flatter than this in Y are rejected (vertical box faces / floater
+ *  shells) so the player never snaps onto a wall or floater treated as "floor". */
+const FLOOR_MIN_ABS_NORMAL_Y = 0.5;
+/** Reject per-frame floor jumps larger than this (anti-teleport onto stray geometry). */
+const FLOOR_STEP_MAX = 0.5;
+/** Vertical damping factor per frame (anti-jitter on stepped voxel floors). */
+const FLOOR_SNAP_LERP = 0.35;
+/** Skip sub-centimetre corrections so a settled player doesn't micro-jitter. */
+const FLOOR_SNAP_DEADBAND = 0.01;
+/** Clamp range for derived eye-height-above-floor (human standing range). */
+const EYE_HEIGHT_MIN = 0.3;
+const EYE_HEIGHT_MAX = 3.0;
+
 /**
  * First-person camera controller with mouse look, WASD movement, and two movement modes
  * (walk / fly). Walk follows the walkable collision floor; fly is free 6DoF. Both modes
@@ -88,6 +111,9 @@ export class CameraController {
   private walkableTris: Triangle[] | null = null;
   /** Pre-extracted world-space triangles for wall collision (both modes). null = no walls. */
   private blockTris: Triangle[] | null = null;
+  /** Last accepted floor Y, used as a prior for hit/miss hysteresis and step-jump
+   *  rejection so the player can't teleport onto a stray box and doesn't jitter. */
+  private lastFloorY: number | null = null;
 
   // For touch controls
   private lastTouchX = 0;
@@ -333,6 +359,9 @@ export class CameraController {
   /** Register the walkable collision mesh (extracted to triangles). Pass null to clear. */
   setWalkableTriangles(tris: Triangle[] | null) {
     this.walkableTris = (tris && tris.length > 0) ? tris : null;
+    // Collision loads async (after the initial jumpTo), so re-derive the spawn
+    // eye-height now that we actually know where the floor is. No-op in fly mode.
+    if (this.walkableTris) this.reacquireFloorHeight();
   }
   /** Register the block (wall) collision mesh. Pass null to clear. */
   setBlockTriangles(tris: Triangle[] | null) {
@@ -463,12 +492,25 @@ export class CameraController {
     if (this.padUp > 0) this.currentHeight = Math.min(this.currentHeight + heightSpeed, this.options.maxHeight);
     if (this.padUp < 0) this.currentHeight = Math.max(this.currentHeight - heightSpeed, this.options.minHeight);
 
-    // Floor follow: drop a ray straight down from above the player and snap onto the
-    // walkable surface. If no floor mesh is registered the player just stays at
-    // currentHeight (legacy behavior preserved).
+    // Floor follow: probe down for the walkable surface, then EASE the eye toward
+    // floor + eye-height. Damped (not a hard snap) with a step-jump reject + hit/miss
+    // hysteresis so the player can't teleport onto a stray box/floater and doesn't
+    // jitter on a stepped voxel floor. Y only — yaw/pitch/target untouched.
     if (this.walkableTris) {
-      const floorY = this.raycastFloor(this.playerPos.x, this.playerPos.z);
-      this.playerPos.y = (floorY ?? this.playerPos.y - this.currentHeight) + this.currentHeight;
+      const raw = this.raycastFloor(this.playerPos.x, this.playerPos.z);
+      const accepted = (raw !== null
+        && (this.lastFloorY === null || Math.abs(raw - this.lastFloorY) <= FLOOR_STEP_MAX))
+        ? raw : null;
+      if (accepted !== null) this.lastFloorY = accepted;
+      const base = accepted ?? this.lastFloorY;
+      if (base !== null) {
+        const targetY = base + this.currentHeight;
+        const dy = targetY - this.playerPos.y;
+        if (Math.abs(dy) > FLOOR_SNAP_DEADBAND) this.playerPos.y += dy * FLOOR_SNAP_LERP;
+      } else {
+        // Floor never acquired yet — hold at currentHeight (legacy fallback).
+        this.playerPos.y = this.currentHeight;
+      }
     } else {
       this.playerPos.y = this.currentHeight;
     }
@@ -529,34 +571,64 @@ export class CameraController {
   }
 
   /**
-   * Resolve the floor Y at a given XZ, used for floor-snap during walk mode.
+   * Resolve the floor Y at a given XZ, used for per-frame floor-snap during walk.
    *
-   * The walkable mesh comes from splat-transform's carve recipe, which
-   * produces a 3D NAVIGABLE VOLUME (not a flat surface). Carved volumes can
-   * be wildly irregular — they leak through wall gaps into adjacent rooms,
-   * pick up floater bubbles at random Y, and have multi-level floors. Naive
-   * ray-down-from-50m or ray-up-from-50m hits whichever surface happens to
-   * be closest in either direction, which on irregular meshes teleports
-   * the player to ceiling height or to a far-away floater.
+   * The walkable mesh comes from splat-transform's carve recipe, which produces a
+   * 3D NAVIGABLE VOLUME (not a flat surface): it leaks through wall gaps into
+   * adjacent rooms, picks up floater bubbles at random Y, and has voxel-stepped /
+   * multi-level floors. A naive nearest-hit down-ray snaps onto whichever surface
+   * is closest — often a floater or a vertical box face — and teleports the player.
    *
-   * Strategy: trust the player's current Y as a prior. The floor must be
-   * within walking-step distance directly below them. Cast DOWN from just
-   * above the player, capped at 3 m — that's enough to catch a real step
-   * down but not enough to reach a leaked-through floater. If nothing's
-   * within that range, return null (don't snap, keep current Y).
+   * Strategy: cast DOWN from just above the FEET (not the drifting eye) over a short
+   * window, and require a near-horizontal hit (|normal.y| ≥ FLOOR_MIN_ABS_NORMAL_Y)
+   * so box sides / floater shells are skipped and the real floor is found. Returns
+   * null when nothing floor-like is within range (caller holds the last floor).
    */
   private raycastFloor(x: number, z: number): number | null {
     if (!this.walkableTris) return null;
-    const start = this.playerPos.y;
-    const hit = raycastTriangles(x, start, z, 0, -1, 0, this.walkableTris, 3);
+    const feetY = this.playerPos.y - this.currentHeight;
+    const start = feetY + FLOOR_PROBE_UP;
+    const hit = raycastTriangles(
+      x, start, z, 0, -1, 0, this.walkableTris,
+      FLOOR_PROBE_UP + FLOOR_PROBE_DOWN, FLOOR_MIN_ABS_NORMAL_Y,
+    );
     return hit ? hit.point.y : null;
   }
 
-  /** When entering walk mode from fly, drop the player onto the walkable floor. */
+  /** When entering walk mode from fly, drop the player onto the walkable floor.
+   *  Uses a generous straight-down probe from the current eye (the player may be
+   *  high up in fly) and requires a horizontal hit. */
   private snapToFloor() {
     if (!this.walkableTris) return;
-    const floorY = this.raycastFloor(this.playerPos.x, this.playerPos.z);
-    if (floorY !== null) this.playerPos.y = floorY + this.currentHeight;
+    const hit = raycastTriangles(
+      this.playerPos.x, this.playerPos.y, this.playerPos.z, 0, -1, 0,
+      this.walkableTris, SNAP_PROBE_DOWN, FLOOR_MIN_ABS_NORMAL_Y,
+    );
+    if (hit) {
+      this.lastFloorY = hit.point.y;
+      this.playerPos.y = hit.point.y + this.currentHeight;
+    }
+  }
+
+  /**
+   * (Re)derive eye-height-above-floor from an absolute-Y prior. Called when the
+   * walkable mesh (re)arrives — collision loads async, after the initial jumpTo —
+   * and from jumpTo when the mesh is already present. Casts down from the current
+   * eye and sets currentHeight = clamp(eyeY − floorY) so the first frame lands the
+   * eye at floor + a sane standing height regardless of the scene's absolute floor
+   * Y (which a collision regen can shift). Prevents launch-into-air / sink-underground.
+   */
+  private reacquireFloorHeight() {
+    if (!this.walkableTris || this.movementMode !== 'walk') return;
+    const hit = raycastTriangles(
+      this.playerPos.x, this.playerPos.y, this.playerPos.z, 0, -1, 0,
+      this.walkableTris, SNAP_PROBE_DOWN, FLOOR_MIN_ABS_NORMAL_Y,
+    );
+    if (!hit) return;
+    this.currentHeight = math.clamp(this.playerPos.y - hit.point.y, EYE_HEIGHT_MIN, EYE_HEIGHT_MAX);
+    this.lastFloorY = hit.point.y;
+    this.playerPos.y = hit.point.y + this.currentHeight;
+    this.applyPose();
   }
 
   /** Apply orientation from yaw/pitch and position. Demo-mode tracking offset is added
@@ -572,7 +644,12 @@ export class CameraController {
   /** Jump the player to a viewpoint and orient the camera toward `target`. */
   jumpTo(position: [number, number, number], target: [number, number, number], fov?: number) {
     this.playerPos.set(position[0], position[1], position[2]);
+    // Walk mode treats currentHeight as eye-height ABOVE the floor, not absolute Y.
+    // Seed it with the authored absolute Y, then (if the walkable mesh is loaded)
+    // re-derive it from the floor below so off-origin scans / regen-shifted floors
+    // don't launch or sink the player. Fly mode keeps absolute Y.
     this.currentHeight = position[1];
+    if (this.movementMode === 'walk' && this.walkableTris) this.reacquireFloorHeight();
 
     const dx = target[0] - position[0];
     const dy = target[1] - position[1];

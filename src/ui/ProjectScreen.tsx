@@ -6,6 +6,7 @@ import { navigate } from '../utils/url';
 import * as idb from '../utils/idb';
 import type { SceneManifest } from '../core/types';
 import { tokens } from './design-tokens';
+import { ApiKeySettings } from './ApiKeySettings';
 
 /**
  * Generate an opaque, hard-to-guess project ID for the share URL. 16 lowercase
@@ -120,6 +121,7 @@ export function ProjectScreen() {
             <span style={{ fontSize: 16, lineHeight: 1, marginRight: 2 }}>＋</span>
             <span>新規プロジェクト</span>
           </PillButton>
+          <ApiKeySettings gearStyle={{ position: 'static', top: 'auto', right: 'auto', flexShrink: 0, marginLeft: 8 }} />
         </div>
       </div>
 

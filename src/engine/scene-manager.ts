@@ -52,6 +52,25 @@ async function resolveAssetUrl(rawPath: string, sceneId: string): Promise<string
   return resolveScenePath(sceneId, rawPath);
 }
 
+/** Drop collision triangles whose centroid lies outside `bounds` (margin already
+ *  applied). Removes stray far-away voxel boxes that would floor-snap / jitter the
+ *  player. Safety floor: if culling would remove >80% (bad/oversized AABB) keep the
+ *  original set so collision is never accidentally starved. */
+function cullTrianglesToBounds<T extends { a: Vec3; b: Vec3; c: Vec3 }>(
+  tris: T[] | null,
+  bounds: { min: Vec3; max: Vec3 } | null,
+): T[] | null {
+  if (!tris || !bounds) return tris;
+  const { min, max } = bounds;
+  const kept = tris.filter((t) => {
+    const cx = (t.a.x + t.b.x + t.c.x) / 3;
+    const cy = (t.a.y + t.b.y + t.c.y) / 3;
+    const cz = (t.a.z + t.b.z + t.c.z) / 3;
+    return cx >= min.x && cx <= max.x && cy >= min.y && cy <= max.y && cz >= min.z && cz <= max.z;
+  });
+  return kept.length >= Math.max(1, Math.floor(tris.length * 0.2)) ? kept : tris;
+}
+
 interface SkyboxSnapshot {
   skybox: Texture | null;
   envAtlas: Texture | null;
@@ -76,6 +95,10 @@ export class SceneManager {
    *  working without any UI wiring. */
   private walkableEnabled = true;
   private blockEnabled = true;
+  /** Whether the green/red collision debug meshes are shown. Default false so the
+   *  customer viewer (which never calls setCollisionVisible) keeps them hidden; the
+   *  Debug "コリジョンを表示" toggle flips it. Applied to meshes as they finish loading. */
+  private collisionVisible = false;
   private viewMode: ViewMode = 'splat';
   /** Snapshot of skybox state captured when entering 360 mode, restored on exit. */
   private savedSkybox: SkyboxSnapshot | null = null;
@@ -989,8 +1012,13 @@ export class SceneManager {
       else { this.collisionBlock?.entity.destroy(); this.collisionBlock = col; }
       // Hand the freshly extracted world-space triangles to the camera controller so
       // walk-mode floor follow / wall collision picks them up immediately. World matrices
-      // need to be valid first — request a sync via the next animation frame.
-      requestAnimationFrame(() => this.syncCollisionTrianglesToController(type));
+      // need to be valid first — request a sync via the next animation frame. Then apply
+      // the current viz state (hidden by default): the mesh extracts while enabled but
+      // does NOT leak the green debug box into play.
+      requestAnimationFrame(() => {
+        this.syncCollisionTrianglesToController(type);
+        setColVis(col, this.collisionVisible);
+      });
       return true;
     } catch (e) { console.error(`Failed to load ${type} collision:`, e); return false; }
   }
@@ -1007,7 +1035,10 @@ export class SceneManager {
       this.app.root.addChild(col.entity);
       if (type === 'walkable') { this.collisionWalkable?.entity.destroy(); this.collisionWalkable = col; }
       else { this.collisionBlock?.entity.destroy(); this.collisionBlock = col; }
-      requestAnimationFrame(() => this.syncCollisionTrianglesToController(type));
+      requestAnimationFrame(() => {
+        this.syncCollisionTrianglesToController(type);
+        setColVis(col, this.collisionVisible);
+      });
       return true;
     } catch (e) { console.error(`Failed to load ${type} collision from ${ref}:`, e); return false; }
   }
@@ -1018,17 +1049,55 @@ export class SceneManager {
    *  re-arm collision behind the user's back. */
   private syncCollisionTrianglesToController(only?: 'walkable' | 'block') {
     if (!this.cameraController) return;
+    // Cull stray far-away voxel boxes (outside the splat AABB) before handing the
+    // triangles to the controller, so they can't floor-snap / jitter the player.
+    const bounds = this.computeSplatWorldBounds();
     if (!only || only === 'walkable') {
-      const tris = (this.walkableEnabled && this.collisionWalkable) ? extractTrianglesFromEntity(this.collisionWalkable.entity) : null;
-      this.cameraController.setWalkableTriangles(tris);
+      const raw = (this.walkableEnabled && this.collisionWalkable) ? extractTrianglesFromEntity(this.collisionWalkable.entity) : null;
+      this.cameraController.setWalkableTriangles(cullTrianglesToBounds(raw, bounds));
     }
     if (!only || only === 'block') {
-      const tris = (this.blockEnabled && this.collisionBlock) ? extractTrianglesFromEntity(this.collisionBlock.entity) : null;
-      this.cameraController.setBlockTriangles(tris);
+      const raw = (this.blockEnabled && this.collisionBlock) ? extractTrianglesFromEntity(this.collisionBlock.entity) : null;
+      this.cameraController.setBlockTriangles(cullTrianglesToBounds(raw, bounds));
     }
   }
 
+  /** World-space AABB of the active splat (with a margin), or null if unavailable.
+   *  The gsplat AABB is local; transform its 8 corners to world so rotation/scale
+   *  (e.g. the default [180,0,0] splatTransform) are handled correctly. */
+  private computeSplatWorldBounds(margin = 1.0): { min: Vec3; max: Vec3 } | null {
+    const ent = this.splatEntity;
+    if (!ent) return null;
+    const gs = ent.gsplat as unknown as {
+      instance?: { aabb?: { center: Vec3; halfExtents: Vec3 } | null; customAabb?: { center: Vec3; halfExtents: Vec3 } | null };
+      aabb?: { center: Vec3; halfExtents: Vec3 } | null;
+      customAabb?: { center: Vec3; halfExtents: Vec3 } | null;
+    } | null;
+    const aabb = gs?.instance?.aabb ?? gs?.instance?.customAabb ?? gs?.aabb ?? gs?.customAabb ?? null;
+    if (!aabb?.center || !aabb?.halfExtents) return null;
+    const wt = ent.getWorldTransform();
+    const c = aabb.center, h = aabb.halfExtents;
+    const min = new Vec3(Infinity, Infinity, Infinity);
+    const max = new Vec3(-Infinity, -Infinity, -Infinity);
+    const corner = new Vec3();
+    for (let sx = -1; sx <= 1; sx += 2) {
+      for (let sy = -1; sy <= 1; sy += 2) {
+        for (let sz = -1; sz <= 1; sz += 2) {
+          corner.set(c.x + sx * h.x, c.y + sy * h.y, c.z + sz * h.z);
+          wt.transformPoint(corner, corner);
+          min.x = Math.min(min.x, corner.x); min.y = Math.min(min.y, corner.y); min.z = Math.min(min.z, corner.z);
+          max.x = Math.max(max.x, corner.x); max.y = Math.max(max.y, corner.y); max.z = Math.max(max.z, corner.z);
+        }
+      }
+    }
+    if (!Number.isFinite(min.x) || !Number.isFinite(max.x)) return null;
+    min.x -= margin; min.y -= margin; min.z -= margin;
+    max.x += margin; max.y += margin; max.z += margin;
+    return { min, max };
+  }
+
   setCollisionVisible(visible: boolean) {
+    this.collisionVisible = visible;
     if (this.collisionWalkable) setColVis(this.collisionWalkable, visible);
     if (this.collisionBlock) setColVis(this.collisionBlock, visible);
   }

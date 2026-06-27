@@ -153,19 +153,21 @@ export interface RenderQualityConfig {
   /** Brightness 0..3 (1 = neutral). PlayCanvas only. Multiplies on top of exposure. */
   brightness?: number;
   /**
-   * Bypass the SuperSplat-equivalent post pipeline entirely (PlayCanvas only).
+   * Bypass the SuperSplat-equivalent color processing (PlayCanvas only).
    *
-   * When `true`, `app-init.ts` skips:
-   *   - CameraFrame setup (HDR float backbuffer + tonemap + grading)
+   * When `true`, `app-init.ts` still creates the CameraFrame HDR float backbuffer
+   * (to avoid 8-bit banding) but skips:
    *   - the `gsplatOutputVS` shader chunk override (gamma passthrough)
+   *   - exposure / tone / grading application (handled in `render-presets.ts`)
    *
-   * Result: splat colors land in the framebuffer through PlayCanvas v2's default
-   * gsplat output path with no color grading on top — matches the "raw, no-adjust"
-   * look of the source PLY/SOG. Tone / saturation / contrast / brightness sliders
-   * become no-ops in this mode (no CameraFrame to apply them to).
+   * Result: splat colors go through PlayCanvas v2's default gsplat gamma round-trip
+   * with no grading on top — the "raw, no-adjust" trained-color look. Tone /
+   * saturation / contrast / brightness sliders become no-ops in this mode.
    *
-   * Requires app reload to toggle (CameraFrame and shader chunks are bound at init).
-   * Default `false` (= SuperSplat-equivalent processing applied).
+   * Requires app reload to toggle (the shader chunk override is bound at init).
+   * Omitted/`false` ⇒ SuperSplat-equivalent processing applied (default, good look);
+   * `true` ⇒ bypass. NOTE: the runtime default is opt-OUT — only an explicit `true`
+   * disables the pipeline, so new/un-authored scenes get the SuperSplat look.
    */
   bypassColorPipeline?: boolean;
 }

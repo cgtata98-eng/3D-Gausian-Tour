@@ -117,8 +117,9 @@ export async function initApp(canvas: HTMLCanvasElement, init?: AppInitOptions):
   // 8bit バンディング = 「もやもや」を回避)、`gsplatOutputVS` の passthrough 上書きは
   // **行わない** → gsplat シェーダのデフォルトのガンマ経路 (= 学習時の色味そのまま) を
   // 通す。grading / exposure は applyRenderConfig 側でスキップ。
-  // 既定 (undefined) は bypass 扱い — 色調整は明示的に `false` を入れたときだけ有効。
-  const bypass = init?.render?.bypassColorPipeline !== false;
+  // 既定 (undefined) は SuperSplat 同等パイプライン ON 扱い — bypass は明示的に
+  // `true` を入れたときだけ。`false`/未設定はどちらも gsplatOutputVS passthrough を当てる。
+  const bypass = init?.render?.bypassColorPipeline === true;
   const cameraFrame = new CameraFrame(app, camera.camera!);
   cameraFrame.rendering.toneMapping = TONEMAP_LINEAR;
   cameraFrame.rendering.renderFormats = [PIXELFORMAT_RGBA16F, PIXELFORMAT_RGBA32F];

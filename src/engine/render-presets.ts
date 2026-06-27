@@ -70,8 +70,9 @@ export function applyRenderConfig(
 
   // bypass ON: exposure / toneMapping / grading の上書きはすべて無視。
   // gsplatOutputVS の上書きが効いていないので、シェーダ既定の gamma 経路を素通しさせる。
-  // 既定 (undefined) は bypass 扱い — 色調整は明示的に `false` を入れたときだけ有効。
-  const bypass = cfg.bypassColorPipeline !== false;
+  // 既定 (undefined) は SuperSplat 同等パイプライン ON 扱い — bypass は明示的に
+  // `true` を入れたときだけ (app-init.ts と一致させる)。
+  const bypass = cfg.bypassColorPipeline === true;
 
   if (!bypass && cfg.exposureEV !== undefined) {
     app.scene.exposure = Math.pow(2, cfg.exposureEV);
