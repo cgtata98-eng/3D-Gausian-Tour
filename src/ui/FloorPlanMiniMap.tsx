@@ -280,10 +280,11 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
           }
           const cx = toMX(mx), cy = toMY(mz);
           const isA = activeVp === vp.id, isD = draggingId === vp.id, canD = editable;
-          // Debug 図面 cone is purely `mapYaw` (slider). Independent of `target`, so saving
-          // the VR thumbnail / initial direction never spins the cone. Defaults to 0°.
+          // Direction cone is for VR (360° panorama) viewpoints ONLY — GS/splat viewpoints
+          // don't need a facing radar (you look around freely), so they show just the pin.
+          // The cone is purely `mapYaw` (slider); independent of `target`/live camera.
           const vpYaw = typeof vp.mapYaw === 'number' ? vp.mapYaw : 0;
-          const hasDir = true;
+          const hasDir = !!activePlan?.panoramas?.[vp.id];
           const vpYawRad = (vpYaw + 90) * Math.PI / 180;
           const vcl = cl * (isA ? 0.75 : 0.55);
           const vSpread = 0.55;
