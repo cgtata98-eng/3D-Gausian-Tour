@@ -270,11 +270,13 @@ export class SceneManager {
           if (activePlan.id) store.setViewpointThumbnails(activePlan.id, thumbs);
         }
 
-        // Initial pose is always the first viewpoint (= the thumbnail the user sees first).
-        // Any legacy `fixedPosition` / `initialPositionMode` data on the manifest is ignored.
+        // Initial pose = the plan's designated start viewpoint (Plan.startViewpointId),
+        // falling back to the first viewpoint for un-designated / legacy plans. Legacy
+        // `fixedPosition` / `initialPositionMode` are not used for placement.
         const vps = activePlan?.viewpoints ?? [];
-        if (vps.length > 0) {
-          this.jumpToViewpoint(vps[0]);
+        const startVp = vps.find((v) => v.id === activePlan?.startViewpointId) ?? vps[0];
+        if (startVp) {
+          this.jumpToViewpoint(startVp);
         }
       } else if (this.splatEntity && this.cameraController instanceof OrbitCameraController) {
         // showroom: orbit カメラを splat に合わせる。PlayCanvas v2 の gsplat instance では
@@ -696,7 +698,8 @@ export class SceneManager {
     // camera pose. Use case: same room with separate day/night plans, the user
     // wants to compare lighting at the exact same spot.
     if (this.cameraController && plan.viewpoints.length > 0 && !useUIStore.getState().linkPlanCamera) {
-      this.jumpToViewpoint(plan.viewpoints[0]);
+      const startVp = plan.viewpoints.find((v) => v.id === plan.startViewpointId) ?? plan.viewpoints[0];
+      this.jumpToViewpoint(startVp);
     }
 
     if (this.viewMode === '360') {

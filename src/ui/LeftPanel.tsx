@@ -251,14 +251,35 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
         {!hasImage && <rect x={0} y={0} width={dW} height={dH} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" strokeWidth={1} rx={4} />}
         {/* Sort: inactive first, active last so the active dot sits on top. */}
         {[...viewpoints].sort((a, b) => (a.id === activeVp ? 1 : 0) - (b.id === activeVp ? 1 : 0)).map((vp) => {
-          const mx = vp.mapPosition ? vp.mapPosition[0] : 0;
-          const mz = vp.mapPosition ? vp.mapPosition[1] : 0;
+          // Match the editor: un-placed pins show in a visible row near the top (never
+          // stacked at the origin), so the map always reflects every viewpoint.
+          let mx: number, mz: number;
+          if (vp.mapPosition) {
+            mx = vp.mapPosition[0]; mz = vp.mapPosition[1];
+          } else {
+            const oi = viewpoints.findIndex((v) => v.id === vp.id);
+            const n = Math.max(1, viewpoints.length);
+            mx = floorPlan.bounds.min[0] + ((oi + 0.5) / n) * worldW;
+            mz = floorPlan.bounds.min[1] + 0.1 * worldH;
+          }
           const cx = toMX(mx), cy = toMY(mz);
           const isA = activeVp === vp.id;
           const fill = isA ? '#4caf50' : 'rgba(15,17,22,0.9)';
           const stroke = '#fff';
           const r = isA ? 6 : 5;
           const sw = isA ? 2 : 1.5;
+          // Direction cone (purely `mapYaw`, identical to the 図面設定 editor) so the
+          // viewpoint's facing — including VR panoramas — shows on the MAP too, not just in
+          // the editor. Defaults to 0° (points up). Independent of camera target.
+          const yawDeg = typeof vp.mapYaw === 'number' ? vp.mapYaw : 0;
+          const yr = (yawDeg + 90) * Math.PI / 180;
+          const ccl = Math.min(dW, dH) * 0.09 * (isA ? 0.8 : 0.62);
+          const spread = 0.55;
+          const tip = { x: cx + Math.cos(yr) * ccl, y: cy - Math.sin(yr) * ccl };
+          const cL = { x: cx + Math.cos(yr + spread) * ccl * 0.7, y: cy - Math.sin(yr + spread) * ccl * 0.7 };
+          const cR = { x: cx + Math.cos(yr - spread) * ccl * 0.7, y: cy - Math.sin(yr - spread) * ccl * 0.7 };
+          const coneFill = isA ? 'rgba(76,175,80,0.35)' : 'rgba(15,17,22,0.22)';
+          const coneStroke = isA ? 'rgba(76,175,80,0.95)' : 'rgba(15,17,22,0.55)';
           return (
             <g
               key={vp.id}
@@ -267,6 +288,7 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
               role="button"
               aria-label={`${vp.label} に移動`}
             >
+              <polygon points={`${cx},${cy} ${cL.x},${cL.y} ${tip.x},${tip.y} ${cR.x},${cR.y}`} fill={coneFill} stroke={coneStroke} strokeWidth={isA ? 1.2 : 0.8} />
               <circle cx={cx} cy={cy} r={Math.max(r + 6, 12)} fill="transparent" />
               <circle cx={cx} cy={cy} r={r} fill={fill} stroke={stroke} strokeWidth={sw} />
               <text x={cx} y={cy - r - 4} textAnchor="middle" fill={isA ? '#4caf50' : '#f5f7fa'} fontSize={11} fontWeight={isA ? 'bold' : 600} stroke="rgba(0,0,0,0.75)" strokeWidth={3} paintOrder="stroke">{vp.label}</text>

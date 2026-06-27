@@ -323,7 +323,14 @@ export interface Plan {
   collision?: CollisionConfig;
   /** Camera positions for this plan. May be empty for a brand-new plan. */
   viewpoints: Viewpoint[];
-  /** Initial camera pose when `settings.initialPositionMode === 'fixed'`. */
+  /**
+   * Which viewpoint the scene starts at on load (and on plan switch). The canonical
+   * "initial position" designation — decoupled from array order. If unset / not found,
+   * falls back to `viewpoints[0]` (preserves legacy behavior). Set via the 🏁 button in
+   * the viewpoint list (`setStartViewpoint`).
+   */
+  startViewpointId?: string;
+  /** @deprecated No longer used for placement — the start is `startViewpointId`. Only `fov` is read as a slider seed. */
   fixedPosition?: FixedPosition;
   /**
    * Optional color / material variants for this plan. When set and the user picks one

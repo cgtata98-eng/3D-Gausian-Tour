@@ -157,6 +157,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const [vpReorderOverId, setVpReorderOverId] = useState<string | null>(null);
   const vpRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const reorderViewpoints = useSceneStore(s => s.reorderViewpoints);
+  const setStartViewpoint = useSceneStore(s => s.setStartViewpoint);
+  const setViewpointPose = useSceneStore(s => s.setViewpointPose);
   // 「位置を変更」モード — { pinId, placementId } がセットされている間、preview を
   // クリックするとその placement の position が新しい床面交点に書き換えられる。
   // 新規タグ作成は「+ タグを追加」(未配置で list へ) → ドラッグで preview に配置。
@@ -514,12 +516,40 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
    *   平行移動して「向きを保ったまま位置だけ移動」する。`mapPosition` も同期するので MAP の
    *   dot と実ジャンプ先が一致する。アクティブ視点ならクリック直後にカメラを新位置へ jump。
    */
-  const placeViewpointAt = (vpId: string, worldX: number, worldZ: number, opts: { jump?: boolean } = {}) => {
-    const shouldJump = opts.jump ?? true;
+  const placeViewpointAt = (vpId: string, worldX: number, worldZ: number) => {
     if (!activePlanId) return;
     const x = +worldX.toFixed(3);
     const z = +worldZ.toFixed(3);
-    let updatedVp: { id: string; label: string; position: [number, number, number]; target: [number, number, number]; fov: number } | null = null;
+    // MAP-ONLY: dragging / clicking the floor-plan moves the DOT (mapPosition) only.
+    // The real 3D camera, target, thumbnail-capture point, and start position are NOT
+    // touched — relocating the camera is the explicit "ドット位置をカメラに反映" action
+    // (bakeViewpointToCamera). This holds for both GS and VR (no viewMode fork), matching
+    // the documented decoupling in types.ts and stopping the "move dot → break camera/thumbnail" chain.
+    useSceneStore.setState((s) => {
+      if (!s.manifest?.plans) return s;
+      return {
+        manifest: {
+          ...s.manifest,
+          plans: s.manifest.plans.map((p) => {
+            if (p.id !== activePlanId) return p;
+            return {
+              ...p,
+              viewpoints: p.viewpoints.map((v) =>
+                v.id === vpId ? { ...v, mapPosition: [x, z] as [number, number] } : v
+              ),
+            };
+          }),
+        },
+      };
+    });
+  };
+
+  /** Explicit "reflect dot → camera": commit ONE viewpoint's floor-plan dot (mapPosition)
+   *  onto its real 3D camera (position + target shifted by the same delta), and jump there
+   *  if it's the active viewpoint. Pairs with the map-only dot dragging above. */
+  const bakeViewpointToCamera = (vpId: string) => {
+    if (!activePlanId) return;
+    let baked: { id: string; label: string; position: [number, number, number]; target: [number, number, number]; fov: number } | null = null;
     useSceneStore.setState((s) => {
       if (!s.manifest?.plans) return s;
       return {
@@ -530,38 +560,23 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             return {
               ...p,
               viewpoints: p.viewpoints.map((v) => {
-                if (v.id !== vpId) return v;
-                if (isVRMode) {
-                  return { ...v, mapPosition: [x, z] as [number, number] };
-                }
-                const dx = x - v.position[0];
-                const dz = z - v.position[2];
-                const nextPos: [number, number, number] = [x, v.position[1], z];
-                const nextTarget: [number, number, number] = [
-                  +(v.target[0] + dx).toFixed(3),
-                  v.target[1],
-                  +(v.target[2] + dz).toFixed(3),
+                if (v.id !== vpId || !v.mapPosition) return v;
+                const [mx, mz] = v.mapPosition;
+                const dx = mx - v.position[0];
+                const dz = mz - v.position[2];
+                const position: [number, number, number] = [+mx.toFixed(3), v.position[1], +mz.toFixed(3)];
+                const target: [number, number, number] = [
+                  +(v.target[0] + dx).toFixed(3), v.target[1], +(v.target[2] + dz).toFixed(3),
                 ];
-                const next = {
-                  ...v,
-                  position: nextPos,
-                  target: nextTarget,
-                  mapPosition: [x, z] as [number, number],
-                };
-                updatedVp = { id: next.id, label: next.label, position: nextPos, target: nextTarget, fov: next.fov };
-                return next;
+                baked = { id: v.id, label: v.label, position, target, fov: v.fov };
+                return { ...v, position, target };
               }),
             };
           }),
         },
       };
     });
-    // GS で active 視点を動かしたら、即座にカメラを新しい位置へジャンプして
-    // 「MAP で配置 = ジャンプ先が変わる」が即体感できるようにする。
-    // ドラッグ中 (jump:false) は呼ばないので、ガクガク追従にならない。
-    if (shouldJump && updatedVp && activeVp === vpId) {
-      smRef.current?.jumpToViewpoint(updatedVp);
-    }
+    if (baked && activeVp === vpId) smRef.current?.jumpToViewpoint(baked);
   };
 
   /** Yaw (0–360°) of the cone for this viewpoint — purely from `mapYaw` (the slider).
@@ -723,7 +738,25 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   // the 2D overlay. No engine-side reaction needed.
 
   const captureCurrentAsThumb = (id: string) => {
-    void smRef.current?.captureCurrentFrameAsManualThumbnail(id);
+    const sm = smRef.current;
+    if (!sm || !activePlanId) return;
+    // GS/splat: 📷 ALSO commits the live camera pose to the viewpoint, so the saved
+    // thumbnail and the jump/start position are the same place ("サムネで決めた位置で
+    // スタート"). VR/360: the thumbnail is regenerated from the panorama; the position
+    // stays the panorama capture spot (don't move it from a non-existent walk position).
+    if (!isVRMode) {
+      const live = sm.getLiveCameraPose?.();
+      if (live) {
+        const pos: [number, number, number] = [+live.position[0].toFixed(3), +live.position[1].toFixed(3), +live.position[2].toFixed(3)];
+        const target: [number, number, number] = [
+          +(pos[0] - Math.sin(live.yaw * Math.PI / 180)).toFixed(3),
+          +(pos[1] + Math.tan(live.pitch * Math.PI / 180)).toFixed(3),
+          +(pos[2] - Math.cos(live.yaw * Math.PI / 180)).toFixed(3),
+        ];
+        setViewpointPose(id, pos, target, +live.fov.toFixed(1));
+      }
+    }
+    void sm.captureCurrentFrameAsManualThumbnail(id);
   };
   const handleManualThumbFile = (file: File, id: string) => {
     if (!activePlanId) return;
@@ -1861,6 +1894,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   <div style={S.vpList}>
                     {activeViewpoints.map(vp => {
                       const isA = activeVp === vp.id;
+                      const isStart = activePlan?.startViewpointId === vp.id;
+                      const dotOffset = !!vp.mapPosition && (Math.abs(vp.mapPosition[0] - vp.position[0]) > 1e-3 || Math.abs(vp.mapPosition[1] - vp.position[2]) > 1e-3);
                       const isE = editId === vp.id;
                       const thumb = planThumbs[vp.id] ?? autoThumbs[vp.id];
                       const isManual = !!planThumbs[vp.id];
@@ -1916,6 +1951,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             ) : (
                               <div onClick={() => handleVpClick(vp.id)} style={{ ...S.vpLabel, color: isA ? '#92400e' : '#1f2937' }}>
                                 {vp.label}
+                                {isStart && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, color: tokens.color.accent }}>🏁 初期位置</span>}
                               </div>
                             )}
                             <div style={S.vpMeta}>
@@ -1926,7 +1962,23 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           </div>
                           <div style={S.vpActions}>
                             <button
-                              title="VR パノラマからサムネを再生成 (パノラマ未設定時はプレビュー画面)"
+                              title={isStart ? '初期位置に設定済み（シーンを開くとここから開始）' : 'この視点を初期位置にする（開いたらここから開始）'}
+                              onClick={() => setStartViewpoint(vp.id)}
+                              style={{ ...S.iconBtn, ...(isStart ? { color: tokens.color.accent, background: tokens.gradient.accent } : {}) }}
+                            >
+                              🏁
+                            </button>
+                            {dotOffset && (
+                              <button
+                                title="ドット位置をカメラに反映（カメラ・初期位置・サムネ撮影点をドットの場所へ移動）"
+                                onClick={() => bakeViewpointToCamera(vp.id)}
+                                style={{ ...S.iconBtn, color: tokens.color.warn }}
+                              >
+                                📍
+                              </button>
+                            )}
+                            <button
+                              title={isVRMode ? 'パノラマからサムネを再生成' : '今いる位置・向き・画をこの視点に保存（位置＋サムネを更新／ジャンプ先＝この画になる）'}
                               onClick={() => captureCurrentAsThumb(vp.id)}
                               style={S.iconBtn}
                             >
@@ -2058,16 +2110,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           onMapClick={(wx, wz) => {
                             if (activeVp) placeViewpointAt(activeVp, wx, wz);
                           }}
-                          onMoveViewpoint={(id, wx, wz) => placeViewpointAt(id, wx, wz, { jump: false })}
-                          onMoveViewpointEnd={(id) => {
-                            const plan = useSceneStore.getState().manifest?.plans?.find(p => p.id === activePlanId);
-                            const vp = plan?.viewpoints.find(v => v.id === id);
-                            if (vp && activeVp === id) smRef.current?.jumpToViewpoint(vp);
-                          }}
+                          onMoveViewpoint={(id, wx, wz) => placeViewpointAt(id, wx, wz)}
+                          onMoveViewpointEnd={() => { /* map-only: dragging the dot never moves the camera (use 📍 reflect) */ }}
                         />
                       </div>
                       <div style={{ fontSize: 11, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.6 }}>
-                        ・<strong style={{ color: '#fecaca' }}>赤ピン</strong>（選択中の視点）= <strong>初期位置</strong> — マップクリックで配置<br />
+                        ・<strong style={{ color: '#fecaca' }}>赤ピン</strong>（選択中の視点）— マップクリックで配置。<strong>初期位置</strong>は視点リストの 🏁 で指定<br />
                         ・他の視点のドットを直接ドラッグして移動も可<br />
                         ・三角コーン = その視点の向き（下の yaw スライダーで調整）
                       </div>

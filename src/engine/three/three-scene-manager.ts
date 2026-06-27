@@ -232,9 +232,10 @@ export class ThreeSceneManager {
       // Apply render-quality config.
       this.applyRenderConfig(ensured.settings.render);
 
-      // Jump to first viewpoint.
+      // Jump to the designated start viewpoint (Plan.startViewpointId; fallback: first).
       const vps = activePlan?.viewpoints ?? [];
-      if (vps.length > 0) this.jumpToViewpoint(vps[0]);
+      const startVp = vps.find((v) => v.id === activePlan?.startViewpointId) ?? vps[0];
+      if (startVp) this.jumpToViewpoint(startVp);
 
       store.setLoaded(true);
       store.setLoading(false);

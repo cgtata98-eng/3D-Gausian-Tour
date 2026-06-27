@@ -147,6 +147,12 @@ interface SceneState {
   /** Reorder viewpoints in the active plan. Moves `fromId` to occupy `toId`'s
    *  current index (other entries slide). No-op if either id is missing. */
   reorderViewpoints: (fromId: string, toId: string) => void;
+  /** Designate which viewpoint the scene starts at (Plan.startViewpointId). */
+  setStartViewpoint: (id: string) => void;
+  /** Commit a viewpoint's real 3D camera pose (position/target/fov) — e.g. when 📷
+   *  captures the thumbnail from where the user is standing, so the thumbnail and the
+   *  jump/start land at the same place. */
+  setViewpointPose: (id: string, position: [number, number, number], target: [number, number, number], fov: number) => void;
   setFloorPlanImage: (dataUrl: string) => void;
   updateInfo: (patch: Partial<SceneInfo>) => void;
   // ── Thumbnails ────────────────────────────────────────────────────
@@ -402,6 +408,14 @@ export const useSceneStore = create<SceneState>((set) => ({
     next.splice(to, 0, moved);
     return { ...p, viewpoints: next };
   })),
+  setStartViewpoint: (id) => set((s) => withActivePlan(s, (p) => ({
+    ...p,
+    startViewpointId: id,
+  }))),
+  setViewpointPose: (id, position, target, fov) => set((s) => withActivePlan(s, (p) => ({
+    ...p,
+    viewpoints: p.viewpoints.map((v) => (v.id === id ? { ...v, position, target, fov } : v)),
+  }))),
   setFloorPlanImage: (dataUrl) => set((s) => withActivePlan(s, (p) => ({
     ...p,
     floorPlan: { ...(p.floorPlan ?? DEFAULT_FLOOR_PLAN), image: dataUrl },

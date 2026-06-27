@@ -102,14 +102,21 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
     if (!editable) return;
     const vp = viewpoints.find(v => v.id === id); if (!vp) return;
     const pt = getSvgPt(cx, cy);
-    // Use the same fallback as the renderer (`(0, 0)` when mapPosition is unset) so the
-    // drag origin matches the dot's actual on-screen position. Falling back to vp.position
-    // here causes the dot to jump on first drag because the dot is rendered at (0, 0).
-    const ox = vp.mapPosition ? vp.mapPosition[0] : 0;
-    const oz = vp.mapPosition ? vp.mapPosition[1] : 0;
+    // Drag origin MUST match where the pin is rendered (see the render loop): the manual
+    // `mapPosition`, else the SAME visible spread default (a row near the top). If these
+    // disagree, grabbing an un-placed pin makes it jump toward the origin on first move.
+    let ox: number, oz: number;
+    if (vp.mapPosition) {
+      ox = vp.mapPosition[0]; oz = vp.mapPosition[1];
+    } else {
+      const oi = viewpoints.findIndex((v) => v.id === id);
+      const n = Math.max(1, viewpoints.length);
+      ox = bounds.min[0] + ((oi + 0.5) / n) * worldW;
+      oz = bounds.min[1] + 0.1 * worldH;
+    }
     dragRef.current = { vpId: id, sx: pt.x, sy: pt.y, ox, oz };
     setDraggingId(id);
-  }, [editable, viewpoints, getSvgPt]);
+  }, [editable, viewpoints, getSvgPt, bounds, worldW, worldH]);
 
   const onDM = useCallback((cx: number, cy: number) => {
     const d = dragRef.current; if (!d) return;
@@ -257,10 +264,20 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
         {!hasImage && <rect x={PADDING} y={PADDING} width={dW - PADDING * 2} height={dH - PADDING * 2} fill="none" stroke="rgba(0,0,0,0.2)" strokeWidth={1.5} rx={4} />}
         {/* Render non-active viewpoints first so the active red pin always sits on top. */}
         {[...viewpoints].sort((a, b) => (a.id === activeVp ? 1 : 0) - (b.id === activeVp ? 1 : 0)).map(vp => {
-          // Pin position is purely `mapPosition`. Default origin (0,0) when unset — never
-          // falls back to `vp.position` (which 📷 mutates).
-          const mx = vp.mapPosition ? vp.mapPosition[0] : 0;
-          const mz = vp.mapPosition ? vp.mapPosition[1] : 0;
+          // Pins are display-only markers the author places on the floor plan (`mapPosition`).
+          // They are NOT tied to the camera `position` (a different coord space that often sits
+          // off the calibrated map). A viewpoint with no placement yet is shown in a visible row
+          // near the top so EVERY pin stays on-screen and draggable — never off-map, never all
+          // stacked at the origin. Dragging it sets `mapPosition` and it stays where dropped.
+          let mx: number, mz: number;
+          if (vp.mapPosition) {
+            mx = vp.mapPosition[0]; mz = vp.mapPosition[1];
+          } else {
+            const oi = viewpoints.findIndex((v) => v.id === vp.id);
+            const n = Math.max(1, viewpoints.length);
+            mx = bounds.min[0] + ((oi + 0.5) / n) * worldW;
+            mz = bounds.min[1] + 0.1 * worldH;
+          }
           const cx = toMX(mx), cy = toMY(mz);
           const isA = activeVp === vp.id, isD = draggingId === vp.id, canD = editable;
           // Debug 図面 cone is purely `mapYaw` (slider). Independent of `target`, so saving
