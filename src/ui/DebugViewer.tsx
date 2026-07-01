@@ -2741,6 +2741,7 @@ function PinsPlanSection({
   const removePin = useSceneStore((s) => s.removePin);
   const updatePin = useSceneStore((s) => s.updatePin);
   const removePinPlacement = useSceneStore((s) => s.removePinPlacement);
+  const updatePinPlacement = useSceneStore((s) => s.updatePinPlacement);
   // Dropping the picker on a pin row uploads a thumbnail image as a base64
   // data URL. Keep the `<input type=file>` ref-bound so the click can be
   // triggered programmatically from the row's button.
@@ -2925,8 +2926,20 @@ function PinsPlanSection({
                     {placements.map((pl) => {
                       const vpLabel = activePlan?.viewpoints.find((v) => v.id === pl.viewpointId)?.label ?? '不明な視点';
                       const isMoving = moveTargetId?.pinId === pin.id && moveTargetId?.placementId === pl.id;
+                      // 数値微調整: 各軸を STEP ずつ加減 or 直接入力。position は
+                      // タプルなので複製してから該当軸だけ書き換えて updatePinPlacement。
+                      const NUDGE_STEP = 0.05;
+                      const setAxis = (axis: 0 | 1 | 2, value: number) => {
+                        const next = [...pl.position] as [number, number, number];
+                        next[axis] = value;
+                        updatePinPlacement(pin.id, pl.id, { position: next });
+                      };
+                      const nudge = (axis: 0 | 1 | 2, delta: number) => {
+                        setAxis(axis, +(pl.position[axis] + delta).toFixed(3));
+                      };
                       return (
-                        <div key={pl.id} style={placementRowStyle}>
+                        <div key={pl.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={placementRowStyle}>
                           <span style={placementVpLabel}>{vpLabel}</span>
                           <span style={placementCoord}>({pl.position.map((c) => c.toFixed(1)).join(', ')})</span>
                           <button
@@ -2954,6 +2967,38 @@ function PinsPlanSection({
                             onClick={() => removePinPlacement(pin.id, pl.id)}
                             style={{ ...S.iconBtn, color: '#dc2626' }}
                           >✕</button>
+                        </div>
+                        {/* 数値微調整 (X/Y/Z を ±0.05m ずつ、または直接入力) */}
+                        <div style={placementNudgeRow}>
+                          {(['X', 'Y', 'Z'] as const).map((label, axis) => (
+                            <div key={label} style={nudgeAxisGroup}>
+                              <span style={nudgeAxisLabel}>{label}</span>
+                              <button
+                                type="button"
+                                title={`${label} を -${NUDGE_STEP}m`}
+                                onClick={() => nudge(axis as 0 | 1 | 2, -NUDGE_STEP)}
+                                style={nudgeBtn}
+                              >−</button>
+                              <input
+                                type="number"
+                                step={NUDGE_STEP}
+                                value={pl.position[axis]}
+                                onChange={(e) => {
+                                  const v = parseFloat(e.target.value);
+                                  if (Number.isFinite(v)) setAxis(axis as 0 | 1 | 2, v);
+                                }}
+                                style={nudgeInput}
+                                title={`${label} 座標 (m)`}
+                              />
+                              <button
+                                type="button"
+                                title={`${label} を +${NUDGE_STEP}m`}
+                                onClick={() => nudge(axis as 0 | 1 | 2, NUDGE_STEP)}
+                                style={nudgeBtn}
+                              >＋</button>
+                            </div>
+                          ))}
+                        </div>
                         </div>
                       );
                     })}
@@ -3068,6 +3113,61 @@ const placementCoord: React.CSSProperties = {
   color: tokens.color.textFaint,
   fontFamily: tokens.font.mono,
   flexShrink: 0,
+};
+
+const placementNudgeRow: React.CSSProperties = {
+  display: 'flex',
+  gap: 6,
+  padding: '0 6px 2px',
+};
+
+const nudgeAxisGroup: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 2,
+  flex: 1,
+};
+
+const nudgeAxisLabel: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 700,
+  color: tokens.color.textMute,
+  width: 10,
+  flexShrink: 0,
+};
+
+const nudgeBtn: React.CSSProperties = {
+  width: 18,
+  height: 18,
+  padding: 0,
+  fontSize: 12,
+  lineHeight: 1,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: tokens.glass.surface,
+  borderWidth: 1,
+  borderStyle: 'solid' as const,
+  borderColor: tokens.color.border,
+  borderRadius: tokens.radius.sm,
+  color: tokens.color.text,
+  cursor: 'pointer',
+  flexShrink: 0,
+};
+
+const nudgeInput: React.CSSProperties = {
+  width: '100%',
+  minWidth: 0,
+  padding: '2px 3px',
+  fontSize: 10,
+  fontFamily: tokens.font.mono,
+  textAlign: 'center' as const,
+  background: 'rgba(255,255,255,0.6)',
+  borderWidth: 1,
+  borderStyle: 'solid' as const,
+  borderColor: tokens.color.border,
+  borderRadius: tokens.radius.sm,
+  color: tokens.color.text,
 };
 
 const pinPlacementBanner: React.CSSProperties = {
