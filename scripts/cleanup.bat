@@ -1,7 +1,7 @@
 @echo off
-title 3DRoomTour Cleanup
+title 3D_CG_GS Cleanup
 echo.
-echo === 3DRoomTour Cleanup ===
+echo === 3D_CG_GS Cleanup ===
 echo.
 
 echo [1/2] Closing Chrome / Edge background processes...
