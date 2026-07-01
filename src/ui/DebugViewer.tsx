@@ -2941,7 +2941,6 @@ function PinsPlanSection({
                         <div key={pl.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div style={placementRowStyle}>
                           <span style={placementVpLabel}>{vpLabel}</span>
-                          <span style={placementCoord}>({pl.position.map((c) => c.toFixed(1)).join(', ')})</span>
                           <button
                             type="button"
                             title={isMoving ? 'クリックして位置変更モードを解除' : 'プレビューをクリックでこの配置の位置を変更'}
@@ -3106,13 +3105,6 @@ const placementVpLabel: React.CSSProperties = {
   whiteSpace: 'nowrap' as const,
   overflow: 'hidden' as const,
   textOverflow: 'ellipsis' as const,
-};
-
-const placementCoord: React.CSSProperties = {
-  fontSize: 10,
-  color: tokens.color.textFaint,
-  fontFamily: tokens.font.mono,
-  flexShrink: 0,
 };
 
 const placementNudgeRow: React.CSSProperties = {
