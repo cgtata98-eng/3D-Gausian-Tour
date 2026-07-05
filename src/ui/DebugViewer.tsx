@@ -2567,8 +2567,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               const cx = e.clientX - r.left;
               const cy = e.clientY - r.top;
               const sm = smRef.current;
-              const pos = sm && 'screenToFloorPoint' in sm
-                ? (sm as { screenToFloorPoint: (x: number, y: number) => [number, number, number] | null }).screenToFloorPoint(cx, cy)
+              // Surface snap (B1): stick to the collision mesh under the cursor
+              // (depth resolved automatically); floor plane is the fallback.
+              const pos = sm && 'screenToScenePoint' in sm
+                ? (sm as { screenToScenePoint: (x: number, y: number) => [number, number, number] | null }).screenToScenePoint(cx, cy)
                 : null;
               if (pos) {
                 const activeVpId = useCameraStore.getState().activeViewpoint;
@@ -2609,8 +2611,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             const cx = e.clientX - r.left;
             const cy = e.clientY - r.top;
             const sm = smRef.current;
-            const pos = sm && 'screenToFloorPoint' in sm
-              ? (sm as { screenToFloorPoint: (x: number, y: number) => [number, number, number] | null }).screenToFloorPoint(cx, cy)
+            // Surface snap (B1) — same resolver as drop-to-place.
+            const pos = sm && 'screenToScenePoint' in sm
+              ? (sm as { screenToScenePoint: (x: number, y: number) => [number, number, number] | null }).screenToScenePoint(cx, cy)
               : null;
             if (!pos) return;
             const activeVpId = useCameraStore.getState().activeViewpoint;
@@ -2625,7 +2628,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
           <AiScreenOverlay />
           <AiGeneratingOverlay />
           <FpsOverlay />
-          <ScenePinsOverlay containerRef={previewWrapRef} />
+          <ScenePinsOverlay containerRef={previewWrapRef} editable />
           {debugTab === 'video' && (
             <VideoOverlay
               freeRecState={freeRecState}
@@ -3013,6 +3016,11 @@ function PinsPlanSection({
   const updatePin = useSceneStore((s) => s.updatePin);
   const removePinPlacement = useSceneStore((s) => s.removePinPlacement);
   const updatePinPlacement = useSceneStore((s) => s.updatePinPlacement);
+  const activeViewpoint = useCameraStore((s) => s.activeViewpoint);
+  // 「この視点で見えている配置だけ表示」フィルタ (B1)。placements は viewpointId に
+  // 束縛されているので、多視点で同じタグを使い回すとリストが膨らむ — 既定 ON で
+  // 今のアングルの分だけに絞る。
+  const [onlyCurrentVp, setOnlyCurrentVp] = useState(true);
   // Dropping the picker on a pin row uploads a thumbnail image as a base64
   // data URL. Keep the `<input type=file>` ref-bound so the click can be
   // triggered programmatically from the row's button.
@@ -3073,6 +3081,12 @@ function PinsPlanSection({
           ✏️ 位置変更モード中 — プレビューをクリックでピンを移動 (Esc で解除)
         </div>
       )}
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: tokens.color.textMute, marginBottom: 8, cursor: 'pointer' }}
+        title="配置一覧を、今表示中の視点に束縛された配置だけに絞ります">
+        <input type="checkbox" checked={onlyCurrentVp} onChange={(e) => setOnlyCurrentVp(e.target.checked)} />
+        この視点の配置のみ表示
+      </label>
 
       {pins.length === 0 ? (
         <div style={S.empty}>まだタグが追加されていません</div>
@@ -3187,14 +3201,22 @@ function PinsPlanSection({
                 </div>
               </div>
 
+              {(() => {
+                const visiblePlacements = onlyCurrentVp
+                  ? placements.filter((pl) => pl.viewpointId === activeViewpoint)
+                  : placements;
+                return (
               <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginBottom: 6 }}>
-                  配置一覧 ({placementCount}箇所)
+                  配置一覧 ({onlyCurrentVp ? `この視点 ${visiblePlacements.length} / 全 ${placementCount}` : `${placementCount}箇所`})
                   {placementCount === 0 && <span style={{ marginLeft: 8, color: tokens.color.textFaint, fontWeight: 500 }}>未配置 — タイトル行をドラッグでプレビューに配置</span>}
+                  {placementCount > 0 && visiblePlacements.length === 0 && (
+                    <span style={{ marginLeft: 8, color: tokens.color.textFaint, fontWeight: 500 }}>この視点への配置なし（フィルタ解除で全表示）</span>
+                  )}
                 </div>
-                {placements.length > 0 && (
+                {visiblePlacements.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {placements.map((pl) => {
+                    {visiblePlacements.map((pl) => {
                       const vpLabel = activePlan?.viewpoints.find((v) => v.id === pl.viewpointId)?.label ?? '不明な視点';
                       const isMoving = moveTargetId?.pinId === pin.id && moveTargetId?.placementId === pl.id;
                       // 数値微調整: 各軸を STEP ずつ加減 or 直接入力。position は
@@ -3207,6 +3229,26 @@ function PinsPlanSection({
                       };
                       const nudge = (axis: 0 | 1 | 2, delta: number) => {
                         setAxis(axis, +(pl.position[axis] + delta).toFixed(3));
+                      };
+                      // 視点ローカル微調整 (B1): 今カメラが向いている方向を基準に
+                      // 左右/前後(水平)/上下 で動かす。ワールド XYZ を頭の中で
+                      // 回転させなくて済むので直感的。yaw はクリック時に読む。
+                      const nudgeLocal = (kind: 'lr' | 'ud' | 'fb', sign: 1 | -1) => {
+                        const step = NUDGE_STEP * sign;
+                        const yawRad = useCameraStore.getState().yaw * Math.PI / 180;
+                        // カメラ規約: forward = (-sin, -cos), right = (cos, -sin) (XZ)
+                        const d: [number, number, number] = kind === 'ud'
+                          ? [0, step, 0]
+                          : kind === 'fb'
+                            ? [-Math.sin(yawRad) * step, 0, -Math.cos(yawRad) * step]
+                            : [Math.cos(yawRad) * step, 0, -Math.sin(yawRad) * step];
+                        updatePinPlacement(pin.id, pl.id, {
+                          position: [
+                            +(pl.position[0] + d[0]).toFixed(3),
+                            +(pl.position[1] + d[1]).toFixed(3),
+                            +(pl.position[2] + d[2]).toFixed(3),
+                          ],
+                        });
                       };
                       return (
                         <div key={pl.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3269,12 +3311,31 @@ function PinsPlanSection({
                             </div>
                           ))}
                         </div>
+                        {/* 視点ローカル微調整 (B1): カメラの向き基準で 左右/上下/前後 */}
+                        <div style={placementNudgeRow}>
+                          <span style={{ ...nudgeAxisLabel, minWidth: 46 }} title="今の視点の向きを基準に動かします">視点基準</span>
+                          {([
+                            ['lr', '←', -1, '左へ'], ['lr', '→', 1, '右へ'],
+                            ['ud', '↓', -1, '下へ'], ['ud', '↑', 1, '上へ'],
+                            ['fb', '－', -1, '手前へ (カメラ側)'], ['fb', '＋', 1, '奥へ'],
+                          ] as ['lr' | 'ud' | 'fb', string, 1 | -1, string][]).map(([kind, glyph, sign, tip], i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              title={`${tip} ${NUDGE_STEP}m`}
+                              onClick={() => nudgeLocal(kind, sign)}
+                              style={nudgeBtn}
+                            >{glyph}</button>
+                          ))}
+                        </div>
                         </div>
                       );
                     })}
                   </div>
                 )}
               </div>
+                );
+              })()}
               </>
               )}
             </div>

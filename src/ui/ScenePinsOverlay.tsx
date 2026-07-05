@@ -25,15 +25,22 @@ import { tokens } from './design-tokens';
  */
 type SceneManagerLike = {
   worldToScreen?: (w: [number, number, number]) => { x: number; y: number } | null;
+  screenToScenePoint?: (x: number, y: number) => [number, number, number] | null;
 };
 
 export function ScenePinsOverlay({
   containerRef,
+  editable = false,
 }: {
   /** The element pins should be positioned within (the canvas wrapper). Used
    *  to compute the canvas offset within its container — typically zero, but
    *  the read keeps us robust if a future layout adds padding/border. */
   containerRef: React.RefObject<HTMLElement | null>;
+  /** Debug authoring: drag a chip to move its placement directly in 3D — the
+   *  new position surface-snaps to the collision mesh under the cursor (B1).
+   *  Writes go through `updatePinPlacement` only (position; the placement's
+   *  viewpoint binding is untouched by a drag). */
+  editable?: boolean;
 }) {
   const manifest = useSceneStore((s) => s.manifest);
   const activePlanId = useSceneStore((s) => s.activePlanId);
@@ -62,6 +69,23 @@ export function ScenePinsOverlay({
   // transform without triggering React re-renders, so dragging the camera
   // is smooth even with dozens of pins on screen.
   const chipRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  // Chip-drag state (editable only). `moved` distinguishes a real drag from a
+  // click; the click that trails a drag's pointer-up is suppressed so it
+  // doesn't toggle the popup (same phantom-click mechanism as FloorPlanMiniMap).
+  const dragRef = useRef<{ pinId: string; placementId: string; startX: number; startY: number; moved: boolean } | null>(null);
+
+  /** Move the dragged placement to the surface point under the cursor. */
+  const dragTo = (clientX: number, clientY: number) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const sm = (window as unknown as { __sceneManager?: SceneManagerLike }).__sceneManager;
+    const canvas = containerRef.current?.querySelector('canvas');
+    if (!sm?.screenToScenePoint || !canvas) return;
+    const r = canvas.getBoundingClientRect();
+    const pos = sm.screenToScenePoint(clientX - r.left, clientY - r.top);
+    if (!pos) return;
+    useSceneStore.getState().updatePinPlacement(d.pinId, d.placementId, { position: pos });
+  };
 
   useEffect(() => {
     if (entries.length === 0 || !showPins) return;
@@ -138,9 +162,37 @@ export function ScenePinsOverlay({
           >
             <button
               type="button"
-              onClick={() => setOpenId(isOpen ? null : key)}
-              title={entry.pin.title}
-              style={{ ...chipStyle, ...(isOpen ? chipStyleActive : null) }}
+              onClick={() => {
+                // A drag's trailing click must not toggle the popup.
+                if (dragRef.current?.moved) { dragRef.current = null; return; }
+                dragRef.current = null;
+                setOpenId(isOpen ? null : key);
+              }}
+              onPointerDown={(e) => {
+                if (!editable || e.button !== 0) return;
+                (e.currentTarget as Element).setPointerCapture(e.pointerId);
+                dragRef.current = {
+                  pinId: entry.pin.id,
+                  placementId: entry.placementId,
+                  startX: e.clientX,
+                  startY: e.clientY,
+                  moved: false,
+                };
+              }}
+              onPointerMove={(e) => {
+                const d = dragRef.current;
+                if (!d) return;
+                // 3px slack so a shaky click doesn't count as a drag.
+                if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) <= 3) return;
+                d.moved = true;
+                dragTo(e.clientX, e.clientY);
+              }}
+              onPointerUp={() => {
+                // Keep dragRef until the trailing click consumes `moved`.
+                if (dragRef.current && !dragRef.current.moved) dragRef.current = null;
+              }}
+              title={editable ? `${entry.pin.title || 'タグ'} — ドラッグで移動（メッシュ表面に吸着）` : entry.pin.title}
+              style={{ ...chipStyle, ...(isOpen ? chipStyleActive : null), ...(editable ? { cursor: 'grab', touchAction: 'none' as const } : null) }}
             >
               <span style={chipDot} />
               <span style={chipLabel}>{entry.pin.title || 'タグ'}</span>

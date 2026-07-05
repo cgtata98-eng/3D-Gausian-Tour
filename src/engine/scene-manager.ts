@@ -21,7 +21,7 @@ import { loadGSplat, loadSogFromIdb, loadSogFromUrl, applySplatTransform, isSogI
 import type { RenderMode } from './gsplat-loader';
 import type { SplatTransform, RenderQualityConfig } from '../core/types';
 import { applyRenderConfig, getRenderPreset } from './render-presets';
-import { extractTrianglesFromEntity } from './mesh-raycaster';
+import { extractTrianglesFromEntity, raycastTriangles, type Triangle } from './mesh-raycaster';
 import { loadCollisionGlb, setCollisionOpacity as setColOp, setCollisionVisible as setColVis } from './collision-loader';
 import { applyHdri, applyHdriFromFile, crossfadeHdri, removeHdri } from './hdri-loader';
 import { setStudioColor } from './studio';
@@ -97,6 +97,10 @@ export class SceneManager {
   private blockEnabled = true;
   /** Pending retry timer for the deferred AABB re-cull (see {@link scheduleBoundsRecull}). */
   private boundsRecullTimer: number | null = null;
+  /** Last triangle sets pushed to the controller — reused by the pin-placement
+   *  surface snap ({@link screenToScenePoint}) so it doesn't re-extract meshes. */
+  private walkableTrisCache: Triangle[] | null = null;
+  private blockTrisCache: Triangle[] | null = null;
   /** Serializes setActivePlan calls — rapid plan clicks would otherwise interleave
    *  teardown/load/assign across two runs (orphaned splat, wrong-plan collision). */
   private planSwitchQueue: Promise<void> = Promise.resolve();
@@ -488,6 +492,36 @@ export class SceneManager {
       0,
       +(camPos.z + dir.z * t).toFixed(3),
     ];
+  }
+
+  /**
+   * Click/drag-to-place helper with SURFACE SNAP (B1): casts the pixel ray
+   * against the loaded collision meshes (walls + floor volume — the splat has
+   * no triangles, so collision is its raycastable proxy) and returns the
+   * NEAREST hit, resolving the tag's depth automatically instead of always
+   * landing on Y=0. Falls back to {@link screenToFloorPoint} when no collision
+   * is loaded or the ray misses everything.
+   */
+  screenToScenePoint(canvasX: number, canvasY: number): [number, number, number] | null {
+    const cam = this.camera.camera;
+    if (!cam) return null;
+    const near = new Vec3();
+    const far = new Vec3();
+    cam.screenToWorld(canvasX, canvasY, cam.nearClip, near);
+    cam.screenToWorld(canvasX, canvasY, cam.nearClip + 1, far);
+    const dir = new Vec3().sub2(far, near).normalize();
+    const camPos = this.camera.getPosition();
+    let bestT = Infinity;
+    let best: [number, number, number] | null = null;
+    for (const tris of [this.blockTrisCache, this.walkableTrisCache]) {
+      if (!tris) continue;
+      const hit = raycastTriangles(camPos.x, camPos.y, camPos.z, dir.x, dir.y, dir.z, tris, 60);
+      if (hit && hit.t < bestT) {
+        bestT = hit.t;
+        best = [+hit.point.x.toFixed(3), +hit.point.y.toFixed(3), +hit.point.z.toFixed(3)];
+      }
+    }
+    return best ?? this.screenToFloorPoint(canvasX, canvasY);
   }
 
   /** The host canvas. Used by the 動画タブ to attach a `MediaRecorder` via
@@ -1186,11 +1220,13 @@ export class SceneManager {
     const bounds = this.computeSplatWorldBounds();
     if (!only || only === 'walkable') {
       const raw = (this.walkableEnabled && this.collisionWalkable) ? extractTrianglesFromEntity(this.collisionWalkable.entity) : null;
-      this.cameraController.setWalkableTriangles(cullTrianglesToBounds(raw, bounds));
+      this.walkableTrisCache = cullTrianglesToBounds(raw, bounds);
+      this.cameraController.setWalkableTriangles(this.walkableTrisCache);
     }
     if (!only || only === 'block') {
       const raw = (this.blockEnabled && this.collisionBlock) ? extractTrianglesFromEntity(this.collisionBlock.entity) : null;
-      this.cameraController.setBlockTriangles(cullTrianglesToBounds(raw, bounds));
+      this.blockTrisCache = cullTrianglesToBounds(raw, bounds);
+      this.cameraController.setBlockTriangles(this.blockTrisCache);
     }
     // If the splat AABB wasn't available yet (big PLY/SOG still initializing right
     // after load), the triangles above went out UNculled — stray far-away boxes
