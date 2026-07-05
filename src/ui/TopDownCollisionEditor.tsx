@@ -8,7 +8,8 @@ export interface TopDownManager {
   screenToPlanePoint: (x: number, y: number, planeY: number) => [number, number, number] | null;
   setSplatClipY: (y: number | null) => void;
   nudgeTopDownCamera: (dx: number, dy: number, dz: number) => void;
-  getLiveCameraPose: () => { position: [number, number, number]; fov: number };
+  zoomTopDownCamera: (factor: number) => void;
+  getTopDownOrthoHeight: () => number;
 }
 
 const DEFAULT_WALLS: CollisionWallData = {
@@ -115,12 +116,12 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
   };
 
   // ── Right drag = pan / right click = end chain / wheel = zoom ──
+  // Orthographic view: meters-per-pixel comes straight from orthoHeight
+  // (visible world height = 2 × orthoHeight), independent of camera altitude.
   const metersPerPx = () => {
     const el = wrapRef.current;
     if (!el || !sm) return 0.01;
-    const pose = sm.getLiveCameraPose();
-    const h = Math.max(0.5, pose.position[1] - data.floorY);
-    return (2 * h * Math.tan((pose.fov / 2) * Math.PI / 180)) / el.getBoundingClientRect().height;
+    return (2 * sm.getTopDownOrthoHeight()) / el.getBoundingClientRect().height;
   };
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 2) return;
@@ -158,9 +159,7 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
   };
   const onWheel = (e: React.WheelEvent) => {
     if (!sm) return;
-    const pose = sm.getLiveCameraPose();
-    const h = Math.max(0.5, pose.position[1] - data.floorY);
-    sm.nudgeTopDownCamera(0, (e.deltaY > 0 ? 1 : -1) * h * 0.12, 0);
+    sm.zoomTopDownCamera(e.deltaY > 0 ? 1.12 : 1 / 1.12);
     setViewTick((t) => t + 1);
   };
 

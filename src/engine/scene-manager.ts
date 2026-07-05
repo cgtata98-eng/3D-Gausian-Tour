@@ -1,4 +1,4 @@
-import { Color, Entity, StandardMaterial, Vec3 } from 'playcanvas';
+import { Color, Entity, StandardMaterial, Vec3, PROJECTION_ORTHOGRAPHIC, PROJECTION_PERSPECTIVE } from 'playcanvas';
 import type { AppBase, Texture, CameraFrame } from 'playcanvas';
 import type { QualityMode } from '../store/ui-store';
 
@@ -580,12 +580,15 @@ export class SceneManager {
   /**
    * Enter the top-down collision-authoring view: saves the current pose, parks
    * the camera above the splat's bounds looking straight down (fly mode,
-   * movement locked — the editor overlay pans/zooms explicitly), and slices
-   * the splat at `sliceY` so walls/floor read like a dollhouse cutaway.
+   * movement locked — the editor overlay pans/zooms explicitly), switches to
+   * ORTHOGRAPHIC projection (a true plan view — perspective made far walls
+   * lean outward and drawing along them imprecise), and slices the splat at
+   * `sliceY` so walls/floor read like a dollhouse cutaway.
    */
   enterTopDownView(sliceY: number): boolean {
     const cc = this.cameraController;
-    if (!cc || !this.splatEntity || this.savedTopDown) return false;
+    const cam = this.camera.camera as { projection: number; orthoHeight: number } | null;
+    if (!cc || !cam || !this.splatEntity || this.savedTopDown) return false;
     const pose = this.getCurrentPose();
     if (!pose) return false;
     this.savedTopDown = { pose, mode: cc.getMovementMode() };
@@ -595,37 +598,51 @@ export class SceneManager {
     const cz = b ? (b.min.z + b.max.z) / 2 : pose.position[2];
     const span = b ? Math.max(b.max.x - b.min.x, b.max.z - b.min.z) : 10;
     const topY = b ? b.max.y : pose.position[1] + 3;
-    const fovDeg = cc.getFov() || 60;
-    // Fit the span into the vertical FOV with a little margin.
-    const height = topY + (span / 2) / Math.tan((fovDeg / 2) * Math.PI / 180) + 0.5;
 
     cc.setMovementMode('fly');
     // Target a hair off vertical so yaw/pitch derivation stays well-defined
-    // (pitch clamps at -89° anyway).
-    cc.jumpTo([cx, height, cz], [cx, height - 1, cz - 0.02]);
+    // (pitch clamps at -89° anyway). Height is uncritical under ortho — just
+    // keep comfortably above the slice.
+    cc.jumpTo([cx, topY + 3, cz], [cx, topY + 2, cz - 0.02]);
     cc.setMovementLocked(true);
+    cam.projection = PROJECTION_ORTHOGRAPHIC;
+    cam.orthoHeight = span / 2 * 1.05; // fit the long side with a little margin
     this.setSplatClipY(sliceY);
     return true;
   }
 
-  /** Leave the top-down view: un-slice the splat and restore pose + mode. */
+  /** Leave the top-down view: back to perspective, un-slice, restore pose. */
   exitTopDownView() {
     const cc = this.cameraController;
+    const cam = this.camera.camera as { projection: number } | null;
     const saved = this.savedTopDown;
     this.savedTopDown = null;
     this.setSplatClipY(null);
+    if (cam) cam.projection = PROJECTION_PERSPECTIVE;
     if (!cc || !saved) return;
     cc.setMovementLocked(false);
     cc.setMovementMode(saved.mode);
     cc.jumpTo(saved.pose.position, saved.pose.target, saved.pose.fov);
   }
 
-  /** Pan / zoom the parked top-down camera (editor right-drag / wheel). */
+  /** Pan the parked top-down camera (editor right-drag). */
   nudgeTopDownCamera(dx: number, dy: number, dz: number) {
     const cc = this.cameraController;
     if (!cc || !this.savedTopDown || !(cc instanceof CameraController)) return;
     const p = cc.getPlayerPosition();
     cc.setPlayerPosition(p.x + dx, Math.max(0.5, p.y + dy), p.z + dz);
+  }
+
+  /** Zoom the top-down ortho view: scale `orthoHeight` (smaller = closer). */
+  zoomTopDownCamera(factor: number) {
+    const cam = this.camera.camera as { orthoHeight: number } | null;
+    if (!cam || !this.savedTopDown) return;
+    cam.orthoHeight = Math.min(200, Math.max(0.5, cam.orthoHeight * factor));
+  }
+
+  /** Current ortho half-height — the editor derives meters-per-pixel from it. */
+  getTopDownOrthoHeight(): number {
+    return (this.camera.camera as { orthoHeight?: number } | null)?.orthoHeight ?? 10;
   }
 
   /** The host canvas. Used by the 動画タブ to attach a `MediaRecorder` via
