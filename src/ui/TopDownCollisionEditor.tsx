@@ -10,6 +10,8 @@ export interface TopDownManager {
   nudgeTopDownCamera: (dx: number, dy: number, dz: number) => void;
   zoomTopDownCamera: (factor: number) => void;
   getTopDownOrthoHeight: () => number;
+  setTopDownOrientation: (orient: 'top' | 'side') => void;
+  getTopDownCenterXZ: () => { x: number; z: number } | null;
 }
 
 const DEFAULT_WALLS: CollisionWallData = {
@@ -54,6 +56,8 @@ interface Props {
 export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate, generating, initialSliceY, onClose }: Props) {
   const data = walls ?? DEFAULT_WALLS;
   const [mode, setMode] = useState<EditMode>('wall');
+  /** 'top' = plan view (drawing), 'side' = elevation view (床Y/壁高 drag). */
+  const [view, setView] = useState<'top' | 'side'>('top');
   const [pending, setPending] = useState<Vec2 | null>(null);
   const [cursor, setCursor] = useState<Vec2 | null>(null);
   const [sliceY, setSliceY] = useState(initialSliceY);
@@ -62,6 +66,8 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
   const wrapRef = useRef<HTMLDivElement>(null);
   /** Right-drag pan state. `moved` distinguishes pan from right-click (= end chain). */
   const panRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  /** Side-view guide-line drag: which line + values at drag start. */
+  const lineDragRef = useRef<{ kind: 'floor' | 'top'; startPy: number; floorY0: number; wallH0: number } | null>(null);
 
   const sm = getManager();
 
@@ -78,9 +84,9 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
 
   const commit = (patch: Partial<CollisionWallData>) => onChange({ ...data, ...patch });
 
-  // ── Left click: draw / erase (mirrors CollisionWallEditor semantics) ──
+  // ── Left click: draw / erase (top view only — side view is for the guides) ──
   const onClick = (e: React.MouseEvent) => {
-    if (generating || e.button !== 0) return;
+    if (generating || e.button !== 0 || view !== 'top') return;
     const w = toWorld(e.clientX, e.clientY);
     if (!w) return;
     if (mode === 'wall') {
@@ -139,6 +145,17 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
     panRef.current = { x: e.clientX, y: e.clientY, moved: false };
   };
   const onPointerMove = (e: React.PointerEvent) => {
+    const ld = lineDragRef.current;
+    if (ld) {
+      // Side-view guide drag: screen up = +Y world.
+      const dWorld = -(e.clientY - ld.startPy) * metersPerPx();
+      if (ld.kind === 'floor') {
+        commit({ floorY: +(ld.floorY0 + dWorld).toFixed(3) });
+      } else {
+        commit({ wallHeight: Math.max(0.2, +(ld.wallH0 + dWorld).toFixed(3)) });
+      }
+      return;
+    }
     const pan = panRef.current;
     if (pan) {
       const dx = e.clientX - pan.x;
@@ -146,18 +163,27 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
       if (pan.moved || Math.hypot(dx, dy) > 3) {
         pan.moved = true;
         const mpp = metersPerPx();
-        // Screen right = +X, screen down = +Z while parked at yaw 0 looking down.
-        sm?.nudgeTopDownCamera(-dx * mpp, 0, -dy * mpp);
+        // Top: screen right = +X, screen down = +Z (yaw 0 looking down).
+        // Side: screen right = +X, screen down = -Y (yaw 0, pitch 0).
+        if (view === 'top') sm?.nudgeTopDownCamera(-dx * mpp, 0, -dy * mpp);
+        else sm?.nudgeTopDownCamera(-dx * mpp, dy * mpp, 0);
         pan.x = e.clientX;
         pan.y = e.clientY;
         setViewTick((t) => t + 1);
       }
       return;
     }
+    if (view !== 'top') return;
     const w = toWorld(e.clientX, e.clientY);
     if (w) setCursor(w);
   };
   const onPointerUp = (e: React.PointerEvent) => {
+    if (lineDragRef.current && e.button === 0) {
+      lineDragRef.current = null;
+      // Re-bake so the red/green meshes follow the new floor/height right away.
+      if (data.segments.length > 0 || (data.floorPolygon?.length ?? 0) >= 3) void onGenerate(data);
+      return;
+    }
     if (e.button !== 2) return;
     const pan = panRef.current;
     panRef.current = null;
@@ -217,24 +243,51 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
       onContextMenu={(e) => e.preventDefault()}
     >
       <svg style={ST.svg} width="100%" height="100%">
-        {projPoly.length >= 2 && (
+        {/* ── 横ビュー: 床Y / 壁上端 のドラッグガイド ── */}
+        {view === 'side' && sm && (() => {
+          const c = sm.getTopDownCenterXZ();
+          if (!c) return null;
+          const fl = sm.worldToScreen([c.x, data.floorY, c.z]);
+          const tp = sm.worldToScreen([c.x, data.floorY + data.wallHeight, c.z]);
+          const startLineDrag = (kind: 'floor' | 'top') => (e: React.PointerEvent) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            wrapRef.current?.setPointerCapture(e.pointerId);
+            lineDragRef.current = { kind, startPy: e.clientY, floorY0: data.floorY, wallH0: data.wallHeight };
+          };
+          const guide = (y: number, color: string, label: string, kind: 'floor' | 'top') => (
+            <g key={kind} style={{ pointerEvents: 'auto', cursor: 'ns-resize' }} onPointerDown={startLineDrag(kind)}>
+              <line x1={0} y1={y} x2={9999} y2={y} stroke="transparent" strokeWidth={18} />
+              <line x1={0} y1={y} x2={9999} y2={y} stroke={color} strokeWidth={2.5} strokeDasharray="10 6" />
+              <text x={14} y={y - 8} fontSize={12} fontWeight={700} fill={color}
+                stroke="rgba(255,255,255,0.9)" strokeWidth={3} paintOrder="stroke">{label}</text>
+            </g>
+          );
+          return (
+            <>
+              {fl && guide(fl.y, '#16a34a', `床Y ${data.floorY.toFixed(2)}m — ドラッグで上下`, 'floor')}
+              {tp && guide(tp.y, '#dc2626', `壁上端 ${(data.floorY + data.wallHeight).toFixed(2)}m（壁高 ${data.wallHeight.toFixed(2)}m）`, 'top')}
+            </>
+          );
+        })()}
+        {view === 'top' && projPoly.length >= 2 && (
           <polygon points={projPoly.map((p) => `${p.x},${p.y}`).join(' ')}
             fill="rgba(34,197,94,0.15)" stroke="rgba(34,197,94,0.95)" strokeWidth={2} />
         )}
-        {projPoly.map((p, i) => (
+        {view === 'top' && projPoly.map((p, i) => (
           <circle key={`fp-${i}`} cx={p.x} cy={p.y} r={5}
             fill={i === 0 ? '#16a34a' : 'rgba(34,197,94,0.95)'} stroke="#fff" strokeWidth={1.5} />
         ))}
-        {mode === 'floor' && projPoly.length > 0 && projCursor && (
+        {view === 'top' && mode === 'floor' && projPoly.length > 0 && projCursor && (
           <line x1={projPoly[projPoly.length - 1].x} y1={projPoly[projPoly.length - 1].y}
             x2={projCursor.x} y2={projCursor.y}
             stroke="rgba(34,197,94,0.6)" strokeWidth={1.5} strokeDasharray="5 4" />
         )}
-        {projSegs.map((s) => (
+        {view === 'top' && projSegs.map((s) => (
           <line key={`w-${s.i}`} x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y}
             stroke="rgba(239,68,68,0.95)" strokeWidth={4} strokeLinecap="round" />
         ))}
-        {mode === 'wall' && projPending && (
+        {view === 'top' && mode === 'wall' && projPending && (
           <>
             <circle cx={projPending.x} cy={projPending.y} r={5} fill="#ef4444" stroke="#fff" strokeWidth={1.5} />
             {projCursor && (
@@ -248,16 +301,34 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
       {/* Toolbar */}
       <div style={ST.toolbar} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
         <span style={ST.title}>⬇ 俯瞰で描く</span>
-        {([['wall', '壁'], ['floor', '床外周'], ['erase', '消す']] as [EditMode, string][]).map(([m, label]) => (
+        {([['top', '上から'], ['side', '横から']] as ['top' | 'side', string][]).map(([v, label]) => (
+          <button key={v} type="button"
+            onClick={() => {
+              if (view === v) return;
+              sm?.setTopDownOrientation(v);
+              // 横ビューは床〜天井の全高を見て合わせたいので断面クリップを一時解除。
+              // 上に戻すとスライダー値で再クリップ。
+              sm?.setSplatClipY(v === 'side' ? null : sliceY);
+              setView(v);
+              setPending(null);
+              setViewTick((t) => t + 1);
+            }}
+            title={v === 'top' ? '平面図ビュー（壁・床を描く）' : '立面ビュー（床Y と壁の高さをドラッグで合わせる）'}
+            style={{ ...ST.modeBtn, ...(view === v ? ST.modeBtnActive : null) }}>{label}</button>
+        ))}
+        <span style={{ width: 1, alignSelf: 'stretch', background: tokens.color.border }} />
+        {view === 'top' && ([['wall', '壁'], ['floor', '床外周'], ['erase', '消す']] as [EditMode, string][]).map(([m, label]) => (
           <button key={m} type="button" onClick={() => { setMode(m); setPending(null); }}
             style={{ ...ST.modeBtn, ...(mode === m ? ST.modeBtnActive : null) }}>{label}</button>
         ))}
-        <label style={ST.param} title="この高さより上の GS を非表示（断面）">
-          断面
-          <input type="range" min={data.floorY - 0.5} max={data.floorY + 4} step={0.05} value={sliceY}
-            onChange={(e) => changeSlice(parseFloat(e.target.value))} style={{ width: 90 }} />
-          <span style={ST.mono}>{sliceY.toFixed(2)}m</span>
-        </label>
+        {view === 'top' && (
+          <label style={ST.param} title="この高さより上の GS を非表示（断面）">
+            断面
+            <input type="range" min={data.floorY - 0.5} max={data.floorY + 4} step={0.05} value={sliceY}
+              onChange={(e) => changeSlice(parseFloat(e.target.value))} style={{ width: 90 }} />
+            <span style={ST.mono}>{sliceY.toFixed(2)}m</span>
+          </label>
+        )}
         {paramInput('床Y', data.floorY, 0.05, (v) => commit({ floorY: v }), '描画平面と床 GLB のワールド Y')}
         {paramInput('壁高', data.wallHeight, 0.1, (v) => commit({ wallHeight: v }), '壁の押し出し高さ (m)')}
         <button
@@ -280,8 +351,10 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
       </div>
 
       <div style={ST.hint}>
-        左クリック: {mode === 'wall' ? '壁の点を置く（連続で折れ線 / 右クリックか Esc で終了）' : mode === 'floor' ? '床外周の頂点を追加（右クリックで最後を削除）' : '壁線・頂点を削除'}
-        ／ 右ドラッグ: パン ／ ホイール: ズーム ／ 壁 {data.segments.length} 本・床 {poly.length} 点
+        {view === 'side'
+          ? <>緑の線 = 床の高さ / 赤の線 = 壁の上端。GS の床・天井に合わせて上下にドラッグ（離すと自動で再生成）／ 右ドラッグ: パン ／ ホイール: ズーム</>
+          : <>左クリック: {mode === 'wall' ? '壁の点を置く（連続で折れ線 / 右クリックか Esc で終了）' : mode === 'floor' ? '床外周の頂点を追加（右クリックで最後を削除）' : '壁線・頂点を削除'}
+        ／ 右ドラッグ: パン ／ ホイール: ズーム ／ 壁 {data.segments.length} 本・床 {poly.length} 点</>}
       </div>
     </div>
   );

@@ -560,8 +560,13 @@ export class SceneManager {
 
   // ── 俯瞰コリジョン編集 (top-down collision authoring) ──────────────────────
 
-  /** Camera pose + mode to restore when the top-down edit session ends. */
-  private savedTopDown: { pose: CameraPose; mode: 'walk' | 'fly' } | null = null;
+  /** Camera pose + mode to restore when the top-down edit session ends, plus
+   *  the splat-bounds geometry both orientations park against. */
+  private savedTopDown: {
+    pose: CameraPose;
+    mode: 'walk' | 'fly';
+    geom: { cx: number; cz: number; topY: number; midY: number; maxZ: number; spanXZ: number; spanY: number };
+  } | null = null;
 
   /**
    * Horizontal cross-section: hide all splats whose world Y is above `y`
@@ -597,24 +602,54 @@ export class SceneManager {
     if (!cc || !cam || !this.splatEntity || this.savedTopDown) return false;
     const pose = this.getCurrentPose();
     if (!pose) return false;
-    this.savedTopDown = { pose, mode: cc.getMovementMode() };
 
     const b = this.computeSplatWorldBounds(0);
-    const cx = b ? (b.min.x + b.max.x) / 2 : pose.position[0];
-    const cz = b ? (b.min.z + b.max.z) / 2 : pose.position[2];
-    const span = b ? Math.max(b.max.x - b.min.x, b.max.z - b.min.z) : 10;
-    const topY = b ? b.max.y : pose.position[1] + 3;
+    const geom = {
+      cx: b ? (b.min.x + b.max.x) / 2 : pose.position[0],
+      cz: b ? (b.min.z + b.max.z) / 2 : pose.position[2],
+      topY: b ? b.max.y : pose.position[1] + 3,
+      midY: b ? (b.min.y + b.max.y) / 2 : pose.position[1],
+      maxZ: b ? b.max.z : pose.position[2] + 5,
+      spanXZ: b ? Math.max(b.max.x - b.min.x, b.max.z - b.min.z) : 10,
+      spanY: b ? Math.max(2, b.max.y - b.min.y) : 4,
+    };
+    this.savedTopDown = { pose, mode: cc.getMovementMode(), geom };
 
     cc.setMovementMode('fly');
-    // Target a hair off vertical so yaw/pitch derivation stays well-defined
-    // (pitch clamps at -89° anyway). Height is uncritical under ortho — just
-    // keep comfortably above the slice.
-    cc.jumpTo([cx, topY + 3, cz], [cx, topY + 2, cz - 0.02]);
     cc.setMovementLocked(true);
     cam.projection = PROJECTION_ORTHOGRAPHIC;
-    cam.orthoHeight = span / 2 * 1.05; // fit the long side with a little margin
+    this.setTopDownOrientation('top');
     this.setSplatClipY(sliceY);
     return true;
+  }
+
+  /**
+   * Re-park the editing camera: `'top'` = plan view (drawing), `'side'` = a
+   * front elevation looking along -Z (床Y / 壁高さ の縦方向調整用 — the user
+   * drags the floor/top lines against the GS silhouette seen from the side).
+   */
+  setTopDownOrientation(orient: 'top' | 'side') {
+    const cc = this.cameraController;
+    const cam = this.camera.camera as { orthoHeight: number } | null;
+    const g = this.savedTopDown?.geom;
+    if (!cc || !cam || !g) return;
+    if (orient === 'top') {
+      // Target a hair off vertical so yaw/pitch derivation stays well-defined
+      // (pitch clamps at -89° anyway). Height is uncritical under ortho.
+      cc.jumpTo([g.cx, g.topY + 3, g.cz], [g.cx, g.topY + 2, g.cz - 0.02]);
+      cam.orthoHeight = g.spanXZ / 2 * 1.05;
+    } else {
+      // Park south of the splat looking north (-Z, yaw 0, pitch 0) at mid height.
+      cc.jumpTo([g.cx, g.midY, g.maxZ + g.spanXZ], [g.cx, g.midY, g.cz]);
+      cam.orthoHeight = Math.max(1.5, g.spanY / 2 * 1.4);
+    }
+  }
+
+  /** Splat-bounds center (XZ) — the side view projects its horizontal guide
+   *  lines through this anchor. */
+  getTopDownCenterXZ(): { x: number; z: number } | null {
+    const g = this.savedTopDown?.geom;
+    return g ? { x: g.cx, z: g.cz } : null;
   }
 
   /** Leave the top-down view: back to perspective, un-slice, restore pose. */
