@@ -335,7 +335,7 @@ export class ThreeSceneManager {
       const group = gltf.scene;
       // Visualisation material so the user can see collision when they toggle visible.
       const color = type === 'walkable' ? 0x00ff00 : 0xff0000;
-      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.15, depthWrite: false, side: THREE.DoubleSide });
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.4, depthWrite: false, side: THREE.DoubleSide });
       group.traverse((o) => {
         const m = o as THREE.Mesh;
         if (m.isMesh) m.material = mat;

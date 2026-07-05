@@ -12,7 +12,12 @@ function createCollisionMaterial(colorHex: string, opacity: number): StandardMat
   const mat = new StandardMaterial();
   const c = new Color();
   c.fromString(colorHex);
-  mat.diffuse = c;
+  // EMISSIVE, not diffuse: diffuse needs scene lighting, and under the viewer's
+  // dim ambient the debug mesh rendered as a barely-visible dark tint. Emissive
+  // makes it a constant saturated green/red regardless of lighting/exposure —
+  // the whole point of the mesh is to be seen while aligning collision to GS.
+  mat.diffuse = new Color(0, 0, 0);
+  mat.emissive = c;
   mat.opacity = opacity;
   mat.blendType = 2; // BLEND_NORMAL
   mat.depthWrite = false;

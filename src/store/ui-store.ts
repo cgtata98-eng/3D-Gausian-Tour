@@ -194,7 +194,9 @@ export const useUIStore = create<UIState>((set) => ({
   showFloorPlan: true,
   showDebugStats: false,
   showGrid: false,
-  collisionOpacity: 0.15,
+  // 0.4 — 旧既定 0.15 は splat に埋もれてほぼ見えなかった。全体調整 (図面⇄GS
+  // 合わせ込み) で常用するため「表示 ON = はっきり見える」を既定に。
+  collisionOpacity: 0.4,
   renderMode: 'default',
   viewMode: 'splat',
   movementMode: 'walk',

@@ -1168,7 +1168,7 @@ export class SceneManager {
     try {
       const gen = this.collisionGen;
       const color = type === 'walkable' ? '#00ff00' : '#ff0000';
-      const col = await loadCollisionGlb(this.app, dataUrl, `collision-${type}`, color, 0.15);
+      const col = await loadCollisionGlb(this.app, dataUrl, `collision-${type}`, color, 0.4);
       // A plan switch happened while this GLB was loading — the result belongs to
       // the OLD plan; installing it would arm the previous plan's floor/walls.
       if (gen !== this.collisionGen) { col.entity.destroy(); return false; }
@@ -1198,7 +1198,7 @@ export class SceneManager {
       const gen = this.collisionGen;
       const url = await resolveAssetUrl(ref, this.manifest?.id ?? '');
       const color = type === 'walkable' ? '#00ff00' : '#ff0000';
-      const col = await loadCollisionGlb(this.app, url, `collision-${type}`, color, 0.15);
+      const col = await loadCollisionGlb(this.app, url, `collision-${type}`, color, 0.4);
       // A plan switch happened while this GLB was loading — the result belongs to
       // the OLD plan; installing it would arm the previous plan's floor/walls.
       if (gen !== this.collisionGen) { col.entity.destroy(); return false; }
