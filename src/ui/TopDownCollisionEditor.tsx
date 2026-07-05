@@ -90,18 +90,28 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
     } else if (mode === 'floor') {
       commit({ floorPolygon: [...(data.floorPolygon ?? []), w] });
     } else {
-      // erase: nearest segment midpoint / floor vertex within ~14px on screen.
+      // erase: nearest wall segment (distance to the WHOLE projected line, not
+      // just its midpoint — long walls were un-erasable away from the middle)
+      // or floor vertex, within ~14px on screen.
       const el = wrapRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
       const px = e.clientX - r.left, py = e.clientY - r.top;
+      /** Screen-space distance from the click to segment ab. */
+      const distToSeg = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+        const abx = b.x - a.x, aby = b.y - a.y;
+        const len2 = abx * abx + aby * aby;
+        const t = len2 < 1e-6 ? 0 : Math.max(0, Math.min(1, ((px - a.x) * abx + (py - a.y) * aby) / len2));
+        return Math.hypot(px - (a.x + abx * t), py - (a.y + aby * t));
+      };
       let bestKind: 'seg' | 'poly' | null = null;
       let bestIdx = -1;
       let bestDist = 14;
       data.segments.forEach((s, i) => {
-        const m = project([(s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2]);
-        if (!m) return;
-        const d = Math.hypot(px - m.x, py - m.y);
+        const a = project(s.a);
+        const b = project(s.b);
+        if (!a || !b) return;
+        const d = distToSeg(a, b);
         if (d < bestDist) { bestDist = d; bestKind = 'seg'; bestIdx = i; }
       });
       (data.floorPolygon ?? []).forEach((p, i) => {
@@ -252,9 +262,17 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
         {paramInput('壁高', data.wallHeight, 0.1, (v) => commit({ wallHeight: v }), '壁の押し出し高さ (m)')}
         <button
           type="button"
-          disabled={generating || (data.segments.length === 0 && poly.length < 3)}
-          onClick={() => void onGenerate(data)}
-          style={{ ...ST.generateBtn, opacity: generating || (data.segments.length === 0 && poly.length < 3) ? 0.5 : 1 }}
+          disabled={generating}
+          onClick={() => {
+            // 適用 = 手動セットを「描画どおり」にする。空チャンネルはクリア
+            // されるので、全消し→適用 で焼き込み済みの壁も消える。
+            if (data.segments.length === 0 && poly.length < 3) {
+              if (!confirm('壁も床も描かれていません。適用すると手動コリジョン (壁・床) を削除します。よろしいですか？')) return;
+            }
+            void onGenerate(data);
+          }}
+          style={{ ...ST.generateBtn, opacity: generating ? 0.5 : 1 }}
+          title="描いた壁→block / 床外周→walkable を生成して適用。描いていないチャンネルはクリアされます"
         >
           {generating ? '生成中…' : '⚒ 生成して適用'}
         </button>

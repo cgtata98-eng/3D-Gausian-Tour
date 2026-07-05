@@ -657,8 +657,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   };
 
   /** Bake the 俯瞰 wall editor's drawing into manual collision GLBs:
-   *  segments → block (walls), floor outline → walkable (floor). Only the
-   *  channels that produced geometry are (over)written. */
+   *  segments → block (walls), floor outline → walkable (floor).
+   *  適用後の手動セットは常に「描画どおり」— a channel with NO drawn geometry
+   *  is CLEARED, so erasing every wall and re-applying really removes the
+   *  baked walls (previously the stale GLB survived and looked un-erasable). */
   const handleGenerateWalls = async (walls: CollisionWallData) => {
     const planId = activePlanId; if (!planId) return;
     setColLoading('walls');
@@ -666,12 +668,20 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
       setPlanCollisionWallsStore(planId, walls); // persist authoring data first
       const blockGlb = buildWallBlockGlb(walls);
       const floorGlb = buildFloorWalkableGlb(walls);
-      if (!blockGlb && !floorGlb) {
-        alert('生成できる形状がありません。壁線か床外周（3点以上）を描いてください。');
-        return;
+      // NOTE: 順序は「ロード→クリア」でなく必ず逐次 — clearCollision は
+      // collisionGen を進めるので、並行中のロードがあると破棄されてしまう。
+      if (floorGlb) {
+        await handleColFile(floorGlb, 'walkable', 'manual');
+      } else {
+        setPlanCollisionStore(planId, 'manual', 'walkable', undefined);
+        smRef.current?.clearCollision?.('walkable');
       }
-      if (floorGlb) await handleColFile(floorGlb, 'walkable', 'manual');
-      if (blockGlb) await handleColFile(blockGlb, 'block', 'manual');
+      if (blockGlb) {
+        await handleColFile(blockGlb, 'block', 'manual');
+      } else {
+        setPlanCollisionStore(planId, 'manual', 'block', undefined);
+        smRef.current?.clearCollision?.('block');
+      }
     } catch (e) {
       console.error('wall collision generation failed:', e);
       alert('壁コリジョン生成に失敗: ' + (e instanceof Error ? e.message : String(e)));
