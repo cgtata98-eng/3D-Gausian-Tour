@@ -1,4 +1,4 @@
-import { Asset, Entity, SHADERLANGUAGE_GLSL } from 'playcanvas';
+﻿import { Asset, Entity, SHADERLANGUAGE_GLSL } from 'playcanvas';
 import type { AppBase } from 'playcanvas';
 import { unzipSync } from 'fflate';
 import type { SplatTransform, Vec3 } from '../core/types';
@@ -30,40 +30,50 @@ export const DEFAULT_SPLAT_POSITION: Vec3 = [0, 0, 0];
 
 /** Steps 5/6 of `docs/playcanvas-supersplat-quality-migration.md`: a `gsplatModifyVS`
  *  chunk that pipes a `viewerSplatScale` uniform into the per-splat scale. The
- *  built-in shader doesn't read `mat.setParameter('splatScale', …)`, so we override
+ *  built-in shader doesn't read `mat.setParameter('splatScale', 窶ｦ)`, so we override
  *  the chunk and feed the value through this uniform instead. */
 const VIEWER_MODIFY_CHUNK = `
 uniform float viewerSplatScale;
+// 菫ｯ迸ｰ譁ｭ髱｢ (top-down collision editing): splats whose WORLD-space Y is above
+// this are collapsed to zero scale (= invisible). 1e9 = disabled. The world
+// transform is passed as our own uniform because \`matrix_model\` lives in
+// gsplatCenterVS, which is #included AFTER this chunk 窶・GLSL can't forward-
+// reference it from here.
+uniform float viewerClipY;
+uniform mat4 viewerClipModelMat;
 
 void modifySplatCenter(inout vec3 center) {}
 
 void modifySplatRotationScale(vec3 originalCenter, vec3 modifiedCenter, inout vec4 rotation, inout vec3 scale) {
     scale *= viewerSplatScale;
+    if (viewerClipY < 8.9e8) {
+        float worldY = (viewerClipModelMat * vec4(modifiedCenter, 1.0)).y;
+        if (worldY > viewerClipY) scale = vec3(0.0);
+    }
 }
 
 void modifySplatColor(vec3 center, inout vec4 color) {}
 `;
-const DEFAULT_SPLAT_SCALE = 1.15; // SuperSplat-feel default; 1.15〜1.25 is usable.
+/** viewerClipY value that disables the cross-section (see chunk guard). */
+export const SPLAT_CLIP_DISABLED = 1e9;
+const DEFAULT_SPLAT_SCALE = 1.15; // SuperSplat-feel default; 1.15縲・.25 is usable.
 const DEFAULT_SH_BANDS = 3;       // 0..3, full SH at load time.
 
-/** ロード% を上位 (LoadingScreen) に伝えるためのコールバック。`progress` は 0..1、
- *  Content-Length が取れず正確な分母が分からないときは `null` (= ステータス不明)。 */
+/** 繝ｭ繝ｼ繝・ 繧剃ｸ贋ｽ・(LoadingScreen) 縺ｫ莨昴∴繧九◆繧√・繧ｳ繝ｼ繝ｫ繝舌ャ繧ｯ縲Ａprogress` 縺ｯ 0..1縲・ *  Content-Length 縺悟叙繧後★豁｣遒ｺ縺ｪ蛻・ｯ阪′蛻・°繧峨↑縺・→縺阪・ `null` (= 繧ｹ繝・・繧ｿ繧ｹ荳肴・)縲・*/
 export type LoadProgress = (progress: number | null) => void;
 
 /**
- * `fetch` を呼びつつ Reader API で逐次バイト数を集計、`onProgress(0..1)` を発火しながら
- * 全バイトを 1 個の Blob にまとめて返す。Content-Length が無い (= 圧縮転送など) 場合は
- * 1 度だけ `null` を発火してから黙々と読む — 上位は「ダウンロード中だが %未確定」として
- * スピナーだけ出せばよい。
- */
+ * `fetch` 繧貞他縺ｳ縺､縺､ Reader API 縺ｧ騾先ｬ｡繝舌う繝域焚繧帝寔險医～onProgress(0..1)` 繧堤匱轣ｫ縺励↑縺後ｉ
+ * 蜈ｨ繝舌う繝医ｒ 1 蛟九・ Blob 縺ｫ縺ｾ縺ｨ繧√※霑斐☆縲・ontent-Length 縺檎┌縺・(= 蝨ｧ邵ｮ霆｢騾√↑縺ｩ) 蝣ｴ蜷医・
+ * 1 蠎ｦ縺縺・`null` 繧堤匱轣ｫ縺励※縺九ｉ鮟吶・→隱ｭ繧 窶・荳贋ｽ阪・縲後ム繧ｦ繝ｳ繝ｭ繝ｼ繝我ｸｭ縺縺・%譛ｪ遒ｺ螳壹阪→縺励※
+ * 繧ｹ繝斐リ繝ｼ縺縺大・縺帙・繧医＞縲・ */
 async function fetchWithProgress(url: string, onProgress?: LoadProgress): Promise<Blob> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText} (${url})`);
   const totalHdr = res.headers.get('content-length');
   const total = totalHdr ? parseInt(totalHdr, 10) : 0;
   if (!res.body || !total) {
-    // 進捗を取れないケース: Blob だけ返して null を流す。
-    onProgress?.(null);
+    // 騾ｲ謐励ｒ蜿悶ｌ縺ｪ縺・こ繝ｼ繧ｹ: Blob 縺縺題ｿ斐＠縺ｦ null 繧呈ｵ√☆縲・    onProgress?.(null);
     return res.blob();
   }
   const reader = res.body.getReader();
@@ -73,9 +83,7 @@ async function fetchWithProgress(url: string, onProgress?: LoadProgress): Promis
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    // Uint8Array<SharedArrayBuffer> 含みの型と Blob ctor の BlobPart 期待型が
-    // 噛み合わないので、安全に ArrayBuffer 側にコピーして詰める (`slice().buffer`)。
-    chunks.push(value.slice().buffer);
+    // Uint8Array<SharedArrayBuffer> 蜷ｫ縺ｿ縺ｮ蝙九→ Blob ctor 縺ｮ BlobPart 譛溷ｾ・梛縺・    // 蝎帙∩蜷医ｏ縺ｪ縺・・縺ｧ縲∝ｮ牙・縺ｫ ArrayBuffer 蛛ｴ縺ｫ繧ｳ繝斐・縺励※隧ｰ繧√ｋ (`slice().buffer`)縲・    chunks.push(value.slice().buffer);
     received += value.byteLength;
     onProgress?.(Math.min(1, received / total));
   }
@@ -98,8 +106,7 @@ export async function loadGSplat(
   transform?: SplatTransform,
   onProgress?: LoadProgress,
 ): Promise<Entity> {
-  // バイト進捗が欲しいので一旦 fetch で全バイトを取得 → Blob → object URL を Asset に渡す。
-  // (`data:` / `blob:` / `mem://` 等はそのまま PlayCanvas に投げる — 進捗は出ない)
+  // 繝舌う繝磯ｲ謐励′谺ｲ縺励＞縺ｮ縺ｧ荳譌ｦ fetch 縺ｧ蜈ｨ繝舌う繝医ｒ蜿門ｾ・竊・Blob 竊・object URL 繧・Asset 縺ｫ貂｡縺吶・  // (`data:` / `blob:` / `mem://` 遲峨・縺昴・縺ｾ縺ｾ PlayCanvas 縺ｫ謚輔￡繧・窶・騾ｲ謐励・蜃ｺ縺ｪ縺・
   let assetUrl = url;
   let revoke: string | null = null;
   if (/^https?:|^\//.test(url)) {
@@ -138,6 +145,7 @@ export async function loadGSplat(
         mat.setDefine('SH_BANDS', String(DEFAULT_SH_BANDS));
         mat.getShaderChunks(SHADERLANGUAGE_GLSL).set('gsplatModifyVS', VIEWER_MODIFY_CHUNK);
         mat.setParameter('viewerSplatScale', DEFAULT_SPLAT_SCALE);
+        mat.setParameter('viewerClipY', SPLAT_CLIP_DISABLED);
         mat.update(); // single shader recompile after both define + chunk are set
       }
 
@@ -163,7 +171,7 @@ export async function loadGSplat(
  *   - `mapUrl` callback that the parser uses to resolve the texture filenames it
  *     reads out of meta.json's `files` arrays, returning the matching IDB blob URL.
  *
- * Caller is responsible for `Plan.splatTransform` — applied here just like PLY.
+ * Caller is responsible for `Plan.splatTransform` 窶・applied here just like PLY.
  */
 export async function loadSogFromIdb(
   app: AppBase,
@@ -197,7 +205,7 @@ export async function loadSogFromIdb(
       url: `mem://${sceneId}/${planId}/meta.json`,
       filename: 'meta.json',
     }, meta as object, {
-      // mapUrl is a SOG parser hook — present at runtime in PlayCanvas v2 but
+      // mapUrl is a SOG parser hook 窶・present at runtime in PlayCanvas v2 but
       // missing from the public Asset options type, so we cast.
       mapUrl: (filename: string) => urlMap.get(filename) ?? '',
     } as unknown as { crossOrigin?: 'anonymous' | 'use-credentials' | null });
@@ -220,6 +228,7 @@ export async function loadSogFromIdb(
         mat.setDefine('SH_BANDS', String(DEFAULT_SH_BANDS));
         mat.getShaderChunks(SHADERLANGUAGE_GLSL).set('gsplatModifyVS', VIEWER_MODIFY_CHUNK);
         mat.setParameter('viewerSplatScale', DEFAULT_SPLAT_SCALE);
+        mat.setParameter('viewerClipY', SPLAT_CLIP_DISABLED);
         mat.update();
       }
 
@@ -242,7 +251,7 @@ export function applySplatTransform(entity: Entity, transform: SplatTransform | 
 /**
  * Load a SOG bundle from a single-file `.sog` URL (zip wrapping `meta.json` +
  * `*.webp` textures, the SuperSplat-export format). Used for R2-hosted assets
- * — the customer's browser fetches one URL, we unzip in-memory with fflate,
+ * 窶・the customer's browser fetches one URL, we unzip in-memory with fflate,
  * and feed the parts straight to PlayCanvas's SogParser. Mirrors
  * `loadSogFromIdb` but skips the IDB hop.
  */
@@ -294,6 +303,7 @@ export async function loadSogFromUrl(
         mat.setDefine('SH_BANDS', String(DEFAULT_SH_BANDS));
         mat.getShaderChunks(SHADERLANGUAGE_GLSL).set('gsplatModifyVS', VIEWER_MODIFY_CHUNK);
         mat.setParameter('viewerSplatScale', DEFAULT_SPLAT_SCALE);
+        mat.setParameter('viewerClipY', SPLAT_CLIP_DISABLED);
         mat.update();
       }
 
@@ -307,7 +317,7 @@ export async function loadSogFromUrl(
 
 /**
  * Legacy no-op shim. The actual quality application now lives in
- * `render-presets.ts → applyRenderConfig`, which `SceneManager.setRenderMode` /
+ * `render-presets.ts 竊・applyRenderConfig`, which `SceneManager.setRenderMode` /
  * `applyRenderConfig` use directly. Kept exported so any stray callers still link.
  */
 export function applyRenderMode(_entity: Entity, _mode: import('./render-presets').RenderMode) {}

@@ -9,6 +9,7 @@ import type { ClipMeta } from '../utils/clip-library';
 import { navigate } from '../utils/url';
 import { publishScene, repackSogBundle } from '../utils/publish';
 import { CollisionWallEditor } from './CollisionWallEditor';
+import { TopDownCollisionEditor, type TopDownManager } from './TopDownCollisionEditor';
 import { WalkGraphEditor } from './WalkGraphEditor';
 import { WalkthroughControls } from './WalkthroughControls';
 import { buildWallBlockGlb, buildFloorWalkableGlb } from '../utils/wall-collision-builder';
@@ -93,6 +94,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const [colLoading, setColLoading] = useState<string | null>(null);
   const [wallEditorOpen, setWallEditorOpen] = useState(false);
   const [walkEditorOpen, setWalkEditorOpen] = useState(false);
+  const [topDownColOpen, setTopDownColOpen] = useState(false);
   const walkableRef = useRef<HTMLInputElement>(null);
   const blockRef = useRef<HTMLInputElement>(null);
   const [hdriLoading, setHdriLoading] = useState(false);
@@ -2352,6 +2354,28 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               <input ref={blockRef} type="file" accept=".glb" style={{ display: 'none' }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'block', 'manual'); e.target.value = ''; }} />
 
+              {/* ── 手動: 俯瞰で描く (GS を断面表示して直接) ── */}
+              <div style={{ ...S.subTitle, marginTop: 14 }}>手動: 俯瞰で描く（GS 直接）</div>
+              <button
+                type="button"
+                style={{ ...S.fileBtn, opacity: topDownColOpen ? 0.6 : 1 }}
+                disabled={topDownColOpen}
+                onClick={() => {
+                  const sm = smRef.current;
+                  if (!sm || !('enterTopDownView' in sm)) { alert('俯瞰編集は PlayCanvas エンジンのみ対応です'); return; }
+                  const floorY = col?.walls?.floorY ?? 0;
+                  const ok = (sm as unknown as { enterTopDownView: (y: number) => boolean }).enterTopDownView(floorY + 1.2);
+                  if (!ok) { alert('splat のロード完了後に開いてください'); return; }
+                  setTopDownColOpen(true);
+                }}
+                title="GS を水平に切断して上から見下ろし、壁や床の輪郭を直接なぞって描きます（図面不要）"
+              >
+                ⬇ GS を切って上から描く
+              </button>
+              <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.55 }}>
+                断面スライダーで切断高さを変えながら、見えている壁をなぞってください。図面エディタと同じデータを編集します。
+              </div>
+
               {/* ── 手動: 図面で壁を描く ── */}
               <div style={{ ...S.subTitle, marginTop: 14 }}>手動: 図面で壁を描く</div>
               {activePlanForCol?.floorPlan?.image ? (
@@ -2700,6 +2724,29 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
           <AiGeneratingOverlay />
           <FpsOverlay />
           <ScenePinsOverlay containerRef={previewWrapRef} editable />
+          {/* 俯瞰コリジョン編集 — GS を断面表示して直接なぞるモード */}
+          {topDownColOpen && (() => {
+            const planForCol = manifest?.plans?.find(p => p.id === activePlanId);
+            const closeTopDown = () => {
+              const sm = smRef.current;
+              if (sm && 'exitTopDownView' in sm) (sm as unknown as { exitTopDownView: () => void }).exitTopDownView();
+              setTopDownColOpen(false);
+            };
+            return (
+              <TopDownCollisionEditor
+                getManager={() => {
+                  const sm = smRef.current;
+                  return sm && 'enterTopDownView' in sm ? (sm as unknown as TopDownManager) : null;
+                }}
+                walls={planForCol?.collision?.walls}
+                onChange={(w) => { if (activePlanId) setPlanCollisionWallsStore(activePlanId, w); }}
+                onGenerate={handleGenerateWalls}
+                generating={colLoading === 'walls'}
+                initialSliceY={(planForCol?.collision?.walls?.floorY ?? 0) + 1.2}
+                onClose={closeTopDown}
+              />
+            );
+          })()}
           {debugTab === 'video' && (
             <VideoOverlay
               freeRecState={freeRecState}

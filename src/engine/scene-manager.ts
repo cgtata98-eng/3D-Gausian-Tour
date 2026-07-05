@@ -17,7 +17,7 @@ import type { SceneManifest, Viewpoint, CameraPose, CameraKeyframe } from '../co
 import { interpolatePath, totalPathDurationSec, resolveStartViewpoint } from '../core/viewpoint';
 import { downscaleCanvasToJpeg } from '../utils/video-recorder';
 import { loadSceneManifest, resolveScenePath } from '../core/scene-manifest';
-import { loadGSplat, loadSogFromIdb, loadSogFromUrl, applySplatTransform, isSogIdbRef } from './gsplat-loader';
+import { loadGSplat, loadSogFromIdb, loadSogFromUrl, applySplatTransform, isSogIdbRef, SPLAT_CLIP_DISABLED } from './gsplat-loader';
 import type { RenderMode } from './gsplat-loader';
 import type { SplatTransform, RenderQualityConfig } from '../core/types';
 import { applyRenderConfig, getRenderPreset } from './render-presets';
@@ -526,6 +526,106 @@ export class SceneManager {
       }
     }
     return best ?? this.screenToFloorPoint(canvasX, canvasY);
+  }
+
+  /**
+   * Like {@link screenToFloorPoint} but intersects an arbitrary horizontal
+   * plane (Y = planeY). Used by the top-down collision editor so wall points
+   * land on the authored floor level, not on Y=0.
+   */
+  screenToPlanePoint(canvasX: number, canvasY: number, planeY: number): [number, number, number] | null {
+    const cam = this.camera.camera;
+    if (!cam) return null;
+    const near = new Vec3();
+    const far = new Vec3();
+    cam.screenToWorld(canvasX, canvasY, cam.nearClip, near);
+    cam.screenToWorld(canvasX, canvasY, cam.nearClip + 1, far);
+    const dir = new Vec3().sub2(far, near).normalize();
+    if (Math.abs(dir.y) < 1e-4) return null;
+    const camPos = this.camera.getPosition();
+    const t = (planeY - camPos.y) / dir.y;
+    if (t <= 0) return null;
+    return [
+      +(camPos.x + dir.x * t).toFixed(3),
+      planeY,
+      +(camPos.z + dir.z * t).toFixed(3),
+    ];
+  }
+
+  // ── 俯瞰コリジョン編集 (top-down collision authoring) ──────────────────────
+
+  /** Camera pose + mode to restore when the top-down edit session ends. */
+  private savedTopDown: { pose: CameraPose; mode: 'walk' | 'fly' } | null = null;
+
+  /**
+   * Horizontal cross-section: hide all splats whose world Y is above `y`
+   * (null = off). Pure uniform update — no shader recompile — so it's safe to
+   * drive from a slider. The splat's world transform rides along in its own
+   * uniform (see gsplat-loader's VIEWER_MODIFY_CHUNK for why).
+   */
+  setSplatClipY(y: number | null) {
+    const ent = this.splatEntity;
+    const mat = (ent?.gsplat as unknown as { instance?: { material?: {
+      setParameter: (k: string, v: number | Float32Array) => void;
+    } } } | null)?.instance?.material;
+    if (!ent || !mat) return;
+    if (y === null) {
+      mat.setParameter('viewerClipY', SPLAT_CLIP_DISABLED);
+    } else {
+      mat.setParameter('viewerClipModelMat', ent.getWorldTransform().data as Float32Array);
+      mat.setParameter('viewerClipY', y);
+    }
+  }
+
+  /**
+   * Enter the top-down collision-authoring view: saves the current pose, parks
+   * the camera above the splat's bounds looking straight down (fly mode,
+   * movement locked — the editor overlay pans/zooms explicitly), and slices
+   * the splat at `sliceY` so walls/floor read like a dollhouse cutaway.
+   */
+  enterTopDownView(sliceY: number): boolean {
+    const cc = this.cameraController;
+    if (!cc || !this.splatEntity || this.savedTopDown) return false;
+    const pose = this.getCurrentPose();
+    if (!pose) return false;
+    this.savedTopDown = { pose, mode: cc.getMovementMode() };
+
+    const b = this.computeSplatWorldBounds(0);
+    const cx = b ? (b.min.x + b.max.x) / 2 : pose.position[0];
+    const cz = b ? (b.min.z + b.max.z) / 2 : pose.position[2];
+    const span = b ? Math.max(b.max.x - b.min.x, b.max.z - b.min.z) : 10;
+    const topY = b ? b.max.y : pose.position[1] + 3;
+    const fovDeg = cc.getFov() || 60;
+    // Fit the span into the vertical FOV with a little margin.
+    const height = topY + (span / 2) / Math.tan((fovDeg / 2) * Math.PI / 180) + 0.5;
+
+    cc.setMovementMode('fly');
+    // Target a hair off vertical so yaw/pitch derivation stays well-defined
+    // (pitch clamps at -89° anyway).
+    cc.jumpTo([cx, height, cz], [cx, height - 1, cz - 0.02]);
+    cc.setMovementLocked(true);
+    this.setSplatClipY(sliceY);
+    return true;
+  }
+
+  /** Leave the top-down view: un-slice the splat and restore pose + mode. */
+  exitTopDownView() {
+    const cc = this.cameraController;
+    const saved = this.savedTopDown;
+    this.savedTopDown = null;
+    this.setSplatClipY(null);
+    if (!cc || !saved) return;
+    cc.setMovementLocked(false);
+    cc.setMovementMode(saved.mode);
+    cc.jumpTo(saved.pose.position, saved.pose.target, saved.pose.fov);
+  }
+
+  /** Pan / zoom the parked top-down camera (editor right-drag / wheel). */
+  nudgeTopDownCamera(dx: number, dy: number, dz: number) {
+    const cc = this.cameraController;
+    if (!cc || !this.savedTopDown || !(cc instanceof CameraController)) return;
+    const p = cc.getPlayerPosition();
+    cc.setPlayerPosition(p.x + dx, Math.max(0.5, p.y + dy), p.z + dz);
   }
 
   /** The host canvas. Used by the 動画タブ to attach a `MediaRecorder` via
