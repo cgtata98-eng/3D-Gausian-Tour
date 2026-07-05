@@ -7,8 +7,7 @@ import { interpolatePath, totalPathDurationSec, resolveStartViewpoint } from '..
 import * as clipLib from '../utils/clip-library';
 import type { ClipMeta } from '../utils/clip-library';
 import { navigate } from '../utils/url';
-import { publishScene, repackSogBundle } from '../utils/publish';
-import { CollisionWallEditor } from './CollisionWallEditor';
+import { publishScene } from '../utils/publish';
 import { TopDownCollisionEditor, type TopDownManager } from './TopDownCollisionEditor';
 import { WalkGraphEditor } from './WalkGraphEditor';
 import { WalkthroughControls } from './WalkthroughControls';
@@ -92,7 +91,6 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [colLoading, setColLoading] = useState<string | null>(null);
-  const [wallEditorOpen, setWallEditorOpen] = useState(false);
   const [walkEditorOpen, setWalkEditorOpen] = useState(false);
   const [topDownColOpen, setTopDownColOpen] = useState(false);
   const walkableRef = useRef<HTMLInputElement>(null);
@@ -658,124 +656,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     }
   };
 
-  /** Auto-generate walkable + block collision GLBs from the active plan's
-   *  splat (B2 自動系統 — restored). Runs the splat-transform voxel pipeline
-   *  twice with different recipes. In dev this hits the Vite middleware which
-   *  spawns the CLI (fast); in production it falls back to the browser-side
-   *  WASM path. Both share the same recipe + seed semantics.
-   *
-   *  Seed position priority — the seed must sit inside the room, otherwise
-   *  carve / exterior-fill silently no-op. First available of:
-   *    1. plan.fixedPosition (user-set initial camera)
-   *    2. 🏁 start viewpoint (falls back to the first viewpoint)
-   *    3. live camera position
-   *    4. [0,0,0] last-resort default. */
-  const handleAutoGenCollision = async () => {
-    const sm = smRef.current; if (!sm) return;
-    const sceneId = manifest?.id;
-    const planId = activePlanId;
-    if (!sceneId || !planId) return;
-    const plan = manifest?.plans?.find((p) => p.id === planId);
-    if (!plan) { alert('プランが見つかりません'); return; }
-
-    setColLoading('autogen');
-    try {
-      // Pick a splat source — prefer SOG (already chunked), then PLY, then SPZ.
-      let body: Blob | null = null;
-      let ext: 'sog' | 'ply' | 'spz' | null = null;
-      if (plan.splatSog && plan.splatSog.startsWith('sog-idb:')) {
-        body = await repackSogBundle(sceneId, planId);
-        ext = 'sog';
-      } else if (plan.splat && plan.splat.startsWith(idb.IDB_REF_PREFIX)) {
-        body = await idb.loadBlob(idb.idbRefKey(plan.splat));
-        ext = 'ply';
-      } else if (plan.splatSpz && plan.splatSpz.startsWith(idb.IDB_REF_PREFIX)) {
-        body = await idb.loadBlob(idb.idbRefKey(plan.splatSpz));
-        ext = 'spz';
-      }
-      if (!body || !ext) {
-        alert('スプラットファイルがアップロードされていません。先に PLY / SPZ / SOG をアップロードしてください。');
-        return;
-      }
-
-      const seed: [number, number, number] =
-        plan.fixedPosition?.position
-        ?? resolveStartViewpoint(plan)?.position
-        ?? sm.getCurrentPose()?.position
-        ?? [0, 0, 0];
-      const seedHeader = seed.map((n) => Number(n).toFixed(4)).join(',');
-      console.log(`[gen-collision] seed=${seedHeader}`);
-
-      const runRecipe = async (recipe: 'walkable' | 'block'): Promise<Blob> => {
-        // Production builds skip the dev-only Vite middleware (it isn't there,
-        // and Cloudflare's edge would 413 the upload anyway). In dev we try
-        // the middleware first — Node CLI is much faster than the in-browser
-        // WASM path — and fall back to the browser pipeline on any failure.
-        if (import.meta.env.DEV && body && ext) {
-          try {
-            const res = await fetch('/api/gen-collision', {
-              method: 'POST',
-              headers: {
-                'X-Input-Ext': ext,
-                'X-Recipe': recipe,
-                'X-Seed': seedHeader,
-                'Content-Type': 'application/octet-stream',
-              },
-              body,
-            });
-            if (res.ok) return await res.blob();
-            console.warn(`[gen-collision] ${recipe} middleware returned ${res.status}; using browser fallback`);
-          } catch (e) {
-            console.warn(`[gen-collision] ${recipe} middleware unreachable, using browser fallback:`, e);
-          }
-        }
-        const { generateCollisionInBrowser } = await import('../utils/gen-collision-browser');
-        return generateCollisionInBrowser(body!, ext!, { recipe, seed });
-      };
-
-      // Run sequentially — the CLI / WebGPU device is GPU-bound and running
-      // both in parallel just thrashes the same hardware.
-      const walkableGlb = await runRecipe('walkable');
-      await handleColFile(new File([walkableGlb], 'auto-walkable.glb', { type: 'model/gltf-binary' }), 'walkable', 'auto');
-      const blockGlb = await runRecipe('block');
-      await handleColFile(new File([blockGlb], 'auto-block.glb', { type: 'model/gltf-binary' }), 'block', 'auto');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error('collision auto-gen failed:', e);
-      alert('コリジョン自動生成に失敗:\n' + msg);
-    } finally {
-      setColLoading(null);
-    }
-  };
-
-  /** Flip the plan's active collision set between 手動 / 自動 and hot-swap the
-   *  engine meshes to match (channels with no GLB in the new stash are cleared
-   *  — clear BOTH first, see SceneManager.clearCollision's generation note). */
-  const handleCollisionSourceSwitch = async (source: 'manual' | 'auto') => {
-    const sm = smRef.current; if (!sm) return;
-    const planId = activePlanId; if (!planId) return;
-    setPlanCollisionSourceStore(planId, source);
-    // Read back the post-switch config (setPlanCollisionSource repoints walkable/block).
-    const plan = useSceneStore.getState().manifest?.plans?.find((p) => p.id === planId);
-    const col = plan?.collision;
-    const w = source === 'manual' ? col?.manualWalkable : col?.autoWalkable;
-    const b = source === 'manual' ? col?.manualBlock : col?.autoBlock;
-    setColLoading('switch');
-    try {
-      sm.clearCollision('walkable');
-      sm.clearCollision('block');
-      await Promise.all([
-        w ? sm.loadCollisionFromManifestRef(w, 'walkable') : null,
-        b ? sm.loadCollisionFromManifestRef(b, 'block') : null,
-      ]);
-    } catch (e) {
-      console.error('collision source switch failed:', e);
-    } finally {
-      setColLoading(null);
-    }
-  };
-
-  /** Bake the 図面 wall editor's drawing into manual collision GLBs:
+  /** Bake the 俯瞰 wall editor's drawing into manual collision GLBs:
    *  segments → block (walls), floor outline → walkable (floor). Only the
    *  channels that produced geometry are (over)written. */
   const handleGenerateWalls = async (walls: CollisionWallData) => {
@@ -2208,7 +2089,6 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             {debugTab === 'plan' && viewMode === 'splat' && hasSplatData && (() => {
               const activePlanForCol = manifest?.plans?.find(p => p.id === activePlanId);
               const col = activePlanForCol?.collision;
-              const colSource: 'manual' | 'auto' = col?.source ?? 'manual';
               const busy = colLoading !== null;
               return (
             <Section title="コリジョン" subtitle="COLLISION" defaultOpen={false}>
@@ -2228,33 +2108,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 <Slider label="不透明度" min={0} max={1} step={0.05} value={collisionOpacity} onChange={setCollisionOpacity} />
               )}
 
-              {/* ── 使用するセット (手動 / 自動) ── */}
-              <div style={{ ...S.subTitle, marginTop: 14 }}>使用するセット</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4 }}>
-                {(['manual', 'auto'] as const).map((src) => {
-                  const has = src === 'manual'
-                    ? !!(col?.manualWalkable || col?.manualBlock)
-                    : !!(col?.autoWalkable || col?.autoBlock);
-                  const active = colSource === src;
-                  return (
-                    <button
-                      key={src}
-                      type="button"
-                      disabled={busy}
-                      onClick={() => { if (!active) void handleCollisionSourceSwitch(src); }}
-                      style={{ ...S.btn, ...(active ? { background: tokens.gradient.accent, border: `1px solid ${tokens.color.accentBorder}`, boxShadow: tokens.shadow.glassAccent } : null) }}
-                      title={src === 'manual' ? '手動セット（GLB アップロード / 図面エディタ）を使用' : '自動生成セットを使用'}
-                    >
-                      {active ? '◉' : '○'} {src === 'manual' ? '手動' : '自動'}{has ? '' : '（未生成）'}
-                    </button>
-                  );
-                })}
-              </div>
-              {colLoading === 'switch' && (
-                <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 4 }}>切替中…</div>
-              )}
-
-              {/* ── 全体調整 — 図面⇄GS のスケール/位置ズレを丸ごと合わせ込む ── */}
+              {/* ── 全体調整 — GS とのスケール/位置ズレを丸ごと合わせ込む ── */}
               {(() => {
                 const tf = col?.transform;
                 const pos = tf?.position ?? [0, 0, 0];
@@ -2324,38 +2178,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 );
               })()}
 
-              {/* ── 自動生成 (splat → voxel pipeline) ── */}
-              <div style={{ ...S.subTitle, marginTop: 14 }}>自動生成</div>
-              <button
-                type="button"
-                onClick={() => void handleAutoGenCollision()}
-                disabled={busy}
-                style={{ ...S.fileBtn, opacity: busy ? 0.6 : 1 }}
-                title="splat から walkable（歩行可能ボリューム）と block（壁・外部）の GLB を自動生成します。シードは 初期位置 → 🏁視点 → ライブカメラ の順で採用（部屋の中にある必要あり）"
-              >
-                {colLoading === 'autogen' ? '生成中…（大きい PLY は数分かかります）' : '⚙ splat から自動生成 (walkable + block)'}
-              </button>
-              <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.55 }}>
-                voxel 10cm。シードが部屋の外だと失敗します — 🏁 初期視点を部屋の中に置いてから実行してください。
-              </div>
-
-              {/* ── 手動: GLB アップロード ── */}
-              <div style={{ ...S.subTitle, marginTop: 14 }}>手動: GLB アップロード</div>
-              <div style={{ ...S.subTitle, marginTop: 6 }}><span style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
-              <button onClick={() => walkableRef.current?.click()} style={S.fileBtn} disabled={busy}>
-                {colLoading === 'walkable' ? '読み込み中…' : 'GLB ファイルを選択'}
-              </button>
-              <input ref={walkableRef} type="file" accept=".glb" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'walkable', 'manual'); e.target.value = ''; }} />
-              <div style={{ ...S.subTitle, marginTop: 10 }}><span style={{ ...S.colorDot, background: '#ef4444' }} />BLOCK</div>
-              <button onClick={() => blockRef.current?.click()} style={S.fileBtn} disabled={busy}>
-                {colLoading === 'block' ? '読み込み中…' : 'GLB ファイルを選択'}
-              </button>
-              <input ref={blockRef} type="file" accept=".glb" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'block', 'manual'); e.target.value = ''; }} />
-
-              {/* ── 手動: 俯瞰で描く (GS を断面表示して直接) ── */}
-              <div style={{ ...S.subTitle, marginTop: 14 }}>手動: 俯瞰で描く（GS 直接）</div>
+              {/* ── 俯瞰で描く (GS を断面表示して直接なぞる — 主経路) ── */}
+              <div style={{ ...S.subTitle, marginTop: 14 }}>俯瞰で描く（GS 直接）</div>
               <button
                 type="button"
                 style={{ ...S.fileBtn, opacity: topDownColOpen ? 0.6 : 1 }}
@@ -2368,42 +2192,28 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   if (!ok) { alert('splat のロード完了後に開いてください'); return; }
                   setTopDownColOpen(true);
                 }}
-                title="GS を水平に切断して上から見下ろし、壁や床の輪郭を直接なぞって描きます（図面不要）"
+                title="GS を水平に切断して真上（正投影）から見下ろし、壁や床の輪郭を直接なぞって描きます"
               >
                 ⬇ GS を切って上から描く
               </button>
               <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.55 }}>
-                断面スライダーで切断高さを変えながら、見えている壁をなぞってください。図面エディタと同じデータを編集します。
+                断面スライダーで切断高さを変えながら、見えている壁をなぞってください。
               </div>
 
-              {/* ── 手動: 図面で壁を描く ── */}
-              <div style={{ ...S.subTitle, marginTop: 14 }}>手動: 図面で壁を描く</div>
-              {activePlanForCol?.floorPlan?.image ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setWallEditorOpen((v) => !v)}
-                    style={S.fileBtn}
-                  >
-                    {wallEditorOpen ? '▲ エディタを閉じる' : '✏ 図面に壁と床を描く'}
-                  </button>
-                  {wallEditorOpen && (
-                    <CollisionWallEditor
-                      sceneId={manifest?.id ?? ''}
-                      floorPlan={activePlanForCol.floorPlan}
-                      walls={col?.walls}
-                      onChange={(w) => { if (activePlanId) setPlanCollisionWallsStore(activePlanId, w); }}
-                      onGenerate={handleGenerateWalls}
-                      generating={colLoading === 'walls'}
-                      size={420}
-                    />
-                  )}
-                </>
-              ) : (
-                <div style={{ fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.55 }}>
-                  図面画像が未設定です。「図面設定」で画像とワールド範囲（bounds）を設定すると、図面上で壁線・床外周を描いて GLB を生成できます。
-                </div>
-              )}
+              {/* ── GLB アップロード (外部ツールで作った場合) ── */}
+              <div style={{ ...S.subTitle, marginTop: 14 }}>GLB アップロード</div>
+              <div style={{ ...S.subTitle, marginTop: 6 }}><span style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
+              <button onClick={() => walkableRef.current?.click()} style={S.fileBtn} disabled={busy}>
+                {colLoading === 'walkable' ? '読み込み中…' : 'GLB ファイルを選択'}
+              </button>
+              <input ref={walkableRef} type="file" accept=".glb" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'walkable', 'manual'); e.target.value = ''; }} />
+              <div style={{ ...S.subTitle, marginTop: 10 }}><span style={{ ...S.colorDot, background: '#ef4444' }} />BLOCK</div>
+              <button onClick={() => blockRef.current?.click()} style={S.fileBtn} disabled={busy}>
+                {colLoading === 'block' ? '読み込み中…' : 'GLB ファイルを選択'}
+              </button>
+              <input ref={blockRef} type="file" accept=".glb" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'block', 'manual'); e.target.value = ''; }} />
             </Section>
               );
             })()}
