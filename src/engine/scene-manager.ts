@@ -101,6 +101,10 @@ export class SceneManager {
    *  surface snap ({@link screenToScenePoint}) so it doesn't re-extract meshes. */
   private walkableTrisCache: Triangle[] | null = null;
   private blockTrisCache: Triangle[] | null = null;
+  /** Debounce for the heavy triangle re-extraction while the user drags the
+   *  collision-transform sliders (the entity moves live; physics follows ~300ms
+   *  after the last change). */
+  private collisionTransformSyncTimer: number | null = null;
   /** Serializes setActivePlan calls — rapid plan clicks would otherwise interleave
    *  teardown/load/assign across two runs (orphaned splat, wrong-plan collision). */
   private planSwitchQueue: Promise<void> = Promise.resolve();
@@ -1170,6 +1174,7 @@ export class SceneManager {
       if (gen !== this.collisionGen) { col.entity.destroy(); return false; }
       col.entity.enabled = true;
       this.app.root.addChild(col.entity);
+      this.applyCollisionTransformTo(col.entity);
       if (type === 'walkable') { this.collisionWalkable?.entity.destroy(); this.collisionWalkable = col; }
       else { this.collisionBlock?.entity.destroy(); this.collisionBlock = col; }
       // Hand the freshly extracted world-space triangles to the camera controller so
@@ -1199,6 +1204,7 @@ export class SceneManager {
       if (gen !== this.collisionGen) { col.entity.destroy(); return false; }
       col.entity.enabled = true;
       this.app.root.addChild(col.entity);
+      this.applyCollisionTransformTo(col.entity);
       if (type === 'walkable') { this.collisionWalkable?.entity.destroy(); this.collisionWalkable = col; }
       else { this.collisionBlock?.entity.destroy(); this.collisionBlock = col; }
       requestAnimationFrame(() => {
@@ -1297,6 +1303,39 @@ export class SceneManager {
     min.x -= margin; min.y -= margin; min.z -= margin;
     max.x += margin; max.y += margin; max.z += margin;
     return { min, max };
+  }
+
+  /** The active plan's whole-collision fit transform (offset / scale / Y-rot),
+   *  straight from the store so plan switches always read the right one. */
+  private currentCollisionTransform() {
+    const s = useSceneStore.getState();
+    return s.manifest?.plans?.find((p) => p.id === s.activePlanId)?.collision?.transform;
+  }
+
+  /** Apply the fit transform to one collision root entity (identity when unset). */
+  private applyCollisionTransformTo(entity: Entity) {
+    const t = this.currentCollisionTransform();
+    const p = t?.position ?? [0, 0, 0];
+    const sc = t?.scale ?? 1;
+    entity.setLocalPosition(p[0], p[1], p[2]);
+    entity.setLocalEulerAngles(0, t?.rotationY ?? 0, 0);
+    entity.setLocalScale(sc, sc, sc);
+  }
+
+  /**
+   * Re-apply the active plan's collision transform to the loaded meshes (B1
+   * follow-up: 図面と GS のスケール不一致の合わせ込み). The debug meshes move
+   * immediately for visual alignment; the walk-physics triangles re-extract on
+   * a 300ms debounce so slider drags don't re-extract per tick.
+   */
+  setCollisionTransform() {
+    if (this.collisionWalkable) this.applyCollisionTransformTo(this.collisionWalkable.entity);
+    if (this.collisionBlock) this.applyCollisionTransformTo(this.collisionBlock.entity);
+    if (this.collisionTransformSyncTimer !== null) clearTimeout(this.collisionTransformSyncTimer);
+    this.collisionTransformSyncTimer = window.setTimeout(() => {
+      this.collisionTransformSyncTimer = null;
+      this.syncCollisionTrianglesToController();
+    }, 300);
   }
 
   /** Remove one collision channel entirely (mesh + controller triangles).
@@ -1520,6 +1559,10 @@ export class SceneManager {
     if (this.walkDollyRaf !== null) {
       cancelAnimationFrame(this.walkDollyRaf);
       this.walkDollyRaf = null;
+    }
+    if (this.collisionTransformSyncTimer !== null) {
+      clearTimeout(this.collisionTransformSyncTimer);
+      this.collisionTransformSyncTimer = null;
     }
     this.stopCameraAnimation();
     if (this.debugSyncHandler) {

@@ -342,6 +342,7 @@ export class ThreeSceneManager {
       });
       group.visible = false;
       this.scene.add(group);
+      this.applyCollisionTransformTo(group);
       const tris = extractThreeTriangles(group);
       if (type === 'walkable') {
         this.removeCollision('walkable');
@@ -658,6 +659,39 @@ export class ThreeSceneManager {
     this.removeCollision(type);
   }
 
+  /** The active plan's whole-collision fit transform, read live from the store. */
+  private currentCollisionTransform() {
+    const s = useSceneStore.getState();
+    return s.manifest?.plans?.find((p) => p.id === s.activePlanId)?.collision?.transform;
+  }
+
+  private applyCollisionTransformTo(group: THREE.Object3D) {
+    const t = this.currentCollisionTransform();
+    const p = t?.position ?? [0, 0, 0];
+    const sc = t?.scale ?? 1;
+    group.position.set(p[0], p[1], p[2]);
+    group.rotation.set(0, THREE.MathUtils.degToRad(t?.rotationY ?? 0), 0);
+    group.scale.setScalar(sc);
+  }
+
+  /** PlayCanvas-side parity: re-apply the fit transform to loaded collision and
+   *  re-extract the physics triangles on a debounce (slider-drag friendly). */
+  private collisionTransformSyncTimer: number | null = null;
+  setCollisionTransform() {
+    if (this.collisionWalkable) this.applyCollisionTransformTo(this.collisionWalkable);
+    if (this.collisionBlock) this.applyCollisionTransformTo(this.collisionBlock);
+    if (this.collisionTransformSyncTimer !== null) clearTimeout(this.collisionTransformSyncTimer);
+    this.collisionTransformSyncTimer = window.setTimeout(() => {
+      this.collisionTransformSyncTimer = null;
+      if (this.collisionWalkable) {
+        this.controller.setWalkableTriangles(this.walkableEnabled ? extractThreeTriangles(this.collisionWalkable) : null);
+      }
+      if (this.collisionBlock) {
+        this.controller.setBlockTriangles(this.blockEnabled ? extractThreeTriangles(this.collisionBlock) : null);
+      }
+    }, 300);
+  }
+
   setCollisionVisible(v: boolean) {
     if (this.collisionWalkable) this.collisionWalkable.visible = v;
     if (this.collisionBlock) this.collisionBlock.visible = v;
@@ -731,6 +765,10 @@ export class ThreeSceneManager {
 
   destroy() {
     this.stopCameraAnimation();
+    if (this.collisionTransformSyncTimer !== null) {
+      clearTimeout(this.collisionTransformSyncTimer);
+      this.collisionTransformSyncTimer = null;
+    }
     if (this.hud && this.hud.parentElement) this.hud.parentElement.removeChild(this.hud);
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;

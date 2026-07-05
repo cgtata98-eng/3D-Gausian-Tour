@@ -98,6 +98,24 @@ export interface CollisionConfig {
   /** Authoring data for the 図面 wall editor (manual source). Persisted so the
    *  drawn walls stay editable — the generated GLBs alone can't be un-baked. */
   walls?: CollisionWallData;
+  /**
+   * Whole-collision fit transform — the collision analogue of `splatTransform`.
+   * Applied to BOTH loaded collision entities (walkable + block) at load and on
+   * live edits, so a floor plan whose bounds don't match the GS scale can still
+   * produce usable geometry: draw once, then slide/scale the whole set onto the
+   * splat. Published with the scene (the customer viewer applies it too).
+   */
+  transform?: CollisionTransform;
+}
+
+/** Offset / uniform scale / Y-rotation for the whole collision set. */
+export interface CollisionTransform {
+  /** World offset in meters. Default [0,0,0]. */
+  position?: [number, number, number];
+  /** Uniform scale factor. Default 1. */
+  scale?: number;
+  /** Rotation around +Y in degrees. Default 0. */
+  rotationY?: number;
 }
 
 /**

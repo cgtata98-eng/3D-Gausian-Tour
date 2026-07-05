@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SceneManifest, SceneInfo, SceneSettings, SplatTransform, ViewerToolbarConfig, Viewpoint, Plan, FloorPlanConfig, AiGenerationEntry, ScenePin, PinPlacement, CollisionWallData, WalkGraph } from '../core/types';
+import type { SceneManifest, SceneInfo, SceneSettings, SplatTransform, ViewerToolbarConfig, Viewpoint, Plan, FloorPlanConfig, AiGenerationEntry, ScenePin, PinPlacement, CollisionWallData, CollisionTransform, WalkGraph } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
 import { resolveStartViewpoint } from '../core/viewpoint';
 import { useCameraStore } from './camera-store';
@@ -142,6 +142,9 @@ interface SceneState {
    *  setter — nodes are plain data, so whole-graph replacement keeps the store
    *  API small. Never touches curated `viewpoints`. */
   setPlanWalk: (id: string, walk: WalkGraph | undefined) => void;
+  /** Whole-collision fit transform (offset / scale / Y-rotation) — the
+   *  collision analogue of setPlanSplatTransform. Pass undefined to reset. */
+  setPlanCollisionTransform: (id: string, transform: CollisionTransform | undefined) => void;
   /** Remember the user-facing filename of the uploaded splat (for Debug UI display). */
   setPlanSplatSourceName: (id: string, name: string | undefined) => void;
   /** Update the splat transform (rotation / position) for a plan. Pass `null` to clear. */
@@ -346,6 +349,23 @@ export const useSceneStore = create<SceneState>((set) => ({
           const next = { ...cur };
           if (walls === undefined) delete next.walls;
           else next.walls = walls;
+          return { ...p, collision: next };
+        }),
+      },
+    };
+  }),
+  setPlanCollisionTransform: (id, transform) => set((s) => {
+    if (!s.manifest?.plans) return s;
+    return {
+      manifest: {
+        ...s.manifest,
+        plans: s.manifest.plans.map((p) => {
+          if (p.id !== id) return p;
+          // A transform may be authored before any GLB exists — seed an empty config.
+          const cur = p.collision ?? { walkable: '', block: '' };
+          const next = { ...cur };
+          if (transform === undefined) delete next.transform;
+          else next.transform = transform;
           return { ...p, collision: next };
         }),
       },

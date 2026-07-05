@@ -147,6 +147,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const setPlanCollisionStore = useSceneStore(s => s.setPlanCollision);
   const setPlanCollisionSourceStore = useSceneStore(s => s.setPlanCollisionSource);
   const setPlanCollisionWallsStore = useSceneStore(s => s.setPlanCollisionWalls);
+  const setPlanCollisionTransformStore = useSceneStore(s => s.setPlanCollisionTransform);
   const setPlanWalkStore = useSceneStore(s => s.setPlanWalk);
   const setPlanSplatSourceNameStore = useSceneStore(s => s.setPlanSplatSourceName);
   const [showAddPlan, setShowAddPlan] = useState(false);
@@ -2250,6 +2251,76 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               {colLoading === 'switch' && (
                 <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 4 }}>切替中…</div>
               )}
+
+              {/* ── 全体調整 — 図面⇄GS のスケール/位置ズレを丸ごと合わせ込む ── */}
+              {(() => {
+                const tf = col?.transform;
+                const pos = tf?.position ?? [0, 0, 0];
+                const scale = tf?.scale ?? 1;
+                const rotY = tf?.rotationY ?? 0;
+                const hasAny = !!(col?.walkable || col?.block);
+                const applyTf = (patch: Partial<import('../core/types').CollisionTransform>) => {
+                  if (!activePlanId) return;
+                  const next: import('../core/types').CollisionTransform = {
+                    position: patch.position ?? (pos as [number, number, number]),
+                    scale: patch.scale ?? scale,
+                    rotationY: patch.rotationY ?? rotY,
+                  };
+                  const identity = next.scale === 1 && next.rotationY === 0
+                    && next.position![0] === 0 && next.position![1] === 0 && next.position![2] === 0;
+                  setPlanCollisionTransformStore(activePlanId, identity ? undefined : next);
+                  smRef.current?.setCollisionTransform?.();
+                };
+                const setPosAxis = (axis: 0 | 1 | 2, v: number) => {
+                  const p = [...pos] as [number, number, number];
+                  p[axis] = +v.toFixed(3);
+                  applyTf({ position: p });
+                };
+                return (
+                  <>
+                    <div style={{ ...S.subTitle, marginTop: 14 }}>全体調整（図面⇄GS 合わせ込み）</div>
+                    {!hasAny ? (
+                      <div style={{ fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.55 }}>
+                        コリジョンを生成/アップロードすると、ここで全体のオフセット・スケール・回転を調整できます。
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.55, marginBottom: 6 }}>
+                          「コリジョンを表示」を ON にして、緑/赤メッシュが GS に重なるように調整してください。歩行判定は操作を止めた 0.3 秒後に追従します。
+                        </div>
+                        {(['X', 'Y', 'Z'] as const).map((label, axis) => (
+                          <Slider
+                            key={label}
+                            label={`オフセット ${label}`}
+                            min={-10}
+                            max={10}
+                            step={0.05}
+                            value={pos[axis]}
+                            onChange={(v) => setPosAxis(axis as 0 | 1 | 2, v)}
+                          />
+                        ))}
+                        <Slider label="スケール" min={0.2} max={3} step={0.01} value={scale}
+                          onChange={(v) => applyTf({ scale: +v.toFixed(3) })} />
+                        <Slider label="回転 Y (°)" min={-180} max={180} step={0.5} value={rotY}
+                          onChange={(v) => applyTf({ rotationY: +v.toFixed(1) })} />
+                        {tf && (
+                          <button
+                            type="button"
+                            style={{ ...S.btn, marginTop: 4 }}
+                            onClick={() => {
+                              if (!activePlanId) return;
+                              setPlanCollisionTransformStore(activePlanId, undefined);
+                              smRef.current?.setCollisionTransform?.();
+                            }}
+                          >
+                            ↺ 調整をリセット
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* ── 自動生成 (splat → voxel pipeline) ── */}
               <div style={{ ...S.subTitle, marginTop: 14 }}>自動生成</div>
