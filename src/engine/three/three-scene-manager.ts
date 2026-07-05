@@ -3,10 +3,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DropInViewer, SceneFormat } from '@mkkellogg/gaussian-splats-3d';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 import type { ViewerEngine, RenderQualityConfig, Viewpoint, SceneManifest, CameraPose, CameraKeyframe } from '../../core/types';
-import { interpolatePath, totalPathDurationSec } from '../../core/viewpoint';
+import { interpolatePath, totalPathDurationSec, resolveStartViewpoint } from '../../core/viewpoint';
 import { downscaleCanvasToJpeg } from '../../utils/video-recorder';
 import { useSceneStore } from '../../store/scene-store';
 import { useCameraStore } from '../../store/camera-store';
+import { useUIStore } from '../../store/ui-store';
 import { resolveSplatUrl } from '../resolve-splat-url';
 import { loadSceneManifest } from '../../core/scene-manifest';
 import { ThreeCameraController, type MovementMode } from './three-camera-controller';
@@ -233,8 +234,7 @@ export class ThreeSceneManager {
       this.applyRenderConfig(ensured.settings.render);
 
       // Jump to the designated start viewpoint (Plan.startViewpointId; fallback: first).
-      const vps = activePlan?.viewpoints ?? [];
-      const startVp = vps.find((v) => v.id === activePlan?.startViewpointId) ?? vps[0];
+      const startVp = resolveStartViewpoint(activePlan);
       if (startVp) this.jumpToViewpoint(startVp);
 
       store.setLoaded(true);
@@ -503,13 +503,94 @@ export class ThreeSceneManager {
   setZoomFovBounds(min: number, max: number) { this.controller.setZoomFovBounds(min, max); }
   setOnMoveSpeedChange(cb: ((s: number) => void) | null) { this.controller.setOnMoveSpeedChange(cb); }
 
+  /** Serializes setActivePlan calls — rapid plan clicks would otherwise interleave
+   *  teardown/load/assign across two runs (orphaned splat, wrong-plan collision). */
+  private planSwitchQueue: Promise<void> = Promise.resolve();
+
+  /**
+   * Switch the active plan: swap splat + collision and jump to the new plan's
+   * start viewpoint. Port of the PlayCanvas `SceneManager.setActivePlan` (minus
+   * the 360°-panorama branch — three engines are splat-only).
+   *
+   * Camera pose is **not** preserved across plans (coordinates don't translate
+   * between layouts) unless the user has the "リンク" toggle (`linkPlanCamera`) on.
+   */
+  async setActivePlan(planId: string): Promise<void> {
+    const run = this.planSwitchQueue.then(() => this.doSetActivePlan(planId));
+    // Keep the chain alive even if a run rejects (error already logged inside).
+    this.planSwitchQueue = run.catch(() => { /* swallowed for the queue only */ });
+    return run;
+  }
+
+  private async doSetActivePlan(planId: string): Promise<void> {
+    const store = useSceneStore.getState();
+    const manifest = store.manifest;
+    if (!manifest) return;
+    const plan = manifest.plans?.find((p) => p.id === planId);
+    if (!plan) return;
+
+    // setActivePlanId resets activeViewpoint internally; do this first so any
+    // subsequent lookups see the new active plan.
+    store.setActivePlanId(planId);
+
+    // Tear down the old plan's collision and clear the controller's triangles
+    // immediately, so walking can never use the PREVIOUS plan's floor/walls.
+    this.removeCollision('walkable');
+    this.removeCollision('block');
+
+    // Tear down the old splat unconditionally — the new plan may not define one.
+    if (this.splatGroup) {
+      this.scene.remove(this.splatGroup);
+      const dispose = (this.splatGroup as { dispose?: () => void | Promise<void> }).dispose;
+      if (typeof dispose === 'function') { try { void dispose.call(this.splatGroup); } catch { /* ignore */ } }
+      this.splatGroup = null;
+    }
+
+    // Load the new splat — Spark prefers SPZ (~10x smaller); mkkellogg reads PLY only.
+    const splatRef = (this.engine === 'spark' && plan.splatSpz) || plan.splat;
+    if (splatRef) {
+      useSceneStore.getState().setLoading(true);
+      try {
+        this.setHud(`${this.engine === 'spark' && plan.splatSpz ? 'SPZ' : 'PLY'} 解決中…`);
+        const splatUrl = await resolveSplatUrl(splatRef, manifest.id);
+        this.setHud('スプラット読み込み中…');
+        await this.loadSplat(splatUrl, plan.splatTransform);
+      } catch (err) {
+        console.error(`[three] plan splat load failed (${planId}):`, err);
+        this.setHud(`エラー: ${(err instanceof Error ? err.message : String(err)).slice(0, 60)}`);
+      } finally {
+        useSceneStore.getState().setLoading(false);
+      }
+    } else {
+      this.setHud('PLY 未設定');
+    }
+
+    // Load the NEW plan's collision (if declared) — after the splat so load order
+    // matches loadScene. Uses the same manifest-ref path as every other caller and
+    // fetches the two independent GLBs in parallel.
+    try {
+      await Promise.all([
+        plan.collision?.walkable ? this.loadCollisionFromManifestRef(plan.collision.walkable, 'walkable') : null,
+        plan.collision?.block ? this.loadCollisionFromManifestRef(plan.collision.block, 'block') : null,
+      ]);
+    } catch (err) {
+      console.error(`[three] plan collision load failed (${planId}):`, err);
+    }
+
+    // Jump to the new plan's start viewpoint — UNLESS the "リンク" toggle keeps
+    // the current camera pose (day/night comparison at the same spot).
+    if (!useUIStore.getState().linkPlanCamera) {
+      const startVp = resolveStartViewpoint(plan);
+      if (startVp) this.jumpToViewpoint(startVp);
+    }
+  }
   /** No-op placeholders — three engines don't yet implement these PlayCanvas-only flows. */
-  async setActivePlan(_planId: string): Promise<void> { /* noop — TODO */ }
   setViewMode(_mode: 'splat' | '360') { /* noop — 360 mode not yet implemented in three */ }
   async applyActiveColor(): Promise<void> { /* noop — color variants not yet implemented */ }
   async setVariant(_f: 'on' | 'off', _l: 'day' | 'night'): Promise<void> { /* noop */ }
   setRenderMode(_m: 'default' | 'sharp' | 'highq') { /* preset is applied via applyRenderConfig */ }
   async setViewpointPanorama(_viewpointId: string, _dataUrl: string): Promise<void> { /* noop — 360 不対応 */ }
+  async showPanoramaPreview(_src: string, _opts?: { animated?: boolean }): Promise<boolean> { return false; /* noop — 360 不対応 */ }
   async loadHdri(_file: File): Promise<true | string> { return '360 モード未対応エンジンです'; }
   removeHdri(): void { /* noop — 360 不対応 */ }
   setStudioColor(_c: [number, number, number]): void { /* noop — 360 不対応 */ }
@@ -568,6 +649,13 @@ export class ThreeSceneManager {
     const sceneId = useSceneStore.getState().manifest?.id ?? '';
     const url = await resolveSplatUrl(ref, sceneId);
     return this.loadCollisionFromUrl(url, type);
+  }
+
+  /** Remove one collision channel entirely (mesh + controller triangles).
+   *  PlayCanvas-side parity — used on manual/auto source switches when the
+   *  newly-selected stash has no GLB for this channel. */
+  clearCollision(type: 'walkable' | 'block') {
+    this.removeCollision(type);
   }
 
   setCollisionVisible(v: boolean) {

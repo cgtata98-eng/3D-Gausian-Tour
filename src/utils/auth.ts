@@ -37,20 +37,28 @@ export function verifyCredentials(username: string, password: string): AuthRole 
   return null;
 }
 
-export function isAuthenticated(): boolean {
+/** Read the stored auth record, enforcing the TTL. Returns null (and clears the
+ *  expired record) when missing / unparseable / expired — the single source of
+ *  truth for BOTH `isAuthenticated` and `getAuthRole`, so a stale or corrupt
+ *  record can never grant a role. */
+function readValidAuthRecord(): AuthRecord | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
+    if (!raw) return null;
     const rec = JSON.parse(raw) as AuthRecord;
-    if (typeof rec?.ts !== 'number') return false;
+    if (typeof rec?.ts !== 'number') return null;
     if (Date.now() - rec.ts > AUTH_TTL_MS) {
       localStorage.removeItem(STORAGE_KEY);
-      return false;
+      return null;
     }
-    return true;
+    return rec;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function isAuthenticated(): boolean {
+  return readValidAuthRecord() !== null;
 }
 
 export function markAuthenticated(role: AuthRole = 'admin'): void {
@@ -59,16 +67,13 @@ export function markAuthenticated(role: AuthRole = 'admin'): void {
   } catch { /* localStorage disabled — best-effort */ }
 }
 
-/** Current session role. Legacy sessions without a role default to admin. */
+/** Current session role. FAIL-SAFE: a missing / corrupt / expired session yields
+ *  the restricted `share` role, never admin. Only a VALID legacy record without a
+ *  role field (pre-role admin logins) keeps its historical admin meaning. */
 export function getAuthRole(): AuthRole {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return 'admin';
-    const rec = JSON.parse(raw) as AuthRecord;
-    return rec?.role === 'share' ? 'share' : 'admin';
-  } catch {
-    return 'admin';
-  }
+  const rec = readValidAuthRecord();
+  if (!rec) return 'share';
+  return rec.role === 'share' ? 'share' : 'admin';
 }
 
 /** Basic Auth header for the current session role — sent to the Worker so it can tell

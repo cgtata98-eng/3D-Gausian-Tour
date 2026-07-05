@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useUIStore } from '../store/ui-store';
+import { useMediaQuery } from '../utils/use-media-query';
 import { tokens } from './design-tokens';
 
 /** スティック中心からのオフセットがこれ未満なら「動いていない」扱いにする。
@@ -27,17 +28,12 @@ export function MobileJoystick({ onChange }: Props) {
   const baseRef = useRef<HTMLDivElement>(null);
   const activeIdRef = useRef<number | null>(null);
   const [thumb, setThumb] = useState({ x: 0, y: 0 });
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
-
+  // Mirror of `activeIdRef !== null` as STATE — the thumb's snap-back transition
+  // depends on it at render time, and reading a ref during render leaves the style
+  // stale (ref writes don't re-render; react-hooks/refs).
+  const [dragging, setDragging] = useState(false);
   // Show only on touch / coarse-pointer devices so it doesn't clutter desktop.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(pointer: coarse)');
-    setIsTouchDevice(mq.matches);
-    const onChange = () => setIsTouchDevice(mq.matches);
-    mq.addEventListener?.('change', onChange);
-    return () => mq.removeEventListener?.('change', onChange);
-  }, []);
+  const isTouchDevice = useMediaQuery('(pointer: coarse)');
 
   // Use pointer events (unified mouse / touch / pen). `setPointerCapture`
   // means the move events keep firing even if the finger drifts off the
@@ -48,6 +44,7 @@ export function MobileJoystick({ onChange }: Props) {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     activeIdRef.current = e.pointerId;
+    setDragging(true);
     updateFromPointer(e.clientX, e.clientY);
   };
 
@@ -62,6 +59,7 @@ export function MobileJoystick({ onChange }: Props) {
     e.preventDefault();
     e.stopPropagation();
     activeIdRef.current = null;
+    setDragging(false);
     setThumb({ x: 0, y: 0 });
     onChange(0, 0);
     useUIStore.getState().setMobileJoystickActive(false);
@@ -131,7 +129,7 @@ export function MobileJoystick({ onChange }: Props) {
           border: `1px solid ${tokens.color.border}`,
           boxShadow: tokens.shadow.glass,
           transform: `translate(${thumb.x}px, ${thumb.y}px)`,
-          transition: activeIdRef.current === null ? 'transform 180ms ease-out' : 'none',
+          transition: dragging ? 'none' : 'transform 180ms ease-out',
           pointerEvents: 'none',
         }}
       />

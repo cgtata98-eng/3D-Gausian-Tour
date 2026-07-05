@@ -124,6 +124,18 @@ export function findViewpoint(viewpoints: Viewpoint[], id: string): Viewpoint | 
 }
 
 /**
+ * Resolve a plan's start viewpoint: the 🏁 `startViewpointId` entry, falling back to
+ * the first viewpoint (legacy / un-designated plans). Single source of truth — the
+ * camera jump, the viewpoint-list highlight, and slider seeds must all agree on it.
+ */
+export function resolveStartViewpoint(
+  plan: { viewpoints: Viewpoint[]; startViewpointId?: string } | undefined | null,
+): Viewpoint | undefined {
+  if (!plan) return undefined;
+  return plan.viewpoints.find((v) => v.id === plan.startViewpointId) ?? plan.viewpoints[0];
+}
+
+/**
  * Derive PlayCanvas yaw (0–360°) from a viewpoint's saved `target - position`.
  * Single source of truth for "the saved direction this viewpoint faces" — used
  * by both maps (debug 図面 + viewer MAP) so their cones agree.

@@ -14,7 +14,7 @@ const QUALITY_PRESETS: Record<QualityMode, { shBands: number; renderScale: numbe
   high: { shBands: 3, renderScale: 1.0,  radialSort: true  },
 };
 import type { SceneManifest, Viewpoint, CameraPose, CameraKeyframe } from '../core/types';
-import { interpolatePath, totalPathDurationSec } from '../core/viewpoint';
+import { interpolatePath, totalPathDurationSec, resolveStartViewpoint } from '../core/viewpoint';
 import { downscaleCanvasToJpeg } from '../utils/video-recorder';
 import { loadSceneManifest, resolveScenePath } from '../core/scene-manifest';
 import { loadGSplat, loadSogFromIdb, loadSogFromUrl, applySplatTransform, isSogIdbRef } from './gsplat-loader';
@@ -23,7 +23,7 @@ import type { SplatTransform, RenderQualityConfig } from '../core/types';
 import { applyRenderConfig, getRenderPreset } from './render-presets';
 import { extractTrianglesFromEntity } from './mesh-raycaster';
 import { loadCollisionGlb, setCollisionOpacity as setColOp, setCollisionVisible as setColVis } from './collision-loader';
-import { applyHdri, applyHdriFromFile, removeHdri } from './hdri-loader';
+import { applyHdri, applyHdriFromFile, crossfadeHdri, removeHdri } from './hdri-loader';
 import { setStudioColor } from './studio';
 import type { CollisionEntity } from './collision-loader';
 import { CameraController } from './camera-controller';
@@ -95,6 +95,16 @@ export class SceneManager {
    *  working without any UI wiring. */
   private walkableEnabled = true;
   private blockEnabled = true;
+  /** Pending retry timer for the deferred AABB re-cull (see {@link scheduleBoundsRecull}). */
+  private boundsRecullTimer: number | null = null;
+  /** Serializes setActivePlan calls — rapid plan clicks would otherwise interleave
+   *  teardown/load/assign across two runs (orphaned splat, wrong-plan collision). */
+  private planSwitchQueue: Promise<void> = Promise.resolve();
+  /** Bumped whenever the current collision set is torn down (plan switch / destroy).
+   *  In-flight async collision loads capture the value at start and discard their
+   *  result if it changed — a slow load from the OLD plan can then never install
+   *  its floor/walls into the NEW plan. */
+  private collisionGen = 0;
   /** Whether the green/red collision debug meshes are shown. Default false so the
    *  customer viewer (which never calls setCollisionVisible) keeps them hidden; the
    *  Debug "コリジョンを表示" toggle flips it. Applied to meshes as they finish loading. */
@@ -273,8 +283,7 @@ export class SceneManager {
         // Initial pose = the plan's designated start viewpoint (Plan.startViewpointId),
         // falling back to the first viewpoint for un-designated / legacy plans. Legacy
         // `fixedPosition` / `initialPositionMode` are not used for placement.
-        const vps = activePlan?.viewpoints ?? [];
-        const startVp = vps.find((v) => v.id === activePlan?.startViewpointId) ?? vps[0];
+        const startVp = resolveStartViewpoint(activePlan);
         if (startVp) {
           this.jumpToViewpoint(startVp);
         }
@@ -641,6 +650,15 @@ export class SceneManager {
    * to another, so we always restart at the new plan's first viewpoint (or fixed pose).
    */
   async setActivePlan(planId: string): Promise<void> {
+    // Serialize: callers fire-and-forget (`void setActivePlan(id)`), so rapid plan
+    // clicks would otherwise interleave two runs' teardown/load/assign steps.
+    const run = this.planSwitchQueue.then(() => this.doSetActivePlan(planId));
+    // Keep the chain alive even if a run rejects (error already logged inside).
+    this.planSwitchQueue = run.catch(() => { /* swallowed for the queue only */ });
+    return run;
+  }
+
+  private async doSetActivePlan(planId: string): Promise<void> {
     // Refresh from store — the UI may have added/renamed plans since loadScene cached `this.manifest`.
     this.manifest = useSceneStore.getState().manifest;
     const m = this.manifest;
@@ -658,6 +676,17 @@ export class SceneManager {
       this.splatEntity.destroy();
       this.splatEntity = null;
     }
+
+    // Tear down the old plan's collision and immediately clear the controller's
+    // triangles, so walk-mode can never floor-snap / wall-block against the
+    // PREVIOUS plan's geometry while (or after) the new plan loads. Bumping the
+    // generation also invalidates any still-in-flight collision load.
+    this.collisionGen++;
+    this.collisionWalkable?.entity.destroy();
+    this.collisionWalkable = null;
+    this.collisionBlock?.entity.destroy();
+    this.collisionBlock = null;
+    this.syncCollisionTrianglesToController();
 
     // Load the new splat — only if the plan defines one. Otherwise leave the canvas blank.
     // Mirror loadScene's preference: SOG bundle first, fall back to PLY.
@@ -693,13 +722,25 @@ export class SceneManager {
     // Re-apply quality preset (SH bands / radial sort / DPR) to the freshly-loaded splat.
     this.applyQualityMode(useUIStore.getState().qualityMode);
 
+    // Load the NEW plan's collision (if declared) — after the splat load so the
+    // AABB cull in syncCollisionTrianglesToController (triggered inside the
+    // loader) runs against the new splat's bounds, not the old plan's. Mirrors
+    // the loadScene auto-load path; product showrooms don't use collision.
+    const isProduct = useProjectStore.getState().getProject(m.id)?.type === 'product';
+    if (!isProduct && plan.collision?.walkable) {
+      void this.loadCollisionFromManifestRef(plan.collision.walkable, 'walkable');
+    }
+    if (!isProduct && plan.collision?.block) {
+      void this.loadCollisionFromManifestRef(plan.collision.block, 'block');
+    }
+
     // Jump to the new plan's first viewpoint — UNLESS the user has the
     // "リンク" toggle on (`linkPlanCamera`), in which case we keep the current
     // camera pose. Use case: same room with separate day/night plans, the user
     // wants to compare lighting at the exact same spot.
-    if (this.cameraController && plan.viewpoints.length > 0 && !useUIStore.getState().linkPlanCamera) {
-      const startVp = plan.viewpoints.find((v) => v.id === plan.startViewpointId) ?? plan.viewpoints[0];
-      this.jumpToViewpoint(startVp);
+    if (this.cameraController && !useUIStore.getState().linkPlanCamera) {
+      const startVp = resolveStartViewpoint(plan);
+      if (startVp) this.jumpToViewpoint(startVp);
     }
 
     if (this.viewMode === '360') {
@@ -739,6 +780,75 @@ export class SceneManager {
       await this.applyActiveViewpointPanorama();
     }
   }
+
+  /**
+   * Show an arbitrary 360° panorama in the main view (walkthrough-node preview /
+   * node transitions). Bypasses the viewpoint-panorama resolution entirely — the
+   * walk layer is independent of curated viewpoints. 360 mode only (in splat
+   * mode the skybox sits behind the splat and wouldn't be visible).
+   * Camera yaw/pitch are untouched — facing carries across node hops.
+   *
+   * `animated: true` = the C4 "walking" transition: a short crossfade between
+   * the two equirects plus a subtle FOV dolly-in that sells forward motion.
+   * `false` / omitted = instant swap (the legacy behavior, and the editor
+   * preview default).
+   */
+  async showPanoramaPreview(src: string, opts?: { animated?: boolean }): Promise<boolean> {
+    if (!this.manifest || this.viewMode !== '360') return false;
+    try {
+      const url = await resolveAssetUrl(src, this.manifest.id);
+      if (opts?.animated) {
+        const fade = crossfadeHdri(this.app, url, 320);
+        this.playWalkDolly(320);
+        await fade;
+      } else {
+        await applyHdri(this.app, url);
+      }
+      return true;
+    } catch (err) {
+      console.error('panorama preview failed:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Forward-step FOV dolly (C4/B4): pinch the FOV in slightly and release over
+   * `durationMs`, synced with the panorama crossfade. Pure render-side motion —
+   * yaw/pitch/mapYaw/saved FOV settings are untouched, and the base FOV is
+   * restored exactly when the tween ends (or when a new dolly supersedes it).
+   */
+  private walkDollyRaf: number | null = null;
+  private playWalkDolly(durationMs: number) {
+    const cc = this.cameraController;
+    if (!cc) return;
+    // Cancel a previous dolly and restore its base FOV first, so spammed steps
+    // never compound the pinch.
+    if (this.walkDollyRaf !== null) {
+      cancelAnimationFrame(this.walkDollyRaf);
+      this.walkDollyRaf = null;
+      if (this.walkDollyBaseFov !== null) cc.setFov(this.walkDollyBaseFov);
+    }
+    const baseFov = cc.getFov();
+    this.walkDollyBaseFov = baseFov;
+    const pinch = baseFov * 0.10; // 10% in-and-out — noticeable, not nauseating
+    const t0 = performance.now();
+    const tick = () => {
+      this.walkDollyRaf = null;
+      const c = this.cameraController;
+      if (!c) return;
+      const t = Math.min(1, (performance.now() - t0) / durationMs);
+      // sin(π·t): 0 → max pinch at the midpoint → back to 0.
+      c.setFov(baseFov - pinch * Math.sin(Math.PI * t));
+      if (t >= 1) {
+        c.setFov(baseFov);
+        this.walkDollyBaseFov = null;
+        return;
+      }
+      this.walkDollyRaf = requestAnimationFrame(tick);
+    };
+    this.walkDollyRaf = requestAnimationFrame(tick);
+  }
+  private walkDollyBaseFov: number | null = null;
 
   private async applyActiveViewpointPanorama(): Promise<void> {
     if (!this.manifest) return;
@@ -878,6 +988,7 @@ export class SceneManager {
       updateHandler?: ((dt: number) => void) | null;
       setYaw?: (deg: number) => void;
       setPitch?: (deg: number) => void;
+      setPlayerPosition?: (x: number, y: number, z: number) => void;
     } | null;
     const ccUpdate = cc?.updateHandler ?? null;
     if (ccUpdate) this.app.off('update', ccUpdate);
@@ -887,7 +998,17 @@ export class SceneManager {
       const msg = ev.data as { type?: string; position?: [number, number, number]; yaw?: number; pitch?: number; fov?: number };
       if (msg?.type !== 'pose') return;
       if (msg.position) {
-        this.camera.setPosition(msg.position[0], msg.position[1], msg.position[2]);
+        // Move the controller's logical playerPos, not just the entity — the
+        // setYaw/setPitch below end in applyPose(), whose final
+        // `entity.setPosition(playerPos)` would overwrite a bare entity write
+        // with the stale position (= the "rotation mirrors but position
+        // doesn't" bug). Fall back to the entity write for controllers without
+        // the method (orbit).
+        if (cc?.setPlayerPosition) {
+          cc.setPlayerPosition(msg.position[0], msg.position[1], msg.position[2]);
+        } else {
+          this.camera.setPosition(msg.position[0], msg.position[1], msg.position[2]);
+        }
       }
       if (msg.yaw !== undefined && msg.pitch !== undefined) {
         // Match camera-controller's convention: pitch on X, yaw on Y, no roll.
@@ -1007,8 +1128,12 @@ export class SceneManager {
   /** Load collision GLB from a data URL (drag & drop) */
   async loadCollisionFromDataUrl(dataUrl: string, type: 'walkable' | 'block'): Promise<boolean> {
     try {
+      const gen = this.collisionGen;
       const color = type === 'walkable' ? '#00ff00' : '#ff0000';
       const col = await loadCollisionGlb(this.app, dataUrl, `collision-${type}`, color, 0.15);
+      // A plan switch happened while this GLB was loading — the result belongs to
+      // the OLD plan; installing it would arm the previous plan's floor/walls.
+      if (gen !== this.collisionGen) { col.entity.destroy(); return false; }
       col.entity.enabled = true;
       this.app.root.addChild(col.entity);
       if (type === 'walkable') { this.collisionWalkable?.entity.destroy(); this.collisionWalkable = col; }
@@ -1031,9 +1156,13 @@ export class SceneManager {
    *  path and the customer viewer fetching from R2. */
   async loadCollisionFromManifestRef(ref: string, type: 'walkable' | 'block'): Promise<boolean> {
     try {
+      const gen = this.collisionGen;
       const url = await resolveAssetUrl(ref, this.manifest?.id ?? '');
       const color = type === 'walkable' ? '#00ff00' : '#ff0000';
       const col = await loadCollisionGlb(this.app, url, `collision-${type}`, color, 0.15);
+      // A plan switch happened while this GLB was loading — the result belongs to
+      // the OLD plan; installing it would arm the previous plan's floor/walls.
+      if (gen !== this.collisionGen) { col.entity.destroy(); return false; }
       col.entity.enabled = true;
       this.app.root.addChild(col.entity);
       if (type === 'walkable') { this.collisionWalkable?.entity.destroy(); this.collisionWalkable = col; }
@@ -1063,12 +1192,47 @@ export class SceneManager {
       const raw = (this.blockEnabled && this.collisionBlock) ? extractTrianglesFromEntity(this.collisionBlock.entity) : null;
       this.cameraController.setBlockTriangles(cullTrianglesToBounds(raw, bounds));
     }
+    // If the splat AABB wasn't available yet (big PLY/SOG still initializing right
+    // after load), the triangles above went out UNculled — stray far-away boxes
+    // survive and the player can floor-snap onto them. Pushing first keeps walking
+    // usable immediately; retry until the AABB shows up, then re-cull.
+    if (!bounds && this.splatEntity && (this.collisionWalkable || this.collisionBlock)) {
+      this.scheduleBoundsRecull();
+    }
+  }
+
+  /** Retry loop for the AABB cull above: poll until `computeSplatWorldBounds()`
+   *  returns non-null (splat finished initializing), then re-sync (= re-cull) the
+   *  collision triangles. Gives up after ~10 s — behavior then matches the old
+   *  "no cull" path. A plan switch tears down `splatEntity` / the controller,
+   *  which the tick detects; `destroy()` clears the timer. */
+  private scheduleBoundsRecull() {
+    if (this.boundsRecullTimer !== null) return; // a retry loop is already waiting
+    let tries = 0;
+    const tick = () => {
+      this.boundsRecullTimer = null;
+      if (!this.cameraController || !this.splatEntity) return; // scene torn down / plan switching
+      if (this.computeSplatWorldBounds()) {
+        this.syncCollisionTrianglesToController(); // re-extract + cull with real bounds
+        return;
+      }
+      if (++tries < 40) {
+        this.boundsRecullTimer = window.setTimeout(tick, 250);
+      } else {
+        console.warn('collision AABB cull skipped: splat bounds never became available');
+      }
+    };
+    this.boundsRecullTimer = window.setTimeout(tick, 250);
   }
 
   /** World-space AABB of the active splat (with a margin), or null if unavailable.
    *  The gsplat AABB is local; transform its 8 corners to world so rotation/scale
-   *  (e.g. the default [180,0,0] splatTransform) are handled correctly. */
-  private computeSplatWorldBounds(margin = 1.0): { min: Vec3; max: Vec3 } | null {
+   *  (e.g. the default [180,0,0] splatTransform) are handled correctly.
+   *  Margin: 2.0 m — generous enough that a tight/slightly-off splat AABB doesn't
+   *  cull legitimate floor triangles at the room edges (voxelized collision can
+   *  overhang the splat by a voxel or two), while stray boxes — typically several
+   *  meters out — still land outside. */
+  private computeSplatWorldBounds(margin = 2.0): { min: Vec3; max: Vec3 } | null {
     const ent = this.splatEntity;
     if (!ent) return null;
     const gs = ent.gsplat as unknown as {
@@ -1097,6 +1261,18 @@ export class SceneManager {
     min.x -= margin; min.y -= margin; min.z -= margin;
     max.x += margin; max.y += margin; max.z += margin;
     return { min, max };
+  }
+
+  /** Remove one collision channel entirely (mesh + controller triangles).
+   *  Used when the active source (manual/auto) switches to a stash that has
+   *  no GLB for this channel — disabling alone would leave the old mesh armed.
+   *  NOTE: bumps `collisionGen` (any in-flight load is discarded), so callers
+   *  doing a clear-then-reload must clear BOTH channels before starting loads. */
+  clearCollision(type: 'walkable' | 'block') {
+    this.collisionGen++;
+    if (type === 'walkable') { this.collisionWalkable?.entity.destroy(); this.collisionWalkable = null; }
+    else { this.collisionBlock?.entity.destroy(); this.collisionBlock = null; }
+    this.syncCollisionTrianglesToController(type);
   }
 
   setCollisionVisible(visible: boolean) {
@@ -1298,6 +1474,16 @@ export class SceneManager {
     if (this.vpSyncTimer) {
       clearTimeout(this.vpSyncTimer);
       this.vpSyncTimer = null;
+    }
+    if (this.boundsRecullTimer !== null) {
+      clearTimeout(this.boundsRecullTimer);
+      this.boundsRecullTimer = null;
+    }
+    // Invalidate in-flight collision loads so they can't attach to the torn-down app.
+    this.collisionGen++;
+    if (this.walkDollyRaf !== null) {
+      cancelAnimationFrame(this.walkDollyRaf);
+      this.walkDollyRaf = null;
     }
     this.stopCameraAnimation();
     if (this.debugSyncHandler) {

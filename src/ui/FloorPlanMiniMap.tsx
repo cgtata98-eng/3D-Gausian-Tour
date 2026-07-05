@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCameraStore } from '../store/camera-store';
 import { useSceneStore } from '../store/scene-store';
 import { resolveScenePath } from '../core/scene-manifest';
@@ -46,19 +46,41 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
   const svgRef = useRef<SVGSVGElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragRef = useRef<{ vpId: string; sx: number; sy: number; ox: number; oz: number } | null>(null);
+  // Phantom-click suppression (A3): after a dot drag, the browser fires a `click` on
+  // mouseup — but by then `draggingId` (React state) is already null, so the click
+  // handler can't tell it apart from a real click and jumps the camera. This ref is
+  // set SYNCHRONOUSLY the moment the pointer actually moves during a drag, checked
+  // (and cleared) in the click handlers, and reset on the next mousedown.
+  const suppressClickRef = useRef(false);
+  /** Removes the current drag gesture's window listeners (set by onDS). */
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   const fpImage = activePlan?.floorPlan?.image;
   const isData = !!fpImage && fpImage.startsWith('data:');
   const hasFile = !!fpImage && (isData || isImageFile(fpImage));
   const imageUrl = isData ? fpImage : (fpImage ? resolveScenePath(sceneId, fpImage) : '');
 
-  useEffect(() => {
-    if (!hasFile || !imageUrl) { setImgSize(null); setImgFailed(false); return; }
+  // Reset load state the moment the image source changes — during render (React's
+  // documented "adjust state when props change" pattern) so the effect below only
+  // talks to the external Image() API. Keeps the previous imgSize while a NEW url
+  // loads (avoids an aspect-ratio pop), clearing it only when the image goes away.
+  const imageKey = hasFile ? imageUrl : '';
+  const [prevImageKey, setPrevImageKey] = useState(imageKey);
+  if (prevImageKey !== imageKey) {
+    setPrevImageKey(imageKey);
     setImgFailed(false);
+    if (!imageKey) setImgSize(null);
+  }
+  useEffect(() => {
+    if (!hasFile || !imageUrl) return;
+    // `cancelled` guards against a slow previous load finishing AFTER the url
+    // changed and overwriting the newer image's size with a stale one.
+    let cancelled = false;
     const img = new Image();
-    img.onload = () => { setImgSize({ w: img.naturalWidth, h: img.naturalHeight }); setImgFailed(false); };
-    img.onerror = () => { setImgSize(null); setImgFailed(true); };
+    img.onload = () => { if (!cancelled) { setImgSize({ w: img.naturalWidth, h: img.naturalHeight }); setImgFailed(false); } };
+    img.onerror = () => { if (!cancelled) { setImgSize(null); setImgFailed(true); } };
     img.src = imageUrl;
+    return () => { cancelled = true; };
   }, [imageUrl, hasFile]);
 
   const hasImage = hasFile && !imgFailed;
@@ -92,13 +114,16 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
   const rW = (dW - PADDING * 2) / 4 * 0.85, rH = (dH - PADDING * 2) / 4 * 0.85;
   const mr = dW > 250 ? 8 : 5, fs = dW > 250 ? 12 : 9;
 
-  const getSvgPt = useCallback((cx: number, cy: number) => {
+  // NOTE: the handlers below are intentionally plain functions, not useCallback —
+  // React Compiler memoizes them, and mixing manual deps lists with its inference
+  // made it skip optimizing this whole component (preserve-manual-memoization).
+  const getSvgPt = (cx: number, cy: number) => {
     const svg = svgRef.current; if (!svg) return { x: 0, y: 0 };
     const r = svg.getBoundingClientRect();
     return { x: (cx - r.left) * (dW / r.width), y: (cy - r.top) * (dH / r.height) };
-  }, [dW, dH]);
+  };
 
-  const onDS = useCallback((id: string, cx: number, cy: number) => {
+  const onDS = (id: string, cx: number, cy: number) => {
     if (!editable) return;
     const vp = viewpoints.find(v => v.id === id); if (!vp) return;
     const pt = getSvgPt(cx, cy);
@@ -115,12 +140,28 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
       oz = bounds.min[1] + 0.1 * worldH;
     }
     dragRef.current = { vpId: id, sx: pt.x, sy: pt.y, ox, oz };
+    suppressClickRef.current = false; // fresh interaction — a plain click (no move) must still work
     setDraggingId(id);
-  }, [editable, viewpoints, getSvgPt, bounds, worldW, worldH]);
+    // Attach the move/up listeners imperatively for THIS gesture (removed on
+    // mouseup / unmount) instead of via a draggingId-driven effect — the effect
+    // version forced onDM/onDE into a deps list they churned every render.
+    const mm = (e: MouseEvent) => { e.preventDefault(); onDM(e.clientX, e.clientY); };
+    const mu = () => { cleanup(); onDE(); };
+    const cleanup = () => {
+      window.removeEventListener('mousemove', mm);
+      window.removeEventListener('mouseup', mu);
+      dragCleanupRef.current = null;
+    };
+    dragCleanupRef.current = cleanup;
+    window.addEventListener('mousemove', mm);
+    window.addEventListener('mouseup', mu);
+  };
 
-  const onDM = useCallback((cx: number, cy: number) => {
+  const onDM = (cx: number, cy: number) => {
     const d = dragRef.current; if (!d) return;
     const pt = getSvgPt(cx, cy);
+    // Real movement (beyond jitter) → the upcoming click is a drag artifact, not intent.
+    if (Math.hypot(pt.x - d.sx, pt.y - d.sy) > 2) suppressClickRef.current = true;
     const dwx = ((pt.x - d.sx) / (dW - PADDING * 2)) * worldW;
     const dwz = ((pt.y - d.sy) / (dH - PADDING * 2)) * worldH;
     const newX = +(d.ox + dwx).toFixed(3);
@@ -145,17 +186,32 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
         },
       };
     });
-  }, [getSvgPt, dW, dH, worldW, worldH, activePlanId, onMoveViewpoint]);
+  };
 
-  const onDE = useCallback(() => {
+  const onDE = () => {
     const d = dragRef.current;
     dragRef.current = null;
     setDraggingId(null);
     if (d && onMoveViewpointEnd) onMoveViewpointEnd(d.vpId);
-  }, [onMoveViewpointEnd]);
+    // The phantom click (if any) fires synchronously right after this mouseup, so
+    // it still sees the suppression flag. If the drag was released OUTSIDE the
+    // SVG no click reaches our handlers to consume the flag — clear it on the
+    // next tick so it can't swallow the user's NEXT legitimate click.
+    setTimeout(() => { suppressClickRef.current = false; }, 0);
+  };
+
+  /** Pin click → jump, UNLESS this click is the tail end of a drag (A3 phantom click).
+   *  Must read the synchronous ref — `draggingId` state is already null here. */
+  const onPinClick = (vpId: string) => {
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+    onViewpointClick(vpId);
+  };
 
   /** Convert a screen click on the SVG to world (x, z) using the same toMX/toMY mapping. */
-  const onSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+  const onSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    // A drag released over empty map area fires `click` on the SVG (the common
+    // ancestor of mousedown/mouseup targets) — don't treat it as click-to-place.
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
     if (!editable || !onMapClick) return;
     // If a viewpoint group handled the click first, it'll have stopped propagation.
     const pt = getSvgPt(e.clientX, e.clientY);
@@ -165,15 +221,11 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
     // Ignore clicks landing in the padding margin.
     if (pt.x < PADDING || pt.x > dW - PADDING || pt.y < PADDING || pt.y > dH - PADDING) return;
     onMapClick(worldX, worldZ);
-  }, [editable, onMapClick, getSvgPt, bounds.min, dW, dH, worldW, worldH]);
+  };
 
-  useEffect(() => {
-    if (!draggingId) return;
-    const mm = (e: MouseEvent) => { e.preventDefault(); onDM(e.clientX, e.clientY); };
-    const mu = () => onDE();
-    window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
-    return () => { window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); };
-  }, [draggingId, onDM, onDE]);
+  // Unmount safety: if the component goes away mid-drag, drop the gesture's
+  // window listeners (registered in onDS).
+  useEffect(() => () => { dragCleanupRef.current?.(); }, []);
 
   if (!manifest) return null;
 
@@ -301,7 +353,7 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
           const labelFill = isA ? '#b91c1c' : 'rgba(31,41,55,0.85)';
           return hasImage ? (
             <g key={vp.id} style={{ cursor: canD ? (isD ? 'grabbing' : 'grab') : 'pointer' }}
-              onClick={(e) => { e.stopPropagation(); if (!isD) onViewpointClick(vp.id); }}
+              onClick={(e) => { e.stopPropagation(); onPinClick(vp.id); }}
               onMouseDown={e => { if (canD) { e.preventDefault(); e.stopPropagation(); onDS(vp.id, e.clientX, e.clientY); } }}>
               {hasDir && (
                 <polygon points={`${cx},${cy} ${vL.x},${vL.y} ${vTip.x},${vTip.y} ${vR.x},${vR.y}`} fill={coneFill} stroke={coneStroke} strokeWidth={isA ? 1.2 : 0.8} />
@@ -315,7 +367,7 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
             </g>
           ) : (
             <g key={vp.id} style={{ cursor: canD ? (isD ? 'grabbing' : 'grab') : 'pointer' }}
-              onClick={(e) => { e.stopPropagation(); if (!isD) onViewpointClick(vp.id); }}
+              onClick={(e) => { e.stopPropagation(); onPinClick(vp.id); }}
               onMouseDown={e => { if (canD) { e.preventDefault(); e.stopPropagation(); onDS(vp.id, e.clientX, e.clientY); } }}>
               <rect x={cx - rW / 2} y={cy - rH / 2} width={rW} height={rH}
                 fill={isA ? 'rgba(239,68,68,0.18)' : 'rgba(0,0,0,0.04)'}

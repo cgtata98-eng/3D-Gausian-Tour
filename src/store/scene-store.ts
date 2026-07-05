@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import type { SceneManifest, SceneInfo, SceneSettings, SplatTransform, ViewerToolbarConfig, Viewpoint, Plan, FloorPlanConfig, AiGenerationEntry, ScenePin, PinPlacement } from '../core/types';
+import type { SceneManifest, SceneInfo, SceneSettings, SplatTransform, ViewerToolbarConfig, Viewpoint, Plan, FloorPlanConfig, AiGenerationEntry, ScenePin, PinPlacement, CollisionWallData, WalkGraph } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
+import { resolveStartViewpoint } from '../core/viewpoint';
 import { useCameraStore } from './camera-store';
 import { useProjectStore } from './project-store';
 
@@ -132,6 +133,15 @@ interface SceneState {
    *  holds; missing stash entries are cleared so the loader doesn't get
    *  half-state. No-op if the matching stash is empty. */
   setPlanCollisionSource: (id: string, source: 'manual' | 'auto') => void;
+  /** Persist the 図面 wall editor's authoring data (segments / floor polygon /
+   *  params) on the plan so the drawn walls stay editable across sessions.
+   *  Pass undefined to clear. */
+  setPlanCollisionWalls: (id: string, walls: CollisionWallData | undefined) => void;
+  /** Replace (or clear) a plan's dense-walkthrough graph (`Plan.walk`). The
+   *  walkthrough authoring UI edits a draft and commits through this single
+   *  setter — nodes are plain data, so whole-graph replacement keeps the store
+   *  API small. Never touches curated `viewpoints`. */
+  setPlanWalk: (id: string, walk: WalkGraph | undefined) => void;
   /** Remember the user-facing filename of the uploaded splat (for Debug UI display). */
   setPlanSplatSourceName: (id: string, name: string | undefined) => void;
   /** Update the splat transform (rotation / position) for a plan. Pass `null` to clear. */
@@ -221,8 +231,10 @@ export const useSceneStore = create<SceneState>((set) => ({
   setActivePlanId: (id) => set((s) => {
     if (s.activePlanId === id) return s;
     const plan = s.manifest?.plans?.find((p) => p.id === id);
-    // Reset the active viewpoint to the new plan's first viewpoint (or null) — coords don't translate.
-    useCameraStore.getState().setActiveViewpoint(plan?.viewpoints[0]?.id ?? null);
+    // Reset the active viewpoint to the new plan's START viewpoint (🏁, falling back
+    // to the first) — coords don't translate across plans. Using the start viewpoint
+    // keeps the list highlight consistent even when `linkPlanCamera` skips the jump.
+    useCameraStore.getState().setActiveViewpoint(resolveStartViewpoint(plan)?.id ?? null);
     return { activePlanId: id };
   }),
   addPlan: (plan) => set((s) => {
@@ -237,7 +249,7 @@ export const useSceneStore = create<SceneState>((set) => ({
     const newActive = s.activePlanId === id ? (next[0]?.id ?? null) : s.activePlanId;
     if (newActive !== s.activePlanId) {
       const plan = next.find((p) => p.id === newActive);
-      useCameraStore.getState().setActiveViewpoint(plan?.viewpoints[0]?.id ?? null);
+      useCameraStore.getState().setActiveViewpoint(resolveStartViewpoint(plan)?.id ?? null);
     }
     return { manifest: { ...s.manifest, plans: next }, activePlanId: newActive };
   }),
@@ -321,6 +333,39 @@ export const useSceneStore = create<SceneState>((set) => ({
       },
     };
   }),
+  setPlanCollisionWalls: (id, walls) => set((s) => {
+    if (!s.manifest?.plans) return s;
+    return {
+      manifest: {
+        ...s.manifest,
+        plans: s.manifest.plans.map((p) => {
+          if (p.id !== id) return p;
+          // Wall data may exist before any GLB has been generated — seed an
+          // otherwise-empty config rather than requiring an upload first.
+          const cur = p.collision ?? { walkable: '', block: '' };
+          const next = { ...cur };
+          if (walls === undefined) delete next.walls;
+          else next.walls = walls;
+          return { ...p, collision: next };
+        }),
+      },
+    };
+  }),
+  setPlanWalk: (id, walk) => set((s) => {
+    if (!s.manifest?.plans) return s;
+    return {
+      manifest: {
+        ...s.manifest,
+        plans: s.manifest.plans.map((p) => {
+          if (p.id !== id) return p;
+          const next = { ...p };
+          if (walk === undefined) delete next.walk;
+          else next.walk = walk;
+          return next;
+        }),
+      },
+    };
+  }),
   setPlanCollisionSource: (id, source) => set((s) => {
     if (!s.manifest?.plans) return s;
     return {
@@ -393,6 +438,9 @@ export const useSceneStore = create<SceneState>((set) => ({
   removeViewpoint: (id) => set((s) => withActivePlan(s, (p) => ({
     ...p,
     viewpoints: p.viewpoints.filter((v) => v.id !== id),
+    // Deleting the 🏁 start viewpoint must not leave a dangling reference —
+    // clear it so the plan falls back to "first viewpoint" semantics everywhere.
+    startViewpointId: p.startViewpointId === id ? undefined : p.startViewpointId,
   }))),
   updateViewpointLabel: (id, label) => set((s) => withActivePlan(s, (p) => ({
     ...p,

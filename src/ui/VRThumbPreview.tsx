@@ -36,12 +36,20 @@ export function VRThumbPreview({
   const imgRef = useRef<HTMLImageElement | null>(null);
   const dragStartRef = useRef<{ x: number; yaw: number } | null>(null);
 
+  // Reset load state when the panorama source changes — during render (React's
+  // "adjust state when props change" pattern) so the effect below only performs
+  // the external resolve/Image work.
+  const [prevSrc, setPrevSrc] = useState(panoramaSrc);
+  if (prevSrc !== panoramaSrc) {
+    setPrevSrc(panoramaSrc);
+    setImgReady(false);
+    setError(null);
+  }
+
   // Resolve panorama source (data:/blob: pass-through, idb: → object URL).
   useEffect(() => {
     let cancelled = false;
     let revokeUrl: string | null = null;
-    setImgReady(false);
-    setError(null);
     (async () => {
       try {
         const url = await resolveBlobRef(panoramaSrc);

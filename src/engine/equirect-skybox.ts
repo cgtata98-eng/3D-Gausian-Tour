@@ -42,10 +42,31 @@ import { HalfFloatType } from 'three';
 const FRAGMENT_GLSL = `
 varying vec3 vViewDir;
 uniform sampler2D equirectTex;
+// Crossfade target (walkthrough transitions, C4). Bound to the SAME texture as
+// equirectTex while idle so the sampler is never unbound.
+uniform sampler2D equirectTexB;
 // 1.0 = HDR float texture (already linear, may exceed 1.0).
 // 0.0 = LDR sRGB-encoded 8bit (needs gamma decode).
 uniform float uIsHdr;
+uniform float uIsHdrB;
+// 0.0 = show A only (idle), 1.0 = show B only. Animated during node steps.
+uniform float uBlend;
 const float PI = 3.141592653589793;
+vec3 sampleEquirect(sampler2D tex, vec2 uv, float isHdr) {
+  // mipmaps are explicitly disabled on the source texture (see
+  // applyEquirectSkybox), so plain texture2D always samples the original
+  // full-resolution image. Without that texture-side guard the equirect seam
+  // (uv.x wrapping 1.0 → 0.0 between adjacent screen pixels) confuses the
+  // GPU's dFdx/dFdy MIP heuristic into picking the smallest MIP and the
+  // whole skybox renders blurry.
+  vec3 raw = texture2D(tex, uv).rgb;
+  // LDR: decode sRGB → linear so the camera's HDR-float pipeline + post-pipeline
+  // gamma encode produce the same brightness as the original cubemap path
+  // (which used decodeGamma() in the skybox PS).
+  // HDR: data is already linear radiance — skip the decode and let the camera
+  // tone-mapper compress values >1.0 naturally.
+  return mix(pow(raw, vec3(2.2)), raw, isHdr);
+}
 void main(void) {
   vec3 dir = normalize(vViewDir);
   // Match the X-flip the cubemap path applies (skybox.js: \`dir.x *= -1.0\`)
@@ -55,20 +76,9 @@ void main(void) {
   float lon = atan(dir.x, dir.z);
   float lat = asin(clamp(dir.y, -1.0, 1.0));
   vec2 uv = vec2(lon / (2.0 * PI) + 0.5, 1.0 - (lat / PI + 0.5));
-  // mipmaps are explicitly disabled on the source texture (see
-  // applyEquirectSkybox), so plain texture2D always samples the original
-  // full-resolution image. Without that texture-side guard the equirect seam
-  // (uv.x wrapping 1.0 → 0.0 between adjacent screen pixels) confuses the
-  // GPU's dFdx/dFdy MIP heuristic into picking the smallest MIP and the
-  // whole skybox renders blurry.
-  vec3 raw = texture2D(equirectTex, uv).rgb;
-  // LDR: decode sRGB → linear so the camera's HDR-float pipeline + post-pipeline
-  // gamma encode produce the same brightness as the original cubemap path
-  // (which used decodeGamma() in the skybox PS).
-  // HDR: data is already linear radiance — skip the decode and let the camera
-  // tone-mapper compress values >1.0 naturally.
-  vec3 linear = mix(pow(raw, vec3(2.2)), raw, uIsHdr);
-  gl_FragColor = vec4(linear, 1.0);
+  vec3 a = sampleEquirect(equirectTex, uv, uIsHdr);
+  vec3 b = sampleEquirect(equirectTexB, uv, uIsHdrB);
+  gl_FragColor = vec4(mix(a, b, uBlend), 1.0);
 }
 `;
 
@@ -78,6 +88,11 @@ interface SkyState {
   material: ShaderMaterial;
   layer: Layer;
   ownedTexture: Texture | null;
+  isHdr: boolean;
+  /** Crossfade bookkeeping: the incoming texture while a fade runs. */
+  fadeTexture: Texture | null;
+  fadeIsHdr: boolean;
+  fadeRaf: number | null;
 }
 
 /** Per-app skybox state so we can tear down cleanly when swapping panoramas. */
@@ -211,6 +226,10 @@ function installEquirectSky(app: AppBase, loaded: LoadedTexture): void {
   });
   material.setParameter('equirectTex', loaded.texture);
   material.setParameter('uIsHdr', loaded.isHdr ? 1 : 0);
+  // B slot idles pointing at the same texture with blend 0 — never unbound.
+  material.setParameter('equirectTexB', loaded.texture);
+  material.setParameter('uIsHdrB', loaded.isHdr ? 1 : 0);
+  material.setParameter('uBlend', 0);
   material.cull = CULLFACE_FRONT;
   material.depthWrite = false;
   material.update();
@@ -233,12 +252,94 @@ function installEquirectSky(app: AppBase, loaded: LoadedTexture): void {
   }
   layer.addMeshInstances([meshInstance]);
 
-  stateByApp.set(app, { meshInstance, mesh, material, layer, ownedTexture: loaded.texture });
+  stateByApp.set(app, {
+    meshInstance, mesh, material, layer,
+    ownedTexture: loaded.texture,
+    isHdr: loaded.isHdr,
+    fadeTexture: null,
+    fadeIsHdr: false,
+    fadeRaf: null,
+  });
+}
+
+/**
+ * Crossfade the current equirect panorama into `url` over `durationMs`
+ * (walkthrough node transitions — C4/B3). The incoming image is loaded into
+ * the material's B slot and `uBlend` eases 0→1; on completion the textures
+ * swap roles and the outgoing one is destroyed. Falls back to a hard install
+ * when no equirect sky is currently active.
+ *
+ * Overlapping calls: an in-flight fade is snapped to completion first, so
+ * spamming 前進 never blends three panoramas or leaks textures.
+ *
+ * Resolves when the fade has fully completed.
+ */
+export async function crossfadeEquirectSkybox(app: AppBase, url: string, durationMs = 320): Promise<void> {
+  const s = stateByApp.get(app);
+  if (!s) {
+    await applyEquirectSkybox(app, url);
+    return;
+  }
+  const loaded = await loadEquirectTextureFromUrl(app, url);
+  // State may have been torn down while the image decoded (mode switch).
+  const cur = stateByApp.get(app);
+  if (!cur || cur !== s) {
+    loaded.texture.destroy();
+    await applyEquirectSkybox(app, url);
+    return;
+  }
+  finishFade(cur); // snap any in-flight fade before starting a new one
+
+  cur.fadeTexture = loaded.texture;
+  cur.fadeIsHdr = loaded.isHdr;
+  cur.material.setParameter('equirectTexB', loaded.texture);
+  cur.material.setParameter('uIsHdrB', loaded.isHdr ? 1 : 0);
+  cur.material.setParameter('uBlend', 0);
+
+  await new Promise<void>((resolve) => {
+    const t0 = performance.now();
+    const tick = () => {
+      const st = stateByApp.get(app);
+      if (!st || st.fadeTexture !== loaded.texture) { resolve(); return; } // superseded / torn down
+      const t = Math.min(1, (performance.now() - t0) / durationMs);
+      // easeInOut — reads as a step, not a video dissolve.
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      st.material.setParameter('uBlend', eased);
+      if (t >= 1) {
+        finishFade(st);
+        resolve();
+        return;
+      }
+      st.fadeRaf = requestAnimationFrame(tick);
+    };
+    cur.fadeRaf = requestAnimationFrame(tick);
+  });
+}
+
+/** Promote the in-flight fade texture to the A slot and reset blend. No-op when idle. */
+function finishFade(s: SkyState): void {
+  if (s.fadeRaf !== null) {
+    cancelAnimationFrame(s.fadeRaf);
+    s.fadeRaf = null;
+  }
+  if (!s.fadeTexture) return;
+  const incoming = s.fadeTexture;
+  s.fadeTexture = null;
+  s.isHdr = s.fadeIsHdr;
+  s.ownedTexture?.destroy();
+  s.ownedTexture = incoming;
+  s.material.setParameter('equirectTex', incoming);
+  s.material.setParameter('uIsHdr', s.isHdr ? 1 : 0);
+  s.material.setParameter('equirectTexB', incoming);
+  s.material.setParameter('uIsHdrB', s.isHdr ? 1 : 0);
+  s.material.setParameter('uBlend', 0);
 }
 
 export function removeEquirectSkybox(app: AppBase): void {
   const s = stateByApp.get(app);
   if (!s) return;
+  if (s.fadeRaf !== null) cancelAnimationFrame(s.fadeRaf);
+  s.fadeTexture?.destroy();
   s.layer.removeMeshInstances([s.meshInstance]);
   s.meshInstance.destroy();
   s.mesh.destroy();

@@ -95,6 +95,29 @@ export interface CollisionConfig {
   manualBlock?: string;
   autoWalkable?: string;
   autoBlock?: string;
+  /** Authoring data for the 図面 wall editor (manual source). Persisted so the
+   *  drawn walls stay editable — the generated GLBs alone can't be un-baked. */
+  walls?: CollisionWallData;
+}
+
+/**
+ * Wall/floor authoring data drawn on the floor plan (図面) by the manual
+ * collision editor. All coordinates are world XZ (the same space as
+ * `Viewpoint.mapPosition` / `FloorPlanConfig.bounds`).
+ */
+export interface CollisionWallData {
+  /** Wall segments — each is extruded into a `wallHeight`-tall box of
+   *  `wallThickness` width, together becoming the `manualBlock` GLB. */
+  segments: { a: Vec2; b: Vec2 }[];
+  /** Floor outline polygon (3+ points, may be concave) — triangulated into a
+   *  flat floor slab at `floorY`, becoming the `manualWalkable` GLB. */
+  floorPolygon?: Vec2[];
+  /** Wall height in meters (extruded up from `floorY`). */
+  wallHeight: number;
+  /** Wall thickness in meters. */
+  wallThickness: number;
+  /** World Y of the floor plane. */
+  floorY: number;
 }
 
 /** Initial camera position mode */
@@ -194,6 +217,9 @@ export interface SceneSettings {
   zoomFovMax?: number;
   /** Maximum upward pitch in degrees (0–89). Lower this to stop the user looking straight up. */
   pitchMaxUp?: number;
+  /** Walkthrough node transitions (B3/C4): true = crossfade + FOV dolly
+   *  ("walking" feel, default), false = instant panorama swap. */
+  walkAnimated?: boolean;
   /** 3DGS render quality knobs (tone mapping, exposure, MSAA, splat scale, …). */
   render?: RenderQualityConfig;
   /** Play built-in footstep audio while WASD is held. Default true. */
@@ -350,10 +376,70 @@ export interface Plan {
    * Created and edited from the Debug "ツール" tab.
    */
   pins?: ScenePin[];
+  /**
+   * Dense panorama walkthrough graph (B3〜B6 — VR 360° mode only). Completely
+   * independent of the curated `viewpoints` above: viewpoints are tour stops
+   * shown in the scene list; walk nodes are lightweight spatial samples (100+)
+   * navigated by "face a direction and step forward". See `WalkGraph`.
+   */
+  walk?: WalkGraph;
 
   // ── Free-form ────────────────────────────────────────────────────
   /** Free-form note shown next to the plan switcher. */
   notes?: string;
+}
+
+/** Compass keys for explicit walk-node adjacency overrides. */
+export type WalkDirection = 'N' | 'E' | 'S' | 'W' | 'NE' | 'NW' | 'SE' | 'SW';
+
+/**
+ * One dense-walkthrough node (VR 360° mode). Deliberately NOT a `Viewpoint`:
+ * viewpoints are rich curated tour stops (position/target/mapPosition/mapYaw)
+ * that appear in the scene list — 100+ of those would break the UI and the
+ * two-way yaw-source problem (A16). WalkNodes carry no facing of their own;
+ * the camera's live yaw is preserved across node transitions.
+ */
+export interface WalkNode {
+  /** Stable id — grid label like "BB" for grid-placed nodes, else a uuid. */
+  id: string;
+  /** Grid coordinate (drives automatic adjacency). Omitted = free placement. */
+  cell?: { row: number; col: number };
+  /** World position (3D) where the panorama was captured / assigned. */
+  position: Vec3;
+  /** Floor-plan dot position (world XZ). Defaults to `position`'s XZ. */
+  mapPosition?: Vec2;
+  /** The external 360° image assigned to this node (url / data: / idb: ref).
+   *  Optional because authoring places the node first and assigns the image
+   *  after — nodes without a panorama are shown as "未割当" and skipped by
+   *  navigation. */
+  panorama?: string;
+  /**
+   * Explicit adjacency overrides (direction → node id). When present these
+   * REPLACE the cell-derived neighbors (e.g. to wall off a doorway). The
+   * compass key is only an authoring label — navigation resolves the actual
+   * bearing from the two nodes' world positions.
+   */
+  neighbors?: Partial<Record<WalkDirection, string>>;
+  /** Panorama north correction in degrees (capture-time heading). Added to the
+   *  live camera yaw before bearing matching so an unaligned 360° image still
+   *  steps in the direction the user is visually facing. */
+  yawOffset?: number;
+}
+
+/** Dense panorama-walkthrough graph for one plan (B3〜B6). */
+export interface WalkGraph {
+  nodes: WalkNode[];
+  /** Grid column labels ("A","B","C"…) — display / auto-naming only. */
+  cols?: string[];
+  /** Grid row labels — display / auto-naming only. */
+  rows?: string[];
+  /** Node the walkthrough starts at. Defaults to `nodes[0]`. */
+  startNodeId?: string;
+  /** How adjacency is derived: 4-way grid, 8-way grid (diagonals), or only
+   *  explicit per-node `neighbors`. Default `grid4`. */
+  adjacency?: 'grid4' | 'grid8' | 'manual';
+  /** Grid cell size in meters (authoring: cell↔world placement). */
+  cellSize?: number;
 }
 
 /**

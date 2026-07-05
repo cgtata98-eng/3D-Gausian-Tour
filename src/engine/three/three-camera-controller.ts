@@ -43,6 +43,32 @@ const DEFAULT: ThreeCameraOptions = {
   dragTranslateSpeed: 0.01,
 };
 
+// ── Floor-snap tuning (walk mode) — mirror of `camera-controller.ts` ────────
+// These affect ONLY the vertical (Y) floor-follow math. yaw / pitch / target /
+// mapYaw are never read or written by the floor-snap code.
+/** Probe origin height above the feet — catches small steps UP. */
+const FLOOR_PROBE_UP = 0.6;
+/** Probe reach below the feet — catches small steps DOWN. */
+const FLOOR_PROBE_DOWN = 1.2;
+/** Generous straight-down probe to (re)acquire the floor on mode-switch /
+ *  collision-load / viewpoint-jump, where the eye may start well above the floor. */
+const SNAP_PROBE_DOWN = 30;
+/** Floor hits flatter than this in Y are rejected (vertical box faces / floater
+ *  shells) so the player never snaps onto a wall or floater treated as "floor". */
+const FLOOR_MIN_ABS_NORMAL_Y = 0.5;
+/** Reject per-frame floor jumps larger than this (anti-teleport onto stray geometry). */
+const FLOOR_STEP_MAX = 0.5;
+/** Vertical damping factor per frame (anti-jitter on stepped voxel floors). */
+const FLOOR_SNAP_LERP = 0.35;
+/** Skip sub-centimetre corrections so a settled player doesn't micro-jitter. */
+const FLOOR_SNAP_DEADBAND = 0.01;
+/** Clamp range for derived eye-height-above-floor (human standing range). */
+const EYE_HEIGHT_MIN = 0.3;
+const EYE_HEIGHT_MAX = 3.0;
+/** Upward probe reach used when the down-probe fails because the player is buried
+ *  BELOW the floor surface (the floor is above the eye). */
+const REACQUIRE_PROBE_UP = 3;
+
 /**
  * Port of `engine/camera-controller.ts` to three.js. Walk / fly modes with floor
  * follow and block collision via mesh raycasts. Same key bindings as the PlayCanvas
@@ -74,6 +100,10 @@ export class ThreeCameraController {
 
   private walkableTris: ThreeTriangle[] | null = null;
   private blockTris: ThreeTriangle[] | null = null;
+  /** Last floor Y accepted by the walk-mode probe. Held during brief probe misses
+   *  (hit/miss hysteresis) so the player doesn't pop; cleared whenever the mesh or
+   *  the player position changes discontinuously (new mesh / jumpTo). */
+  private lastFloorY: number | null = null;
 
   private onLookInputChange: (() => void) | null = null;
   private onMoveSpeedChange: ((s: number) => void) | null = null;
@@ -181,12 +211,27 @@ export class ThreeCameraController {
   }
   getMovementMode(): MovementMode { return this.mode; }
   getPlayerPosition(): THREE.Vector3 { return this.playerPos.clone(); }
-  setWalkableTriangles(tris: ThreeTriangle[] | null) { this.walkableTris = (tris && tris.length > 0) ? tris : null; }
+  setWalkableTriangles(tris: ThreeTriangle[] | null) {
+    this.walkableTris = (tris && tris.length > 0) ? tris : null;
+    // A different mesh invalidates the step-clamp history — otherwise a floor at a
+    // different Y (plan switch) is rejected forever as a ">0.5 m step".
+    this.lastFloorY = null;
+    // Collision loads async (after the initial jumpTo), so re-derive the spawn
+    // eye-height now that we actually know where the floor is. No-op in fly mode.
+    if (this.walkableTris) this.reacquireFloorHeight();
+  }
   setBlockTriangles(tris: ThreeTriangle[] | null) { this.blockTris = (tris && tris.length > 0) ? tris : null; }
 
   jumpTo(position: [number, number, number], target: [number, number, number], fov?: number) {
     this.playerPos.set(position[0], position[1], position[2]);
+    // Teleporting invalidates the step-clamp history (the destination floor may
+    // legitimately sit at a very different Y).
+    this.lastFloorY = null;
+    // Walk mode treats currentHeight as eye-height ABOVE the floor, not absolute Y.
+    // Seed with the authored absolute Y, then (if the walkable mesh is loaded)
+    // re-derive it from the floor below — mirror of the PlayCanvas jumpTo.
     this.currentHeight = position[1];
+    if (this.mode === 'walk' && this.walkableTris) this.reacquireFloorHeight();
     const dx = target[0] - position[0];
     const dy = target[1] - position[1];
     const dz = target[2] - position[2];
@@ -424,9 +469,25 @@ export class ThreeCameraController {
     if (this.padUp > 0) this.currentHeight = Math.min(this.currentHeight + heightSpeed, this.opts.maxHeight);
     if (this.padUp < 0) this.currentHeight = Math.max(this.currentHeight - heightSpeed, this.opts.minHeight);
 
+    // Floor follow: probe down for the walkable surface, then EASE the eye toward
+    // floor + eye-height. Damped (not a hard snap) with a step-jump reject + hit/miss
+    // hysteresis so the player can't teleport onto a stray box/floater and doesn't
+    // jitter on a stepped voxel floor. Y only — yaw/pitch/target untouched.
+    // Mirror of the PlayCanvas `updateWalk` floor-follow.
     if (this.walkableTris) {
-      const floorY = this.raycastFloor(this.playerPos.x, this.playerPos.z);
-      this.playerPos.y = (floorY ?? this.playerPos.y - this.currentHeight) + this.currentHeight;
+      const raw = this.raycastFloor(this.playerPos.x, this.playerPos.z);
+      const accepted = (raw !== null
+        && (this.lastFloorY === null || Math.abs(raw - this.lastFloorY) <= FLOOR_STEP_MAX))
+        ? raw : null;
+      if (accepted !== null) this.lastFloorY = accepted;
+      const base = accepted ?? this.lastFloorY;
+      if (base !== null) {
+        const targetY = base + this.currentHeight;
+        const dy = targetY - this.playerPos.y;
+        if (Math.abs(dy) > FLOOR_SNAP_DEADBAND) this.playerPos.y += dy * FLOOR_SNAP_LERP;
+      }
+      // Floor never acquired yet → hold the current Y (don't teleport to an
+      // absolute eye-height Y) until a probe succeeds.
     } else {
       this.playerPos.y = this.currentHeight;
     }
@@ -475,22 +536,69 @@ export class ThreeCameraController {
     return { x: dir.x * safe, y: dir.y * safe, z: dir.z * safe };
   }
 
-  /** Cast DOWN from the player, capped at 3 m — see PlayCanvas-side
-   *  comment in `camera-controller.ts:raycastFloor` for the rationale.
-   *  The carve volume is too irregular to trust long-range rays. */
+  /**
+   * Resolve the floor Y at a given XZ, used for per-frame floor-snap during walk.
+   * Mirror of the PlayCanvas `raycastFloor` hardening: cast DOWN from just above
+   * the FEET (not the drifting eye) over a short window, and require a
+   * near-horizontal hit so box sides / floater shells are skipped and the real
+   * floor is found. Returns null when nothing floor-like is within range (the
+   * caller holds the last floor).
+   */
   private raycastFloor(x: number, z: number): number | null {
     if (!this.walkableTris) return null;
-    const start = this.playerPos.y;
-    const origin = new THREE.Vector3(x, start, z);
+    const feetY = this.playerPos.y - this.currentHeight;
+    const origin = new THREE.Vector3(x, feetY + FLOOR_PROBE_UP, z);
     const down = new THREE.Vector3(0, -1, 0);
-    const hit = raycastThreeTriangles(origin, down, this.walkableTris, 3);
+    const hit = raycastThreeTriangles(
+      origin, down, this.walkableTris,
+      FLOOR_PROBE_UP + FLOOR_PROBE_DOWN, FLOOR_MIN_ABS_NORMAL_Y,
+    );
     return hit ? hit.point.y : null;
   }
 
+  /** When entering walk mode from fly, drop the player onto the walkable floor.
+   *  Uses a generous straight-down probe from the current eye (the player may be
+   *  high up in fly) and requires a horizontal hit. */
   private snapToFloor() {
     if (!this.walkableTris) return;
-    const floorY = this.raycastFloor(this.playerPos.x, this.playerPos.z);
-    if (floorY !== null) this.playerPos.y = floorY + this.currentHeight;
+    const down = new THREE.Vector3(0, -1, 0);
+    const hit = raycastThreeTriangles(
+      this.playerPos.clone(), down, this.walkableTris,
+      SNAP_PROBE_DOWN, FLOOR_MIN_ABS_NORMAL_Y,
+    );
+    if (hit) {
+      this.lastFloorY = hit.point.y;
+      this.playerPos.y = hit.point.y + this.currentHeight;
+    }
+  }
+
+  /**
+   * (Re)derive eye-height-above-floor from an absolute-Y prior. Called when the
+   * walkable mesh (re)arrives and from jumpTo when the mesh is already present.
+   * Mirror of the PlayCanvas `reacquireFloorHeight`, including the buried-player
+   * recovery: if the down-probe misses (the floor surface is ABOVE the eye), a
+   * short UP-probe finds it so the player pops back out instead of staying sunk.
+   */
+  private reacquireFloorHeight() {
+    if (!this.walkableTris || this.mode !== 'walk') return;
+    const origin = this.playerPos.clone();
+    const down = raycastThreeTriangles(
+      origin, new THREE.Vector3(0, -1, 0), this.walkableTris,
+      SNAP_PROBE_DOWN, FLOOR_MIN_ABS_NORMAL_Y,
+    );
+    const hit = down ?? raycastThreeTriangles(
+      origin, new THREE.Vector3(0, 1, 0), this.walkableTris,
+      REACQUIRE_PROBE_UP, FLOOR_MIN_ABS_NORMAL_Y,
+    );
+    if (!hit) return;
+    // Floor below → derive eye height from the prior. Floor ABOVE (player was
+    // buried) → the prior is meaningless, reset to the standard standing height.
+    this.currentHeight = down
+      ? THREE.MathUtils.clamp(this.playerPos.y - hit.point.y, EYE_HEIGHT_MIN, EYE_HEIGHT_MAX)
+      : this.opts.cameraHeight;
+    this.lastFloorY = hit.point.y;
+    this.playerPos.y = hit.point.y + this.currentHeight;
+    this.applyPose();
   }
 
   /**

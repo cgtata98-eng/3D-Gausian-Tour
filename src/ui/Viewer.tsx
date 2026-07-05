@@ -9,6 +9,7 @@ import { useUIStore } from '../store/ui-store';
 import { useProjectStore } from '../store/project-store';
 import { LoadingScreen } from './LoadingScreen';
 import { ViewerOverlay } from './ViewerOverlay';
+import { WalkthroughControls } from './WalkthroughControls';
 import { AiScreenOverlay, AiGeneratingOverlay } from './LeftPanel';
 import { AmbientAudio } from './AmbientAudio';
 import { FootstepAudio } from './FootstepAudio';
@@ -100,10 +101,10 @@ export function Viewer({ sceneId }: ViewerProps) {
       destroyed = true;
       try { sceneManagerRef.current?.destroy(); } catch { /* ignore */ }
       sceneManagerRef.current = null;
-      const c = canvasRef.current;
-      if (c) c.style.display = 'block';
-      const w = wrapRef.current;
-      if (w) Array.from(w.querySelectorAll('canvas')).forEach((node) => { if (node !== c) node.remove(); });
+      // Use the nodes captured when the effect ran — the refs may already point
+      // elsewhere (or be null) by cleanup time.
+      canvas.style.display = 'block';
+      Array.from(wrap.querySelectorAll('canvas')).forEach((node) => { if (node !== canvas) node.remove(); });
       setReady(false);
     };
   }, [sceneId]);
@@ -207,6 +208,7 @@ export function Viewer({ sceneId }: ViewerProps) {
             showDebugLink={false}
             onPlanSwitch={(planId) => { void sceneManagerRef.current?.setActivePlan(planId); }}
           />
+          <WalkthroughControls getManager={() => sceneManagerRef.current} />
           {/* 移動が無い product (showroom) ではジョイスティックを出さない。OrbitCameraController が
               キャンバスの touch / pointer をそのまま使うので joystick オーバーレイは邪魔。 */}
           {useUIStore.getState().projectType !== 'product' && (

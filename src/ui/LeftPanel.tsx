@@ -10,6 +10,7 @@ import * as idb from '../utils/idb';
 import { getOpenAIKey, getGeminiKey, getSelectedModelId, setSelectedModelId } from '../utils/api-keys';
 import { getModelById, PROVIDERS, modelsForProvider, firstModelForProvider, type AiProvider } from '../utils/ai-models';
 import { getAuthHeader } from '../utils/auth';
+import { useMediaQuery } from '../utils/use-media-query';
 import { tokens } from './design-tokens';
 
 interface LeftPanelProps {
@@ -215,13 +216,26 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
   const hasFile = !!fpImage && (isData || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(fpImage));
   const imageUrl = isData ? fpImage : (fpImage && manifest ? resolveScenePath(manifest.id, fpImage) : '');
 
-  useEffect(() => {
-    if (!hasFile || !imageUrl) { setImgSize(null); setImgFailed(false); return; }
+  // Reset load state the moment the image source changes — during render (React's
+  // "adjust state when props change" pattern) so the effect below only talks to the
+  // external Image() API. Mirrors FloorPlanMiniMap.
+  const imageKey = hasFile ? imageUrl : '';
+  const [prevImageKey, setPrevImageKey] = useState(imageKey);
+  if (prevImageKey !== imageKey) {
+    setPrevImageKey(imageKey);
     setImgFailed(false);
+    if (!imageKey) setImgSize(null);
+  }
+  useEffect(() => {
+    if (!hasFile || !imageUrl) return;
+    // `cancelled` guards against a slow previous load finishing AFTER the url
+    // changed and overwriting the newer image's size with a stale one.
+    let cancelled = false;
     const img = new Image();
-    img.onload = () => setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
-    img.onerror = () => { setImgSize(null); setImgFailed(true); };
+    img.onload = () => { if (!cancelled) setImgSize({ w: img.naturalWidth, h: img.naturalHeight }); };
+    img.onerror = () => { if (!cancelled) { setImgSize(null); setImgFailed(true); } };
     img.src = imageUrl;
+    return () => { cancelled = true; };
   }, [imageUrl, hasFile]);
 
   if (!manifest || !floorPlan) {
@@ -713,10 +727,17 @@ export function AiScreenOverlay() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
 
-  useEffect(() => {
-    let alive = true;
+  // Reset the displayed image + zoom when the selected variant changes — during
+  // render (React's "adjust state when props change" pattern) so the effect below
+  // only performs the external IDB resolve.
+  const [prevEntry, setPrevEntry] = useState(entry);
+  if (prevEntry !== entry) {
+    setPrevEntry(entry);
     setSrc(null);
     setZoom({ scale: 1, panX: 0, panY: 0 });
+  }
+  useEffect(() => {
+    let alive = true;
     if (!entry || entry.kind !== 'screen' || !entry.image) return;
     const path = entry.image;
     (async () => {
@@ -1011,13 +1032,22 @@ function AiImageGenBlock() {
         images: sources,
         prompt: p,
         aspectRatio: opts.aspectRatio,
-        imageSize: opts.imageSize,
+        // 解像度 (1K/2K/4K) は Gemini 3.x の imageConfig 専用。OpenAI (gpt-image) は
+        // 固定サイズ 3 種のみでアスペクト比から自動選択されるため送らない
+        // (UI 側でもセレクタを無効化している)。
+        ...(model.provider === 'gemini' ? { imageSize: opts.imageSize } : {}),
       }),
     });
-    // Both providers are normalized by the proxy to { data: [{ b64_json }] }.
-    const j = await r.json() as { data?: { b64_json?: string }[]; error?: { message?: string } };
+    // Both providers are normalized by the proxy to { data: [{ b64_json }] } — but only
+    // when the proxy itself answered. A dev-server crash / upstream HTML 5xx is NOT
+    // JSON, and parsing it unconditionally used to throw and mask the real error.
+    const ct = r.headers.get('content-type') ?? '';
+    let j: { data?: { b64_json?: string }[]; error?: { message?: string } } = {};
+    if (ct.includes('application/json')) {
+      try { j = await r.json() as typeof j; } catch { /* malformed body — fall through to status error */ }
+    }
     if (!r.ok) {
-      alert('生成エラー: ' + (j.error?.message ?? r.statusText));
+      alert('生成エラー: ' + (j.error?.message ?? `${r.status} ${r.statusText}`));
       return null;
     }
     const b64 = j.data?.[0]?.b64_json;
@@ -1199,8 +1229,11 @@ function AiImageGenBlock() {
         </div>
       )}
       <div style={aiOptRow}>
-        <label style={aiOptLabel}><span style={aiOptCap}>解像度</span>
-          <select value={imageSize} onChange={(e) => setImageSize(e.target.value as '1K' | '2K' | '4K')} disabled={aiBusy} style={aiOptSelect}>
+        <label style={aiOptLabel} title={curProvider === 'openai' ? 'OpenAI (gpt-image) は解像度指定に非対応です。サイズは比率から自動選択されます。' : undefined}>
+          <span style={aiOptCap}>解像度</span>
+          {/* OpenAI (gpt-image) は 1024/1536 の固定 3 サイズのみで 1K/2K/4K の概念が無い —
+              誤解を生まないようセレクタごと無効化 (A4)。Gemini 3.x のみ有効。 */}
+          <select value={imageSize} onChange={(e) => setImageSize(e.target.value as '1K' | '2K' | '4K')} disabled={aiBusy || curProvider === 'openai'} style={aiOptSelect}>
             <option value="1K">1K</option>
             <option value="2K">2K</option>
             <option value="4K">4K</option>
@@ -1436,32 +1469,14 @@ function QualityBlock() {
 /** True when the page is running on a touch / coarse-pointer device. Mirrors
  *  the gate `MobileJoystick` uses. */
 function useTouchDevice(): boolean {
-  const [match, setMatch] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(pointer: coarse)');
-    setMatch(mq.matches);
-    const onChange = () => setMatch(mq.matches);
-    mq.addEventListener?.('change', onChange);
-    return () => mq.removeEventListener?.('change', onChange);
-  }, []);
-  return match;
+  return useMediaQuery('(pointer: coarse)');
 }
 
 /** Portrait (= 縦向き) なら true。回転で値が切り替わるので useMobileSidebarPlacement の
  *  根拠に使う。デスクトップは isTouch=false 経由で無効化される想定なので素直に
  *  `(orientation: portrait)` の真偽だけ拾う。 */
 function usePortraitOrientation(): boolean {
-  const [match, setMatch] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(orientation: portrait)');
-    setMatch(mq.matches);
-    const onChange = () => setMatch(mq.matches);
-    mq.addEventListener?.('change', onChange);
-    return () => mq.removeEventListener?.('change', onChange);
-  }, []);
-  return match;
+  return useMediaQuery('(orientation: portrait)');
 }
 
 /**

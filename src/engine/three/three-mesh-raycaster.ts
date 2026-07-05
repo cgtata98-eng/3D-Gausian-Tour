@@ -55,12 +55,18 @@ export function extractThreeTriangles(root: THREE.Object3D): ThreeTriangle[] {
 /**
  * Möller–Trumbore ray vs triangle test. `dir` should be a unit vector for `t` to be
  * in meters. Returns the closest hit within `[epsilon, maxT]` or null.
+ *
+ * `minAbsNormalY` (0 = off) skips triangles whose face normal is not steep enough in Y,
+ * i.e. only accepts surfaces at least this horizontal (|ny| ≥ minAbsNormalY). Used by
+ * floor-snap to ignore vertical box faces / floater shells and find the real floor below.
+ * Mirror of `mesh-raycaster.ts`.
  */
 export function raycastThreeTriangles(
   origin: THREE.Vector3,
   dir: THREE.Vector3,
   triangles: ThreeTriangle[],
   maxT: number = Infinity,
+  minAbsNormalY: number = 0,
 ): ThreeRayHit | null {
   const EPS = 1e-7;
   let bestT = maxT;
@@ -90,12 +96,16 @@ export function raycastThreeTriangles(
     if (v < 0 || u + v > 1) continue;
     const t = f * (e2x * qx + e2y * qy + e2z * qz);
     if (t > EPS && t < bestT) {
-      bestT = t;
       let nx = e1y * e2z - e1z * e2y;
       let ny = e1z * e2x - e1x * e2z;
       let nz = e1x * e2y - e1y * e2x;
       const len = Math.hypot(nx, ny, nz);
       if (len > 0) { nx /= len; ny /= len; nz /= len; }
+      // Surface-orientation filter (floor-snap): reject non-horizontal hits so a
+      // vertical box face / floater shell directly below is skipped and the real
+      // floor beyond it is found instead.
+      if (minAbsNormalY > 0 && Math.abs(ny) < minAbsNormalY) continue;
+      bestT = t;
       bestNX = nx; bestNY = ny; bestNZ = nz;
       found = true;
     }

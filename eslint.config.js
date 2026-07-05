@@ -19,5 +19,15 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // The codebase convention for interface-parity no-op methods (e.g. the
+      // ThreeSceneManager / OrbitCameraController placeholders) is `_`-prefixed
+      // parameters — recognize it instead of flagging every stub.
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
+    },
   },
 ])

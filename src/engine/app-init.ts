@@ -14,6 +14,8 @@ import {
   Entity,
   Color,
   DEVICETYPE_WEBGL2,
+  FILLMODE_NONE,
+  RESOLUTION_AUTO,
   CameraFrame,
   PIXELFORMAT_RGBA16F,
   PIXELFORMAT_RGBA32F,
@@ -89,8 +91,8 @@ export async function initApp(canvas: HTMLCanvasElement, init?: AppInitOptions):
   app.init(opts);
 
   // Size canvas to its DOM container (allows embedding inside flex layouts)
-  app.setCanvasFillMode('NONE' as any);
-  app.setCanvasResolution('AUTO' as any);
+  app.setCanvasFillMode(FILLMODE_NONE);
+  app.setCanvasResolution(RESOLUTION_AUTO);
 
   // Scene defaults
   app.scene.ambientLight = new Color(0.3, 0.3, 0.3);

@@ -172,7 +172,13 @@ interface SceneLike {
     splatSpz?: string;
     splatSog?: string;
     floorPlan?: { image?: string; [k: string]: unknown };
-    collision?: { walkable?: string; block?: string };
+    collision?: {
+      walkable?: string; block?: string;
+      manualWalkable?: string; manualBlock?: string;
+      autoWalkable?: string; autoBlock?: string;
+      source?: string;
+    };
+    walk?: { nodes?: Array<{ id: string; panorama?: string; [k: string]: unknown }>; [k: string]: unknown };
     [k: string]: unknown;
   }>;
   [k: string]: unknown;
@@ -204,6 +210,9 @@ export async function publishScene(
     if (plan.floorPlan?.image && plan.floorPlan.image.startsWith('data:')) total++;
     if (plan.collision?.walkable?.startsWith(idb.IDB_REF_PREFIX)) total++;
     if (plan.collision?.block?.startsWith(idb.IDB_REF_PREFIX)) total++;
+    for (const node of plan.walk?.nodes ?? []) {
+      if (node.panorama?.startsWith(idb.IDB_REF_PREFIX) || node.panorama?.startsWith('data:')) total++;
+    }
   }
   let current = 0;
   const tick = (message: string) => onProgress({ message, current: ++current, total });
@@ -252,6 +261,9 @@ export async function publishScene(
     }
 
     // Collision GLBs (walkable / block) — upload from IDB and rewrite refs.
+    // Only the ACTIVE set is published; the manual*/auto* stashes are authoring
+    // state whose idb: refs are meaningless on the customer's machine, so strip
+    // them (and the source marker) from the public manifest.
     if (plan.collision) {
       for (const type of ['walkable', 'block'] as const) {
         const ref = plan.collision[type];
@@ -265,6 +277,26 @@ export async function publishScene(
         await publishFile(sceneId, filename, blob);
         plan.collision[type] = filename;
       }
+      delete plan.collision.manualWalkable;
+      delete plan.collision.manualBlock;
+      delete plan.collision.autoWalkable;
+      delete plan.collision.autoBlock;
+      delete plan.collision.source;
+    }
+
+    // Walkthrough-node panoramas (idb blobs / data URLs) → upload and rewrite,
+    // mirroring the per-viewpoint panorama handling above.
+    for (const node of plan.walk?.nodes ?? []) {
+      const src = node.panorama;
+      if (!src) continue;
+      let blob: Blob | null = null;
+      if (src.startsWith(idb.IDB_REF_PREFIX)) blob = await idb.loadBlob(src.slice(idb.IDB_REF_PREFIX.length));
+      else if (src.startsWith('data:')) blob = await dataUrlToBlob(src);
+      if (!blob) continue;
+      const filename = plans.length > 1 ? `walk-${planId}-${node.id}.jpg` : `walk-${node.id}.jpg`;
+      tick(`ウォークスルー画像をアップロード: ${filename}`);
+      await publishFile(sceneId, filename, blob);
+      node.panorama = filename;
     }
   }
 

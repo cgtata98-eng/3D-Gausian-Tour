@@ -1,5 +1,5 @@
 import { AppBase, Quat, Vec3 } from 'playcanvas';
-import { applyEquirectSkybox, applyEquirectSkyboxFromBlob, removeEquirectSkybox } from './equirect-skybox';
+import { applyEquirectSkybox, applyEquirectSkyboxFromBlob, crossfadeEquirectSkybox, removeEquirectSkybox } from './equirect-skybox';
 
 /** 180° rotation around +Y, baked once. Aligns equirect u=0.5 with camera yaw=0. */
 const SKYBOX_Y_FLIP = new Quat().setFromAxisAngle(Vec3.UP, 180);
@@ -53,6 +53,22 @@ export async function applyHdriFromFile(app: AppBase, file: File): Promise<void>
   app.scene.skybox = null;
 
   await applyEquirectSkyboxFromBlob(app, file, file.name);
+
+  app.scene.skyboxIntensity = 1.0;
+  app.scene.skyboxMip = 0;
+  app.scene.skyboxRotation = SKYBOX_Y_FLIP;
+}
+
+/**
+ * Crossfade variant of {@link applyHdri} — walkthrough node transitions (C4).
+ * Blends the current panorama into the new one over `durationMs`; falls back
+ * to a hard install when no equirect sky is active yet.
+ */
+export async function crossfadeHdri(app: AppBase, url: string, durationMs = 320): Promise<void> {
+  app.scene.envAtlas = null;
+  app.scene.skybox = null;
+
+  await crossfadeEquirectSkybox(app, url, durationMs);
 
   app.scene.skyboxIntensity = 1.0;
   app.scene.skyboxMip = 0;

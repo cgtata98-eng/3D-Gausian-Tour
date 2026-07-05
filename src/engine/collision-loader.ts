@@ -50,7 +50,7 @@ export async function loadCollisionGlb(
   return new Promise((resolve, reject) => {
     const asset = new Asset(name, 'container', { url });
     asset.on('load', () => {
-      const entity = (asset.resource as any).instantiateRenderEntity();
+      const entity = (asset.resource as { instantiateRenderEntity: () => Entity }).instantiateRenderEntity();
       const mat = createCollisionMaterial(color, opacity);
       applyMaterialToEntity(entity, mat);
       resolve({ entity, material: mat });

@@ -79,6 +79,9 @@ const FLOOR_SNAP_DEADBAND = 0.01;
 /** Clamp range for derived eye-height-above-floor (human standing range). */
 const EYE_HEIGHT_MIN = 0.3;
 const EYE_HEIGHT_MAX = 3.0;
+/** Upward probe reach used when the down-probe fails because the player is buried
+ *  BELOW the floor surface (the floor is above the eye). */
+const REACQUIRE_PROBE_UP = 3;
 
 /**
  * First-person camera controller with mouse look, WASD movement, and two movement modes
@@ -274,7 +277,7 @@ export class CameraController {
 
   getPitch(): number { return this.pitch; }
   getYaw(): number { return this.yaw; }
-  getFov(): number { return (this.entity.camera as any)?.fov ?? 60; }
+  getFov(): number { return (this.entity.camera as { fov?: number } | undefined)?.fov ?? 60; }
   getMoveSpeed(): number { return this.options.moveSpeed; }
   setMoveSpeed(speed: number) { this.options.moveSpeed = speed; }
   /** Mobile / touch on-screen joystick input. `x` and `y` are normalised to -1..1
@@ -283,7 +286,7 @@ export class CameraController {
     this.touchStrafe = x;
     this.touchFwd = -y;
   }
-  setFov(fov: number) { if (this.entity.camera) (this.entity.camera as any).fov = fov; }
+  setFov(fov: number) { if (this.entity.camera) (this.entity.camera as { fov: number }).fov = fov; }
   /** Demo-mode head-tracking offset (degrees). Render-only. */
   setTrackingOffset(yawDeg: number, pitchDeg: number) {
     this.trackingYaw = yawDeg;
@@ -328,6 +331,19 @@ export class CameraController {
     this.pitch = math.clamp(deg, -89, this.pitchMaxUp);
     this.applyPose();
   }
+  /** Directly place the player at an absolute eye position. Used by mirror-receive,
+   *  where poses stream in from another tab: writing the entity position alone is not
+   *  enough — the next `applyPose()` (from setYaw/setPitch) would snap the entity back
+   *  to the stale internal `playerPos`, so the logical position must move too.
+   *  currentHeight is mode-aware: in fly it IS the absolute Y (mirror the drag-translate
+   *  convention); in walk it's eye-height-above-floor, so the pre-mirror standing height
+   *  is kept — writing the absolute Y there would launch/sink the camera the moment
+   *  mirroring turns off and the floor-follow eases toward floorY + currentHeight. */
+  setPlayerPosition(x: number, y: number, z: number) {
+    this.playerPos.set(x, y, z);
+    if (this.movementMode === 'fly') this.currentHeight = y;
+    this.applyPose();
+  }
   /** Immediately set the camera's eye-level height. Used for live "initial height" tweaks in debug. */
   setCurrentHeight(h: number) {
     this.currentHeight = math.clamp(h, this.options.minHeight, this.options.maxHeight);
@@ -359,6 +375,9 @@ export class CameraController {
   /** Register the walkable collision mesh (extracted to triangles). Pass null to clear. */
   setWalkableTriangles(tris: Triangle[] | null) {
     this.walkableTris = (tris && tris.length > 0) ? tris : null;
+    // A different mesh invalidates the step-clamp history — otherwise a floor at a
+    // different Y (plan switch) is rejected forever as a ">0.5 m step".
+    this.lastFloorY = null;
     // Collision loads async (after the initial jumpTo), so re-derive the spawn
     // eye-height now that we actually know where the floor is. No-op in fly mode.
     if (this.walkableTris) this.reacquireFloorHeight();
@@ -507,10 +526,10 @@ export class CameraController {
         const targetY = base + this.currentHeight;
         const dy = targetY - this.playerPos.y;
         if (Math.abs(dy) > FLOOR_SNAP_DEADBAND) this.playerPos.y += dy * FLOOR_SNAP_LERP;
-      } else {
-        // Floor never acquired yet — hold at currentHeight (legacy fallback).
-        this.playerPos.y = this.currentHeight;
       }
+      // Floor never acquired yet → hold the current Y until a probe succeeds.
+      // (Writing `currentHeight` as an ABSOLUTE Y here teleported the player into
+      // the air / underground, since in walk mode it's an eye-height offset.)
     } else {
       this.playerPos.y = this.currentHeight;
     }
@@ -620,12 +639,23 @@ export class CameraController {
    */
   private reacquireFloorHeight() {
     if (!this.walkableTris || this.movementMode !== 'walk') return;
-    const hit = raycastTriangles(
+    const down = raycastTriangles(
       this.playerPos.x, this.playerPos.y, this.playerPos.z, 0, -1, 0,
       this.walkableTris, SNAP_PROBE_DOWN, FLOOR_MIN_ABS_NORMAL_Y,
     );
+    // Buried-player recovery: if the down-probe misses, the floor surface may be
+    // ABOVE the eye (regen shifted the floor up / authored Y sits under it). A
+    // short UP-probe finds it so the player pops back out instead of staying sunk.
+    const hit = down ?? raycastTriangles(
+      this.playerPos.x, this.playerPos.y, this.playerPos.z, 0, 1, 0,
+      this.walkableTris, REACQUIRE_PROBE_UP, FLOOR_MIN_ABS_NORMAL_Y,
+    );
     if (!hit) return;
-    this.currentHeight = math.clamp(this.playerPos.y - hit.point.y, EYE_HEIGHT_MIN, EYE_HEIGHT_MAX);
+    // Floor below → derive eye height from the prior. Floor ABOVE (buried) → the
+    // prior is meaningless, reset to the standard standing height.
+    this.currentHeight = down
+      ? math.clamp(this.playerPos.y - hit.point.y, EYE_HEIGHT_MIN, EYE_HEIGHT_MAX)
+      : this.options.cameraHeight;
     this.lastFloorY = hit.point.y;
     this.playerPos.y = hit.point.y + this.currentHeight;
     this.applyPose();
@@ -644,6 +674,9 @@ export class CameraController {
   /** Jump the player to a viewpoint and orient the camera toward `target`. */
   jumpTo(position: [number, number, number], target: [number, number, number], fov?: number) {
     this.playerPos.set(position[0], position[1], position[2]);
+    // Teleporting invalidates the step-clamp history (the destination floor may
+    // legitimately sit at a very different Y).
+    this.lastFloorY = null;
     // Walk mode treats currentHeight as eye-height ABOVE the floor, not absolute Y.
     // Seed it with the authored absolute Y, then (if the walkable mesh is loaded)
     // re-derive it from the floor below so off-origin scans / regen-shifted floors
