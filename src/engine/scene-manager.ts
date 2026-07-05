@@ -484,17 +484,21 @@ export class SceneManager {
       // Ray parallel to the floor — never hits Y=0. Fall back gracefully.
       return this.getCameraForwardPoint(2);
     }
-    const camPos = this.camera.getPosition();
-    // (camPos + t·dir).y = 0 → t = -camPos.y / dir.y
-    const t = -camPos.y / dir.y;
+    // Ray origin = the pixel's NEAR-PLANE point, NOT the camera position.
+    // Equivalent under perspective (both lie on the same ray), but REQUIRED
+    // under orthographic: rays are parallel and each pixel starts at its own
+    // near-plane point — a camera-position origin collapses every click onto
+    // the view axis (the 俯瞰 editor bug where nothing could be drawn).
+    // (near + t·dir).y = 0 → t = -near.y / dir.y
+    const t = -near.y / dir.y;
     if (t <= 0) {
       // Floor plane is behind the camera (looking up). Use forward fallback.
       return this.getCameraForwardPoint(2);
     }
     return [
-      +(camPos.x + dir.x * t).toFixed(3),
+      +(near.x + dir.x * t).toFixed(3),
       0,
-      +(camPos.z + dir.z * t).toFixed(3),
+      +(near.z + dir.z * t).toFixed(3),
     ];
   }
 
@@ -514,12 +518,13 @@ export class SceneManager {
     cam.screenToWorld(canvasX, canvasY, cam.nearClip, near);
     cam.screenToWorld(canvasX, canvasY, cam.nearClip + 1, far);
     const dir = new Vec3().sub2(far, near).normalize();
-    const camPos = this.camera.getPosition();
+    // Near-plane origin — required for orthographic (parallel rays), identical
+    // under perspective. See screenToFloorPoint for the full note.
     let bestT = Infinity;
     let best: [number, number, number] | null = null;
     for (const tris of [this.blockTrisCache, this.walkableTrisCache]) {
       if (!tris) continue;
-      const hit = raycastTriangles(camPos.x, camPos.y, camPos.z, dir.x, dir.y, dir.z, tris, 60);
+      const hit = raycastTriangles(near.x, near.y, near.z, dir.x, dir.y, dir.z, tris, 60);
       if (hit && hit.t < bestT) {
         bestT = hit.t;
         best = [+hit.point.x.toFixed(3), +hit.point.y.toFixed(3), +hit.point.z.toFixed(3)];
@@ -542,13 +547,14 @@ export class SceneManager {
     cam.screenToWorld(canvasX, canvasY, cam.nearClip + 1, far);
     const dir = new Vec3().sub2(far, near).normalize();
     if (Math.abs(dir.y) < 1e-4) return null;
-    const camPos = this.camera.getPosition();
-    const t = (planeY - camPos.y) / dir.y;
+    // Near-plane origin — required for orthographic (parallel rays), identical
+    // under perspective. See screenToFloorPoint for the full note.
+    const t = (planeY - near.y) / dir.y;
     if (t <= 0) return null;
     return [
-      +(camPos.x + dir.x * t).toFixed(3),
+      +(near.x + dir.x * t).toFixed(3),
       planeY,
-      +(camPos.z + dir.z * t).toFixed(3),
+      +(near.z + dir.z * t).toFixed(3),
     ];
   }
 
