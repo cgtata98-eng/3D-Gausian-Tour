@@ -2242,7 +2242,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.6 }}>
                         ・<strong style={{ color: '#fecaca' }}>赤ピン</strong>（選択中の視点）— マップクリックで配置。<strong>初期位置</strong>は視点リストの 🏁 で指定<br />
                         ・他の視点のドットを直接ドラッグして移動も可<br />
-                        ・三角コーン = その視点の向き（下の yaw スライダーで調整）
+                        ・扇形 = その視点の視野の向き（下の yaw スライダーで調整）
                       </div>
                       </div>{/* /floorPlanSticky */}
 

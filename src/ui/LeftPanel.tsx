@@ -13,6 +13,7 @@ import { getAuthHeader } from '../utils/auth';
 import { useMediaQuery } from '../utils/use-media-query';
 import { tokens } from './design-tokens';
 import { SegmentedControl, Tile, surfaceClass, IconClose, IconPlus, IconSettings, IconTrash } from './components';
+import { fanPath } from './map-fan';
 
 interface LeftPanelProps {
   onViewpointClick: (id: string) => void;
@@ -294,9 +295,6 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
           const yr = (yawDeg + 90) * Math.PI / 180;
           const ccl = Math.min(dW, dH) * 0.09 * (isA ? 0.8 : 0.62);
           const spread = 0.55;
-          const tip = { x: cx + Math.cos(yr) * ccl, y: cy - Math.sin(yr) * ccl };
-          const cL = { x: cx + Math.cos(yr + spread) * ccl * 0.7, y: cy - Math.sin(yr + spread) * ccl * 0.7 };
-          const cR = { x: cx + Math.cos(yr - spread) * ccl * 0.7, y: cy - Math.sin(yr - spread) * ccl * 0.7 };
           const coneFill = isA ? 'rgba(76,175,80,0.35)' : 'rgba(15,17,22,0.22)';
           const coneStroke = isA ? 'rgba(76,175,80,0.95)' : 'rgba(15,17,22,0.55)';
           return (
@@ -307,7 +305,7 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
               role="button"
               aria-label={`${vp.label} に移動`}
             >
-              {isVR && <polygon points={`${cx},${cy} ${cL.x},${cL.y} ${tip.x},${tip.y} ${cR.x},${cR.y}`} fill={coneFill} stroke={coneStroke} strokeWidth={isA ? 1.2 : 0.8} />}
+              {isVR && <path d={fanPath(cx, cy, ccl, yr, spread)} fill={coneFill} stroke={coneStroke} strokeWidth={isA ? 1.2 : 0.8} strokeLinejoin="round" />}
               <circle cx={cx} cy={cy} r={Math.max(r + 6, 12)} fill="transparent" />
               <circle cx={cx} cy={cy} r={r} fill={fill} stroke={stroke} strokeWidth={sw} />
               <text x={cx} y={cy - r - 4} textAnchor="middle" fill={isA ? '#4caf50' : '#f5f7fa'} fontSize={11} fontWeight={isA ? 'bold' : 600} stroke="rgba(0,0,0,0.75)" strokeWidth={3} paintOrder="stroke">{vp.label}</text>

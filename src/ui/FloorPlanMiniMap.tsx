@@ -3,6 +3,7 @@ import { useCameraStore } from '../store/camera-store';
 import { useSceneStore } from '../store/scene-store';
 import { resolveScenePath } from '../core/scene-manifest';
 import { surfaceClass, IconClose } from './components';
+import { fanPath } from './map-fan';
 
 /** The map is an on-scene overlay; the collapsed handle is the same surface
  *  reduced to a round button. */
@@ -113,9 +114,6 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
   // yaw + 90° (so tip = camera + (cos(angle), -sin(angle)) — note Y is flipped because SVG +Y is down).
   const yawRad = (yaw + 90) * Math.PI / 180;
   const cl = Math.min(dW, dH) * 0.09, cs = 0.4;
-  const tip = { x: camX + Math.cos(yawRad) * cl, y: camY - Math.sin(yawRad) * cl };
-  const cL = { x: camX + Math.cos(yawRad + cs) * cl * 0.7, y: camY - Math.sin(yawRad + cs) * cl * 0.7 };
-  const cR = { x: camX + Math.cos(yawRad - cs) * cl * 0.7, y: camY - Math.sin(yawRad - cs) * cl * 0.7 };
   const rW = (dW - PADDING * 2) / 4 * 0.85, rH = (dH - PADDING * 2) / 4 * 0.85;
   const mr = dW > 250 ? 8 : 5, fs = dW > 250 ? 12 : 9;
 
@@ -313,9 +311,7 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
           const vpYawRad = (vpYaw + 90) * Math.PI / 180;
           const vcl = cl * (isA ? 0.75 : 0.55);
           const vSpread = 0.55;
-          const vTip = { x: cx + Math.cos(vpYawRad) * vcl, y: cy - Math.sin(vpYawRad) * vcl };
-          const vL = { x: cx + Math.cos(vpYawRad + vSpread) * vcl * 0.7, y: cy - Math.sin(vpYawRad + vSpread) * vcl * 0.7 };
-          const vR = { x: cx + Math.cos(vpYawRad - vSpread) * vcl * 0.7, y: cy - Math.sin(vpYawRad - vSpread) * vcl * 0.7 };
+          const vFan = fanPath(cx, cy, vcl, vpYawRad, vSpread);
           // Active = red + bigger + halo. Inactive = dark neutral so it stays readable on
           // any floor-plan image (white themed panel makes white pins disappear).
           const pinFill = isA ? '#ef4444' : 'rgba(31,41,55,0.7)';
@@ -329,7 +325,7 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
               onClick={(e) => { e.stopPropagation(); onPinClick(vp.id); }}
               onMouseDown={e => { if (canD) { e.preventDefault(); e.stopPropagation(); onDS(vp.id, e.clientX, e.clientY); } }}>
               {hasDir && (
-                <polygon points={`${cx},${cy} ${vL.x},${vL.y} ${vTip.x},${vTip.y} ${vR.x},${vR.y}`} fill={coneFill} stroke={coneStroke} strokeWidth={isA ? 1.2 : 0.8} />
+                <path d={vFan} fill={coneFill} stroke={coneStroke} strokeWidth={isA ? 1.2 : 0.8} strokeLinejoin="round" />
               )}
               {isA && (
                 /* Outer ring for the active red pin to make it pop against busy floor plan images. */
@@ -350,14 +346,14 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
               <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central"
                 fill={isA ? '#b91c1c' : 'rgba(31,41,55,0.6)'} fontSize={fs} fontFamily="sans-serif" fontWeight={isA ? 'bold' : 'normal'}>{vp.label}</text>
               {hasDir && (
-                <polygon points={`${cx},${cy} ${vL.x},${vL.y} ${vTip.x},${vTip.y} ${vR.x},${vR.y}`} fill={coneFill} stroke={coneStroke} strokeWidth={0.8} />
+                <path d={vFan} fill={coneFill} stroke={coneStroke} strokeWidth={0.8} strokeLinejoin="round" />
               )}
             </g>
           );
         })}
         {!editable && (
           <>
-            <polygon points={`${camX},${camY} ${cL.x},${cL.y} ${tip.x},${tip.y} ${cR.x},${cR.y}`} fill="rgba(76,175,80,0.3)" stroke="rgba(76,175,80,0.7)" strokeWidth={0.8} />
+            <path d={fanPath(camX, camY, cl, yawRad, cs)} fill="rgba(76,175,80,0.3)" stroke="rgba(76,175,80,0.7)" strokeWidth={0.8} strokeLinejoin="round" />
             <circle cx={camX} cy={camY} r={dW > 250 ? 6 : 4} fill="#4caf50" stroke="#fff" strokeWidth={1.35} />
           </>
         )}
