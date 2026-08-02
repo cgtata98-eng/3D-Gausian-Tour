@@ -219,32 +219,46 @@ function ViewpointBar({ onViewpointClick }: { onViewpointClick: (id: string) => 
 
   if (tb?.viewpoints !== true || projectType === 'product') return null;
 
-  // Hidden: leave a way back IN PLACE. The old reopen handle lived in the
-  // sidebar, which would now mean hiding from one side of the screen and
-  // restoring from the other.
+  const bottom = isPortrait ? 12 : 24;
+
+  // Hidden: the way back is the SAME chevron in the SAME place, pointing the
+  // other way. Folding something down at the bottom of the screen and having
+  // to reopen it from a panel elsewhere is the version of this that annoys.
   if (hiddenSections.includes('viewpoints')) {
     return (
       <button
         type="button"
         onClick={() => setSectionHidden('viewpoints', false)}
-        className={`${surfaceClass('plain')} ds-overlay ds-overlay--pill ds-pill ds-pill--sm`}
-        style={{ ...viewpointBarAnchor, bottom: isPortrait ? 12 : 24 }}
+        className="ds-scene-fold"
+        style={{ bottom }}
         title="シーンを表示"
+        aria-label="シーンを表示"
       >
-        シーン
+        <svg className="ds-icon" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6" /></svg>
       </button>
     );
   }
 
   return (
-    <div
-      className={`${surfaceClass('plain')} ds-overlay ds-overlay--lg`}
-      style={{ ...viewpointBarAnchor, ...viewpointBar, bottom: isPortrait ? 12 : 24 }}
-    >
-      <SceneStrip onViewpointClick={onViewpointClick} onHide={() => setSectionHidden('viewpoints', true)} />
-    </div>
+    <>
+      <SceneStrip onViewpointClick={onViewpointClick} bottom={bottom} />
+      <button
+        type="button"
+        onClick={() => setSectionHidden('viewpoints', true)}
+        className="ds-scene-fold"
+        style={{ bottom: bottom + SCENE_BAR_H + 2 }}
+        title="シーンを隠す"
+        aria-label="シーンを隠す"
+      >
+        <svg className="ds-icon" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+    </>
   );
 }
+
+/** Bar height: 10px padding × 2 + a 96px-wide 4:3 thumbnail. Used to park the
+ *  fold chevron just above it without measuring at runtime. */
+const SCENE_BAR_H = 20 + 72;
 
 /**
  * The scenes themselves, plus the two arrows that page through them.
@@ -253,9 +267,9 @@ function ViewpointBar({ onViewpointClick }: { onViewpointClick: (id: string) => 
  * scrollbar is both ugly and, on a trackpad-less machine, the only way to
  * discover there is more to the right.
  */
-function SceneStrip({ onViewpointClick, onHide }: {
+function SceneStrip({ onViewpointClick, bottom }: {
   onViewpointClick: (id: string) => void;
-  onHide: () => void;
+  bottom: number;
 }) {
   const manifest = useSceneStore((s) => s.manifest);
   const activePlanId = useSceneStore((s) => s.activePlanId);
@@ -285,9 +299,9 @@ function SceneStrip({ onViewpointClick, onHide }: {
   const page = (dir: 1 | -1) => railRef.current?.scrollBy({ left: dir * 220, behavior: 'smooth' });
 
   return (
-    <>
+    <div className="ds-scene-bar" style={{ bottom }}>
       {overflowing && (
-        <button type="button" className={SCENE_ARROW} onClick={() => page(-1)} title="前へ" aria-label="前へ">
+        <button type="button" className="ds-scene-nav" onClick={() => page(-1)} title="前へ" aria-label="前へ">
           <svg className="ds-icon" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg>
         </button>
       )}
@@ -310,25 +324,16 @@ function SceneStrip({ onViewpointClick, onHide }: {
         })}
       </div>
       {overflowing && (
-        <button type="button" className={SCENE_ARROW} onClick={() => page(1)} title="次へ" aria-label="次へ">
+        <button type="button" className="ds-scene-nav" onClick={() => page(1)} title="次へ" aria-label="次へ">
           <svg className="ds-icon" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
         </button>
       )}
-      <button
-        type="button"
-        onClick={onHide}
-        className={BLOCK_CLOSE_BTN}
-        style={{ alignSelf: 'center', flexShrink: 0 }}
-        title="シーンを閉じる"
-      >
-        <IconClose />
-      </button>
-    </>
+    </div>
   );
 }
 
-const SCENE_ARROW = `${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--sm ds-fill-surface`;
-/** Layout only — the scrolling rail the scenes sit on. */
+/** Layout only — the scrolling rail the scenes sit on. The bar around it,
+ *  its glass and its arrows are `.ds-scene-bar` / `.ds-scene-nav`. */
 const sceneRail: React.CSSProperties = {
   display: 'flex',
   gap: 6,
@@ -336,22 +341,6 @@ const sceneRail: React.CSSProperties = {
   scrollbarWidth: 'none',
   minWidth: 0,
   alignItems: 'center',
-};
-
-/** Layout only. */
-const viewpointBarAnchor: React.CSSProperties = {
-  position: 'absolute',
-  left: '50%',
-  transform: 'translateX(-50%)',
-  zIndex: 5,
-};
-const viewpointBar: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: 8,
-  // Never wider than the viewport, and never over the sidebar on a phone.
-  maxWidth: 'min(860px, calc(100vw - 48px))',
 };
 
 
