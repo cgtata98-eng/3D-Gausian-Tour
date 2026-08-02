@@ -146,7 +146,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
             viewpoints: showViewpoints ? (hiddenSections.includes('viewpoints') ? (
               <ClosedSectionHandle label="シーン" onOpen={() => setSectionHidden('viewpoints', false)} />
             ) : (
-              <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
+              <div className="ds-sidebar__group" style={sidebarBlock}>
                 <div style={overviewHeaderRow}>
                   <span className="ds-label">シーン</span>
                   <div style={{ flex: 1 }} />
@@ -164,7 +164,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
             map: showMap ? (hiddenSections.includes('map') ? (
               <ClosedSectionHandle label={isOther ? 'MAP' : 'FLOOR MAP'} onOpen={() => setSectionHidden('map', false)} />
             ) : (
-              <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={{ ...sidebarBlock, ...sidebarMapBlock }}>
+              <div className="ds-sidebar__group" style={{ ...sidebarBlock, ...sidebarMapBlock }}>
                 <div style={overviewHeaderRow}>
                   <span className="ds-label">{isOther ? 'MAP' : 'FLOOR MAP'}</span>
                   <div style={{ flex: 1 }} />
@@ -375,7 +375,7 @@ function TypeSelectBlock({ onPlanSwitch }: { onPlanSwitch?: (planId: string) => 
     return <ClosedSectionHandle label={blockLabel} onOpen={() => setSectionHidden('type', false)} />;
   }
   return (
-    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
+    <div className="ds-sidebar__group" style={sidebarBlock}>
       <div style={overviewHeaderRow}>
         <span className="ds-label">{blockLabel}</span>
         <div style={{ flex: 1 }} />
@@ -428,7 +428,7 @@ function ColorSelectBlock() {
     return <ClosedSectionHandle label="カラー" onOpen={() => setSectionHidden('color', false)} />;
   }
   return (
-    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
+    <div className="ds-sidebar__group" style={sidebarBlock}>
       <div style={overviewHeaderRow}>
         <span className="ds-label">カラー</span>
         <div style={{ flex: 1 }} />
@@ -515,7 +515,7 @@ function OverviewBlock() {
   const restoreAll = () => updateInfo({ visibility: { overall: true } });
 
   return (
-    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
+    <div className="ds-sidebar__group" style={sidebarBlock}>
       <div style={overviewHeaderRow}>
         <span className="ds-label">間取り概要</span>
         {anyHidden && (
@@ -658,7 +658,7 @@ function MovementModeBlock() {
   const setValue = useUIStore((s) => s.setMovementMode);
   const setSectionHidden = useUIStore((s) => s.setSectionHidden);
   return (
-    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
+    <div className="ds-sidebar__group" style={sidebarBlock}>
       <div style={overviewHeaderRow}>
         <span className="ds-label">移動モード</span>
         <div style={{ flex: 1 }} />
@@ -1107,7 +1107,7 @@ function AiImageGenBlock() {
   const onPickProvider = (p: AiProvider) => setSelectedModelId(firstModelForProvider(p).id);
 
   return (
-    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
+    <div className="ds-sidebar__group" style={sidebarBlock}>
       <div style={overviewHeaderRow}>
         <span className="ds-label">AI 画像生成</span>
         <div style={{ flex: 1 }} />
@@ -1301,7 +1301,7 @@ function QualityBlock() {
   const setValue = useUIStore((s) => s.setQualityMode);
   const setSectionHidden = useUIStore((s) => s.setSectionHidden);
   return (
-    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
+    <div className="ds-sidebar__group" style={sidebarBlock}>
       <div style={overviewHeaderRow}>
         <span className="ds-label">画質</span>
         <div style={{ flex: 1 }} />
@@ -1369,7 +1369,7 @@ function MobileToolsBlock({ onClose }: { onClose: () => void }) {
   }, []);
 
   return (
-    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
+    <div className="ds-sidebar__group" style={sidebarBlock}>
       <div style={overviewHeaderRow}>
         <span className="ds-label">移動スピード</span>
         <div style={{ flex: 1 }} />
@@ -1414,7 +1414,7 @@ function DemoModeBlock() {
   const status: string = !enabled ? 'OFF' : connected ? '取得中 (face)' : 'カメラ準備中…';
   const statusTone = !enabled ? 'ds-faint' : connected ? 'ds-ok' : 'ds-warn';
   return (
-    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
+    <div className="ds-sidebar__group" style={sidebarBlock}>
       <div style={overviewHeaderRow}>
         <span className="ds-label">ヘッドトラッキング</span>
         <div style={{ flex: 1 }} />
@@ -1665,27 +1665,12 @@ function collapsedHandleStyle(placement: SidebarPlacement): React.CSSProperties 
   return collapsedHandle;
 }
 
-/* NO `padding` here. These blocks carry `.ds-block`, which owns their padding;
-   an inline `padding: 0` beat the class and every block in the viewer sidebar
-   rendered flush to its own edge — the label and the close button sat on the
-   16px corner radius with the shell ring cutting through them. Padding is
-   layout, so it looks like it belongs in a style object; when the element is a
-   design-system component, its own spacing is part of what the component IS. */
-const sidebarBlock: React.CSSProperties = {
-  marginBottom: 10,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  flexShrink: 0,
-};
+/* Layout only. Padding, the divider and the column live in
+   `.ds-sidebar__group`; writing any of them here is how the previous version
+   ended up with `padding: 0` silently beating the component's own spacing. */
+const sidebarBlock: React.CSSProperties = {};
 
-const sidebarMapBlock: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  overflow: 'hidden',
-  flexShrink: 0,
-};
+const sidebarMapBlock: React.CSSProperties = { overflow: 'hidden' };
 
 
 const colorInlineToggles: React.CSSProperties = {

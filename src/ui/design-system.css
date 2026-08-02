@@ -763,6 +763,24 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   -webkit-overflow-scrolling: touch;
 }
 
+/* A group inside the sidebar.
+   ─────────────────────────────────────────────────────────────────────────
+   NOT a card. The sidebar is already a surface, and every control these
+   groups hold — segmented controls, tiles, inputs, pills — carries its own
+   rim. Wrapping them in a third one gives a frame inside a frame: two rings
+   a few pixels apart, neither of which means anything. Groups are separated
+   by a rule, which is what a divider is for; elevation is for things that
+   float over something else. */
+.ds-sidebar__group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ds-hairline);
+}
+.ds-sidebar__group:last-child { border-bottom: 0; }
+
 /* A row in the sidebar's icon toolbar. No surface until it is pointed at —
    a column of shells would read as a stack of buttons rather than a list. */
 .ds-navitem {
