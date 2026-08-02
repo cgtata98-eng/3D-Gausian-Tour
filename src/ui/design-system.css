@@ -144,9 +144,19 @@
     inset 0 0 0 1px rgba(176, 190, 210, 0.44),
     inset 0 1.5px 0 0 rgba(142, 151, 170, 0.22),
     inset 0 -1.5px 0 0 rgba(255, 255, 255, 0.96);
-  /* Fields sit ON white panels now, so the old #ededed read as a grey block.
-     Lighter, and it is the rim that says "this is a slot", not the darkness. */
-  --ds-field-fill: linear-gradient(180deg, #f1f2f3 0%, #f8f9fa 100%);
+  /* THE white. One value, used by every white surface in the app.
+     ─────────────────────────────────────────────────────────────────────
+     There were five fills in circulation: this one, a "neutral" at #fcfcfc,
+     a field fill at #f1f2f3 (and inverted, lighter at the BOTTOM, so it was
+     lit from below while everything around it was lit from above), the
+     select's copy of that, and transparent for segmented tracks. Sitting in
+     one sidebar they read as three or four different whites.
+
+     What a surface IS — raised, recessed, a track — is said by its rim and
+     its inner shading. Saying it a second time in the fill is what let them
+     drift apart. */
+  --ds-fill-white: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
+  --ds-field-fill: var(--ds-fill-white);
 
   --ds-lift:
     0 1px 2px rgba(40, 48, 80, 0.05),
@@ -260,8 +270,12 @@
    canvas a shell genuinely takes the colour behind it. Containers that sit
    OVER content (dialogs, side panels, overlays on the 3D view) must opt back
    in, or their own text ends up on top of whatever is underneath. */
-.ds-fill-surface { --ds-fill: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%); }
-.ds-fill-neutral { --ds-fill: linear-gradient(180deg, #fcfcfc 0%, #f1f1f1 100%); }
+.ds-fill-surface { --ds-fill: var(--ds-fill-white); }
+/* Kept as a separate class because call sites name it, but it is the same
+   white now: `neutral` and `plain` differ in the hue of their rim, which is
+   the part that was always meant to carry the difference. Two whites three
+   points apart carried nothing except the risk of looking like a mistake. */
+.ds-fill-neutral { --ds-fill: var(--ds-fill-white); }
 
 /* Translucent accent for surfaces over the 3D view: the opaque blue reads as
    a solid board once there is real content behind it. */

@@ -161,7 +161,11 @@ export function SegmentedControl<T extends string>({ value, onChange, options, o
 }) {
   const { trackRef, rect } = useSegIndicator(value);
   return (
-    <div ref={trackRef} className={cx(surfaceClass('plain'), 'ds-seg', 'ds-blur', className)} style={style}>
+    /* The track takes the same white as every other control. It used to have
+       no fill at all, so it showed whatever panel it happened to sit on — one
+       more white in a row that already had too many. On the 3D view it still
+       opts out, because there the point is that the scene shows through. */
+    <div ref={trackRef} className={cx(surfaceClass('plain'), 'ds-seg', 'ds-blur', !onScene && 'ds-fill-surface', className)} style={style}>
       <SegIndicator rect={rect} onScene={onScene} />
       {options.map((o) => (
         <button
@@ -188,7 +192,7 @@ export function PillToggle<T extends string>({ value, onChange, options, onScene
 }) {
   const { trackRef, rect } = useSegIndicator(value);
   return (
-    <div ref={trackRef} className={cx(surfaceClass('plain'), 'ds-seg', 'ds-blur')} style={style}>
+    <div ref={trackRef} className={cx(surfaceClass('plain'), 'ds-seg', 'ds-blur', !onScene && 'ds-fill-surface')} style={style}>
       <SegIndicator rect={rect} onScene={onScene} />
       {options.map((o) => {
         const active = o.value === value;
