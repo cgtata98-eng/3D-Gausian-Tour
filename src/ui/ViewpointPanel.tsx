@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSceneStore } from '../store/scene-store';
 import { useCameraStore } from '../store/camera-store';
-import { tokens } from './design-tokens';
+import { tokens, shellSurface } from './design-tokens';
 
 interface ViewpointPanelProps {
   onViewpointClick: (id: string) => void;
@@ -26,7 +26,7 @@ export function ViewpointPanel({ onViewpointClick }: ViewpointPanelProps) {
   const autoThumbs = (activePlanId && thumbs[activePlanId]) || {};
 
   return (
-    <div style={panel}>
+    <div className="glass-edge" style={panel}>
       {viewpoints.map((vp) => (
         <ViewpointCard
           key={vp.id}
@@ -52,6 +52,7 @@ function ViewpointCard({ label, thumb, active, onClick }: {
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      className="glass-edge"
       style={{
         ...card,
         ...(active ? cardActive : null),
@@ -77,13 +78,10 @@ const panel: React.CSSProperties = {
   background: tokens.glass.surfaceStrong,
   backdropFilter: tokens.backdrop,
   WebkitBackdropFilter: tokens.backdrop,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.lg,
-  boxShadow: tokens.shadow.glass,
+  ...shellSurface('plain', { radius: tokens.radius.lg }),
   zIndex: 5,
   maxWidth: 'calc(100vw - 48px)',
   overflowX: 'auto',
-  fontFamily: tokens.font.family,
 };
 
 const card: React.CSSProperties = {
@@ -93,27 +91,18 @@ const card: React.CSSProperties = {
   gap: 6,
   width: 104,
   padding: 6,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.md,
-  background: tokens.gradient.surface,
-  color: tokens.color.text,
+  ...shellSurface('plain', { radius: tokens.radius.md, fill: 'surface' }),
   cursor: 'pointer',
-  fontFamily: tokens.font.family,
   flex: '0 0 auto',
   outline: 'none',
-  transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}, transform ${tokens.transition}`,
 };
 
 const cardHover: React.CSSProperties = {
   transform: 'translateY(-1px)',
-  boxShadow: tokens.shadow.glass,
+  boxShadow: `${tokens.shadow.shellInner}, ${tokens.shadow.raised}`,
 };
 
-const cardActive: React.CSSProperties = {
-  background: tokens.gradient.accent,
-  borderColor: tokens.color.accentBorder,
-  boxShadow: tokens.shadow.glassAccent,
-};
+const cardActive: React.CSSProperties = shellSurface('accent', { radius: tokens.radius.md });
 
 const thumbWrap: React.CSSProperties = {
   width: '100%',
@@ -121,7 +110,7 @@ const thumbWrap: React.CSSProperties = {
   borderRadius: tokens.radius.sm,
   overflow: 'hidden',
   background: tokens.color.surfaceSoft,
-  border: `1px solid ${tokens.color.border}`,
+  boxShadow: tokens.shadow.shellInner,
 };
 
 const thumbImg: React.CSSProperties = {
@@ -138,16 +127,16 @@ const thumbPlaceholder: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   color: tokens.color.textFaint,
-  fontSize: 12,
+  fontSize: 11.5,
 };
 
 const labelStyle: React.CSSProperties = {
-  fontSize: 11.5,
-  fontWeight: 600,
+  fontSize: 10.5,
+  fontWeight: tokens.font.weight.strong,
   letterSpacing: 0.3,
   color: tokens.color.text,
 };
 
 const labelActive: React.CSSProperties = {
-  fontWeight: 700,
+  fontWeight: tokens.font.weight.strong,
 };

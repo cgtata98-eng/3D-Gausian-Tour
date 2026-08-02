@@ -200,9 +200,9 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     fontFamily: tokens.font.family,
   },
-  header: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: tokens.color.text },
-  title: { flex: 1, fontWeight: 700, letterSpacing: 0.3 },
-  yaw: { fontFamily: tokens.font.mono, color: tokens.color.accent, fontWeight: 600 },
+  header: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: tokens.color.text },
+  title: { flex: 1, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3 },
+  yaw: { fontFamily: tokens.font.mono, color: tokens.color.accent, fontWeight: tokens.font.weight.strong },
   closeBtn: {
     background: tokens.gradient.surface,
     border: `1px solid ${tokens.color.border}`,
@@ -210,7 +210,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 24, height: 24,
     borderRadius: tokens.radius.pill,
     cursor: 'pointer',
-    fontSize: 11,
+    fontSize: 10.5,
     lineHeight: '22px',
     padding: 0,
     boxShadow: tokens.shadow.glass,
@@ -230,7 +230,7 @@ const styles: Record<string, React.CSSProperties> = {
   overlay: {
     position: 'absolute', inset: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: 'rgba(255,255,255,0.88)', fontSize: 12, fontWeight: 500,
+    color: 'rgba(255,255,255,0.88)', fontSize: 11.5, fontWeight: tokens.font.weight.medium,
     background: 'rgba(31,41,55,0.55)', borderRadius: tokens.radius.md,
     pointerEvents: 'none',
   },
@@ -238,7 +238,7 @@ const styles: Record<string, React.CSSProperties> = {
   slider: { flex: 1, accentColor: tokens.color.accent },
   saveBtn: {
     padding: '8px 16px',
-    fontSize: 12, fontWeight: 700,
+    fontSize: 11.5, fontWeight: tokens.font.weight.strong,
     background: tokens.gradient.accent,
     color: tokens.color.text,
     border: `1px solid ${tokens.color.accentBorder}`,
@@ -249,5 +249,5 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: tokens.font.family,
     outline: 'none',
   },
-  hint: { fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.55 },
+  hint: { fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.55 },
 };

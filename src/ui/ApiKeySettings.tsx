@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { tokens, softCard } from './design-tokens';
+import { surfaceClass } from './components';
 import { PillInput } from './components/Input';
 import {
   getOpenAIKey, setOpenAIKey,
@@ -79,9 +80,10 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
         onClick={openModal}
         title="AI API キー設定"
         aria-label="AI API キー設定"
+        className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-fill-surface ds-blur`}
         style={{ ...gearBtn, ...gearStyle }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
@@ -89,16 +91,16 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
 
       {open && createPortal(
         <div style={overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
-          <div style={card} onMouseDown={(e) => e.stopPropagation()}>
+          <div className={`${surfaceClass('plain')} ds-card ds-dialog ds-fill-surface`} style={card} onMouseDown={(e) => e.stopPropagation()}>
             <div style={titleRow}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: tokens.color.text }}>AI API キー設定</span>
+              <span style={{ fontSize: 13, fontWeight: tokens.font.weight.strong, color: tokens.color.text }}>AI API キー設定</span>
               <button type="button" onClick={() => setOpen(false)} style={closeBtn} aria-label="閉じる">✕</button>
             </div>
 
             {/* Gemini key */}
             <div style={{ ...fieldLabel, marginTop: 16 }}>
               Gemini API キー
-              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: gemSaved ? tokens.color.success : tokens.color.textFaint }}>
+              <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: gemSaved ? tokens.color.success : tokens.color.textFaint }}>
                 {gemSaved ? `設定済み (${maskKey(gemSaved)})` : '未設定'}
               </span>
             </div>
@@ -120,7 +122,7 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
             {/* OpenAI key */}
             <div style={{ ...fieldLabel, marginTop: 14 }}>
               OpenAI (ChatGPT) API キー
-              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: oaSaved ? tokens.color.success : tokens.color.textFaint }}>
+              <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: oaSaved ? tokens.color.success : tokens.color.textFaint }}>
                 {oaSaved ? `設定済み (${maskKey(oaSaved)})` : '未設定'}
               </span>
             </div>
@@ -139,7 +141,7 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
               </button>
             </div>
 
-            <div style={{ fontSize: 11, color: tokens.color.textMute, marginTop: 10, lineHeight: 1.7 }}>
+            <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 10, lineHeight: 1.7 }}>
               「カラー / 素材バリエーション」の AI 画像生成に使います。キーはこの端末の
               localStorage に保存され、生成時にプロバイダ別ヘッダで <code>/api/ai/edit</code> へ送られます。
               <br />・<b>Gemini</b>（Nano Banana）= <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: tokens.color.accent }}>Google AI Studio</a> でキー取得。課金有効なキーが必要（無料枠は画像生成が制限/不可の場合あり）。組織認証は不要。
@@ -147,9 +149,9 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
-              <button type="button" onClick={save} style={primaryBtn}>保存</button>
-              <button type="button" onClick={clearAll} style={ghostBtn} disabled={noKeys}>両方クリア</button>
-              <button type="button" onClick={() => setOpen(false)} style={ghostBtn}>閉じる</button>
+              <button type="button" onClick={save} className={`${surfaceClass('accent')} ds-pill`} style={primaryBtn}>保存</button>
+              <button type="button" onClick={clearAll} className={`${surfaceClass('neutral')} ds-pill ds-fill-neutral`} style={ghostBtn} disabled={noKeys}>両方クリア</button>
+              <button type="button" onClick={() => setOpen(false)} className={`${surfaceClass('neutral')} ds-pill ds-fill-neutral`} style={ghostBtn}>閉じる</button>
             </div>
           </div>
         </div>,
@@ -167,16 +169,9 @@ const gearBtn: React.CSSProperties = {
   width: 40, height: 40,
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   background: tokens.glass.surfaceStrong,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.pill,
   backdropFilter: tokens.backdrop,
   WebkitBackdropFilter: tokens.backdrop,
-  boxShadow: tokens.shadow.glass,
-  color: tokens.color.text,
-  cursor: 'pointer',
   zIndex: 80,
-  outline: 'none',
-  fontFamily: tokens.font.family,
 };
 
 const overlay: React.CSSProperties = {
@@ -200,7 +195,7 @@ const titleRow: React.CSSProperties = {
 };
 
 const fieldLabel: React.CSSProperties = {
-  fontSize: 12.5, fontWeight: 700, color: tokens.color.text,
+  fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: tokens.color.text,
   marginBottom: 6,
 };
 
@@ -212,7 +207,7 @@ const closeBtn: React.CSSProperties = {
   borderRadius: tokens.radius.pill,
   color: tokens.color.textMute,
   cursor: 'pointer',
-  fontSize: 14,
+  fontSize: 12.5,
   outline: 'none',
   fontFamily: tokens.font.family,
 };
@@ -225,7 +220,7 @@ const eyeBtn: React.CSSProperties = {
   background: 'transparent',
   border: 'none',
   cursor: 'pointer',
-  fontSize: 15,
+  fontSize: 13,
   outline: 'none',
   lineHeight: 1,
 };
@@ -233,26 +228,8 @@ const eyeBtn: React.CSSProperties = {
 const primaryBtn: React.CSSProperties = {
   flex: 1,
   padding: '11px 16px',
-  fontSize: 13, fontWeight: 700,
-  color: tokens.color.text,
-  background: tokens.gradient.accent,
-  border: `1px solid ${tokens.color.accentBorder}`,
-  borderRadius: tokens.radius.pill,
-  boxShadow: tokens.shadow.glassAccent,
-  cursor: 'pointer',
-  outline: 'none',
-  fontFamily: tokens.font.family,
 };
 
 const ghostBtn: React.CSSProperties = {
   padding: '11px 16px',
-  fontSize: 13, fontWeight: 700,
-  color: tokens.color.text,
-  background: tokens.gradient.neutral,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.pill,
-  boxShadow: tokens.shadow.glass,
-  cursor: 'pointer',
-  outline: 'none',
-  fontFamily: tokens.font.family,
 };

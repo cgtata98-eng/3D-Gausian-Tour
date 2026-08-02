@@ -442,6 +442,10 @@ export interface WalkNode {
    *  live camera yaw before bearing matching so an unaligned 360° image still
    *  steps in the direction the user is visually facing. */
   yawOffset?: number;
+  /** true = VR 範囲外 (editor: gray). Navigation never steps here — keeps the
+   *  walkthrough inside the painted room area instead of wandering the whole
+   *  auto-filled grid. Cleared automatically when a panorama is assigned. */
+  excluded?: boolean;
 }
 
 /** Dense panorama-walkthrough graph for one plan (B3〜B6). */

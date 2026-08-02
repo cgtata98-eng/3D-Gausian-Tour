@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { findWalkNode, resolveStartNode, stepForward } from '../core/walk-graph';
+import { walkPlaceholderPanorama } from '../utils/walk-placeholder';
 import { useCameraStore } from '../store/camera-store';
 import { useSceneStore } from '../store/scene-store';
 import { useUIStore } from '../store/ui-store';
-import { tokens } from './design-tokens';
+import { tokens, shellSurface } from './design-tokens';
 
 interface Props {
   /** The live scene manager (PlayCanvas union member implements the preview;
@@ -47,22 +48,51 @@ export function WalkthroughControls({ getManager }: Props) {
     setCurrentId(null);
   }
   const startNode = walk ? resolveStartNode(walk) : undefined;
-  const current = (walk && currentId ? findWalkNode(walk, currentId) : undefined) ?? startNode;
+  // Walk-only plans have no viewpoint panorama, so 360 mode starts black.
+  // Resolve a starting node inside the painted range (excluded = gray cells
+  // are out of bounds): start node with an image → any node with an image →
+  // start node if in range → any in-range node (direction-guide placeholder).
+  const inRange = (n?: { excluded?: boolean }) => !!n && !n.excluded;
+  const fallbackNode =
+    inRange(startNode) && startNode?.panorama
+      ? startNode
+      : walk?.nodes.find((n) => !n.excluded && n.panorama)
+        ?? (inRange(startNode) ? startNode : walk?.nodes.find((n) => !n.excluded));
+  const current = (walk && currentId ? findWalkNode(walk, currentId) : undefined) ?? fallbackNode;
 
   // Entering the walkthrough: show the start node's panorama once (instant —
-  // there's nothing meaningful to fade from).
+  // there's nothing meaningful to fade from). Depends on the resolved node too:
+  // when the FIRST image gets assigned while already in 360 mode, the effect
+  // must re-fire — with [active, plan] deps alone the view stayed black.
   const enteredRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!active || !current?.panorama) return;
+    if (!active || !current) return;
     const key = `${activePlanId}:${current.id}`;
     if (enteredRef.current === key) return;
-    // Only auto-apply on activation / plan change, not on every step (steps
-    // apply their own panorama with the transition).
+    // Only auto-apply on activation / plan change / first image, not on every
+    // step (steps apply their own panorama with the transition).
     if (enteredRef.current?.startsWith(`${activePlanId}:`)) { enteredRef.current = key; return; }
     enteredRef.current = key;
-    void getManager()?.showPanoramaPreview(current.panorama);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire on activation/plan change only
-  }, [active, activePlanId]);
+    // Mode entry races the engine: this (child) effect fires BEFORE the parent
+    // effect that calls `sm.setViewMode('360')`, so the first attempt can hit
+    // the manager while it still thinks it's in splat mode and get `false`
+    // back. Retry briefly before concluding the engine really can't do 360.
+    let cancelled = false;
+    const tryShow = (attempt: number, usePlaceholder: boolean) => {
+      const src = (usePlaceholder ? undefined : current.panorama) ?? walkPlaceholderPanorama(current);
+      void getManager()?.showPanoramaPreview(src).then((ok) => {
+        if (cancelled || ok !== false) return;
+        if (attempt < 5) setTimeout(() => tryShow(attempt + 1, usePlaceholder), 120);
+        // Assigned image failed (e.g. dangling idb: ref) — the generated
+        // placeholder is a data URL and can still succeed. Never leave white.
+        else if (!usePlaceholder && current.panorama) tryShow(0, true);
+        else showFlash('360°表示に失敗 — エンジンが未対応の可能性 (PlayCanvas に切替してください)');
+      });
+    };
+    tryShow(0, false);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire on activation / plan change / first image only
+  }, [active, activePlanId, current?.id, current?.panorama]);
 
   const showFlash = (msg: string) => {
     setFlash(msg);
@@ -74,11 +104,19 @@ export function WalkthroughControls({ getManager }: Props) {
   const step = async () => {
     if (!walk || !current || busy) return;
     const target = stepForward(current, useCameraStore.getState().yaw, walk);
-    if (!target?.panorama) { showFlash('この方向へは進めません'); return; }
+    if (!target) { showFlash('この方向へは進めません'); return; }
     setBusy(true);
     try {
-      await getManager()?.showPanoramaPreview(target.panorama, { animated });
-      setCurrentId(target.id);
+      const src = target.panorama ?? walkPlaceholderPanorama(target);
+      let ok = await getManager()?.showPanoramaPreview(src, { animated });
+      if (!ok && target.panorama) {
+        // Assigned image failed to load (e.g. dangling idb: ref) — step onto the
+        // direction-guide placeholder instead of leaving the previous panorama.
+        ok = await getManager()?.showPanoramaPreview(walkPlaceholderPanorama(target), { animated });
+        if (ok) showFlash('画像の読込に失敗 — 仮画像を表示中');
+      }
+      if (ok) setCurrentId(target.id);
+      else showFlash('360°表示に失敗 — エンジンが未対応の可能性 (PlayCanvas に切替してください)');
     } finally {
       setBusy(false);
     }
@@ -99,14 +137,23 @@ export function WalkthroughControls({ getManager }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (!active || !current) return null;
+  if (!active) return null;
+  if (!current) {
+    // Grid exists but the walkable range (blue) hasn't been painted yet.
+    return (
+      <div style={ST.wrap}>
+        <div className="glass-edge" style={ST.flash}>ウォークスルー範囲が未設定です — エディタの 🖌 で歩ける範囲（青）を塗ってください</div>
+      </div>
+    );
+  }
 
   return (
     <div style={ST.wrap}>
-      {flash && <div style={ST.flash}>{flash}</div>}
-      <div style={ST.pill}>
+      {flash && <div className="glass-edge" style={ST.flash}>{flash}</div>}
+      <div className="glass-edge" style={ST.pill}>
         <button
           type="button"
+          className="glass-edge"
           style={{ ...ST.stepBtn, opacity: busy ? 0.6 : 1 }}
           disabled={busy}
           onClick={() => void step()}
@@ -117,11 +164,12 @@ export function WalkthroughControls({ getManager }: Props) {
         <span style={ST.nodeLabel}>{current.id}</span>
         <button
           type="button"
+          className="glass-edge"
           style={ST.animBtn}
           onClick={() => useSceneStore.getState().updateSettings({ walkAnimated: !animated })}
-          title="移動アニメーション (クロスフェード + ズーム) の ON/OFF"
+          title="移動の見せ方の切替。ON = ウォークスルー風 (クロスフェード+ズームで歩く演出) / OFF = 即切替 (密なグリッドで GS のように動ける風)。どちらでも「向き→隣ノード」の移動ルールは同じ"
         >
-          {animated ? '🎞 アニメON' : '⏭ 即切替'}
+          {animated ? '🚶 ウォークスルー風' : '⚡ 即切替 (GS風)'}
         </button>
       </div>
     </div>
@@ -143,15 +191,12 @@ const ST: Record<string, React.CSSProperties> = {
   },
   flash: {
     padding: '4px 12px',
-    fontSize: 11.5,
-    fontWeight: 600,
-    color: tokens.color.text,
+    fontSize: 10.5,
+    fontWeight: tokens.font.weight.strong,
     background: tokens.glass.surfaceStrong,
     backdropFilter: tokens.backdrop,
     WebkitBackdropFilter: tokens.backdrop,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glass,
+    ...shellSurface('plain'),
   },
   pill: {
     display: 'flex',
@@ -161,25 +206,18 @@ const ST: Record<string, React.CSSProperties> = {
     background: tokens.glass.surfaceStrong,
     backdropFilter: tokens.backdrop,
     WebkitBackdropFilter: tokens.backdrop,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glass,
+    ...shellSurface('plain'),
   },
   stepBtn: {
     padding: '8px 18px',
-    fontSize: 13,
-    fontWeight: 700,
-    background: tokens.gradient.accent,
-    color: tokens.color.text,
-    border: `1px solid ${tokens.color.accentBorder}`,
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glassAccent,
+    fontSize: 11.5,
+    fontWeight: tokens.font.weight.strong,
+    ...shellSurface('accent'),
     cursor: 'pointer',
-    fontFamily: tokens.font.family,
   },
   nodeLabel: {
-    fontSize: 12,
-    fontWeight: 700,
+    fontSize: 11.5,
+    fontWeight: tokens.font.weight.strong,
     fontFamily: tokens.font.mono,
     color: tokens.color.textMute,
     minWidth: 28,
@@ -187,12 +225,9 @@ const ST: Record<string, React.CSSProperties> = {
   },
   animBtn: {
     padding: '6px 10px',
-    fontSize: 11,
-    background: tokens.gradient.surface,
+    fontSize: 10.5,
+    ...shellSurface('plain', { fill: 'surface' }),
     color: tokens.color.textMute,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.pill,
     cursor: 'pointer',
-    fontFamily: tokens.font.family,
   },
 };

@@ -15,17 +15,14 @@ canvas {
   display: block;
 }
 
-/* Liquid-glass UI: never show the browser-default focus rectangle. The pill
- * recipe (border + box-shadow inner ring) communicates state; an extra
- * black/blue rectangle on top is just noise. Belt-and-suspenders: strip
- * outline + tap highlight + webkit focus ring + appearance, on every state. */
+/* The shell recipe (edge ring + inner shading) already communicates state, so
+ * the browser's default focus rectangle on top of it is pure noise. */
 button,
 a,
 [role="tab"],
 [role="button"] {
   outline: none !important;
   -webkit-tap-highlight-color: transparent !important;
-  -webkit-focus-ring-color: transparent !important;
   appearance: none;
   -webkit-appearance: none;
 }
@@ -40,7 +37,6 @@ a:active,
 [role="tab"]:focus-visible,
 [role="tab"]:active {
   outline: none !important;
-  outline-style: none !important;
   outline-width: 0 !important;
 }
 

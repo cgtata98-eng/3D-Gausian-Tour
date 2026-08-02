@@ -49,6 +49,9 @@ Desktop.ini
 .temp/
 build/
 
+# Screenshots written by scripts/shot.mjs — regenerated on every run
+.shots/
+
 # Environment / secrets
 .env
 .env.*

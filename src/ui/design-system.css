@@ -1,0 +1,1018 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   3DRoomTour — Design system (transmissive shell)
+   ─────────────────────────────────────────────────────────────────────────
+   THE SINGLE SOURCE OF TRUTH FOR HOW ANYTHING LOOKS.
+
+   Why this file exists
+   --------------------
+   The previous arrangement expressed the design system as JS style objects
+   spread into `style={{…}}` at each call site, PLUS a `className` the caller
+   also had to remember (the edge ring is a masked pseudo-element and cannot
+   be inlined). Two coupled opt-ins, applied by hand across ~400 style objects
+   in 17 files. Forget either one and the element silently keeps its old
+   appearance — no error, no warning, nothing to grep for. That is why the app
+   ended up half-migrated no matter how many passes were made over it.
+
+   Here the whole language is CSS. One class per component gives you the
+   surface, the edge, the type and the motion together; there is nothing to
+   pair it with and nothing to forget. Screens stop describing appearance and
+   only say what a thing *is*.
+
+   How to use it
+   -------------
+     <button className="ds-pill ds-pill--accent">保存</button>
+     <div    className="ds-card">…</div>
+     <input  className="ds-input" />
+
+   Inline `style` is for layout only — position, size, grid placement, gap.
+   The moment a screen writes `background` / `border` / `boxShadow` /
+   `fontSize` / `fontWeight` inline, it has forked the design system again and
+   will drift out of it. That is the rule this file exists to make enforceable.
+
+   The model
+   ---------
+   Every surface is a thin transparent shell lit from above:
+
+       top    grey    — seen edge-on through the shell's thickness → shadow
+       sides  hue     — longest path through the material → its colour pools
+       bottom white   — light refracts out at the lower rim → caustic
+
+   Feeding a `linear-gradient(180deg)` through a ring-shaped mask maps 0% to
+   the top edge, 50% to the left/right caps and 100% to the bottom, so that
+   whole three-part structure is one gradient. Text is engraved with the same
+   light source (shadow above the glyph, highlight below) so the two never
+   contradict each other.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Canvas & ink ─────────────────────────────────────────────────── */
+  --ds-bg: #f8f8f8;
+  --ds-surface: #ffffff;
+  --ds-surface-soft: #f1f1f1;
+
+  /* Neutral dark grey, deliberately NOT the old blue-purple steel: the edge
+     is built from neutral grey plus the variant hue, and a third hue family
+     in the body text fights it. Mute/faint are neutralised in step — shifting
+     only the body colour leaves secondary copy reading visibly blue. */
+  --ds-text: #3a3c40;
+  --ds-text-mute: #6e7076;
+  --ds-text-faint: #a1a3a9;
+
+  /* An actually-drawn line: separators, progress tracks. Never an outline for
+     a surface — surfaces get the ring. */
+  --ds-hairline: #dadada;
+
+  /* ── Type ─────────────────────────────────────────────────────────
+     Four steps replacing an ad-hoc 10.5/11.5/12.5/13.5/15 spread.
+     Weight is 400 throughout. Note Segoe UI / Yu Gothic UI (the Windows
+     fallbacks) ship 300/350/400/600/700 and have no 500, so a requested
+     500 resolves down to 400 there anyway. */
+  --ds-font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Yu Gothic UI', system-ui, sans-serif;
+  --ds-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --ds-fs-lg: 13px;
+  --ds-fs-md: 11.5px;
+  --ds-fs-sm: 10.5px;
+  --ds-fs-xs: 9.5px;
+  --ds-fw: 400;
+  --ds-tracking: 0.2px;
+  --ds-tracking-label: 0.8px;
+
+  /* ── Radii ────────────────────────────────────────────────────────── */
+  --ds-r-pill: 999px;
+  --ds-r-card: 24px;
+  --ds-r-lg: 28px;
+  --ds-r-md: 16px;
+  --ds-r-sm: 10px;
+
+  /* ── Control height ───────────────────────────────────────────────
+     One height for every full-size interactive control. Without it each
+     variant's height falls out of its own padding and line count, so a
+     one-line segmented control and a two-line one stacked in the same panel
+     came out visibly different sizes — and a button placed beside either of
+     them matched neither. */
+  --ds-control-h: 40px;
+  --ds-control-h-sm: 32px;
+
+  /* Spacing scale. Panels were laid out on ad-hoc 4/6/10px values and read
+     cramped; these give the surfaces room without each screen choosing its
+     own numbers. */
+  --ds-space: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-5: 22px;
+  --ds-ease: cubic-bezier(0.32, 0.72, 0.24, 1);
+  --ds-dur: 0.22s;
+
+  /* ── Edge ring ────────────────────────────────────────────────────── */
+  --ds-edge-w: 1.2px;
+  /* Softened from .46/.24. The top edge must stay the darkest part of the
+     ring — that orientation is what makes the shell read as glass — but the
+     original value was tuned on an 80px pill. The same alpha drawn across a
+     300px-wide button reads as a hard rule, because the eye weighs a line by
+     its length as well as its density. */
+  --ds-edge-top: rgba(142, 151, 170, 0.32);
+  --ds-edge-top2: rgba(170, 179, 196, 0.15);
+  --ds-edge-bot2: rgba(255, 255, 255, 0.70);
+  --ds-edge-bot: rgba(255, 255, 255, 1);
+  /* Overridden per variant; this is the achromatic default. */
+  --ds-edge-side: rgba(190, 204, 224, 0.40);
+
+  /* ── Shell shading ────────────────────────────────────────────────
+     Inner pair, FLIPPED from the pre-shell recipe (which put white on top
+     and dark underneath, i.e. an opaque object). Getting this orientation
+     right is what makes the language read as glass; no amount of extra edge
+     layers fixes it while the orientation is wrong. */
+  --ds-inner:
+    inset 0 1.5px 1.5px rgba(118, 130, 154, 0.10),
+    inset 0 -2px 2px rgba(255, 255, 255, 0.95);
+  /* Sunken: same light source, top shadow pushed harder, nothing cast out. */
+  --ds-inner-sunken:
+    inset 0 2px 3px rgba(118, 130, 154, 0.15),
+    inset 0 -1.5px 1px rgba(255, 255, 255, 0.90);
+
+  --ds-lift:
+    0 1px 2px rgba(40, 48, 80, 0.05),
+    0 4px 14px rgba(40, 48, 80, 0.07),
+    0 16px 36px rgba(40, 48, 80, 0.05);
+  --ds-lift-raised:
+    0 2px 4px rgba(40, 48, 80, 0.06),
+    0 16px 36px rgba(40, 48, 80, 0.14),
+    0 36px 72px rgba(40, 48, 80, 0.10);
+  --ds-lift-dialog:
+    0 4px 12px rgba(40, 48, 80, 0.10),
+    0 32px 80px rgba(40, 48, 80, 0.20);
+
+  /* Text fill and engraving hue, per variant. */
+  --ds-fg: var(--ds-text);
+  --ds-cut-rgb: 96, 104, 120;
+
+  /* Modal scrim. A dialog dims and blurs what it covers; both values are
+     part of the language, not a per-dialog choice. */
+  --ds-scrim: rgba(45, 49, 66, 0.28);
+  --ds-scrim-blur: blur(14px) saturate(140%);
+
+  --ds-backdrop: blur(10px) saturate(120%);
+  --ds-backdrop-scene: blur(14px) saturate(175%);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Variant palettes
+   Setting these three properties is all a variant is. Anything that composes
+   a surface picks them up, so a new component needs no per-variant CSS.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-v-plain      { --ds-edge-side: rgba(190, 204, 224, 0.40); --ds-fg: var(--ds-text); --ds-cut-rgb: 96, 104, 120; --ds-fill: none; --ds-glow: var(--ds-lift); }
+.ds-v-neutral    { --ds-edge-side: rgba(190, 204, 224, 0.34); --ds-fg: var(--ds-text); --ds-cut-rgb: 96, 104, 120; --ds-fill: none; --ds-glow: var(--ds-lift); }
+.ds-v-accent     { --ds-edge-side: rgba(112, 180, 222, 0.56); --ds-fg: #357fb2; --ds-cut-rgb: 40, 96, 140;
+                   --ds-fill: linear-gradient(180deg, #ecf6fc 0%, #c8e1f1 100%);
+                   --ds-glow: 0 1px 2px rgba(61,142,197,.06), 0 4px 12px rgba(130,200,235,.24), 0 12px 28px rgba(130,200,235,.14); }
+.ds-v-success    { --ds-edge-side: rgba(150, 192, 112, 0.50); --ds-fg: #5c8c3e; --ds-cut-rgb: 74, 110, 52;
+                   --ds-fill: linear-gradient(180deg, #f2f7e2 0%, #dceac0 100%);
+                   --ds-glow: 0 1px 2px rgba(106,157,74,.06), 0 4px 12px rgba(180,220,130,.22), 0 12px 28px rgba(180,220,130,.14); }
+.ds-v-processing { --ds-edge-side: rgba(148, 142, 222, 0.54); --ds-fg: #6259bd; --ds-cut-rgb: 74, 68, 150;
+                   --ds-fill: linear-gradient(180deg, #ece9f7 0%, #d2cde9 100%);
+                   --ds-glow: 0 1px 2px rgba(110,106,208,.08), 0 6px 16px rgba(170,160,228,.30), 0 16px 36px rgba(170,160,228,.18); }
+.ds-v-warn       { --ds-edge-side: rgba(206, 166, 100, 0.50); --ds-fg: #966f30; --ds-cut-rgb: 122, 90, 40;
+                   --ds-fill: linear-gradient(180deg, #f7ede0 0%, #ecdcc0 100%);
+                   --ds-glow: 0 1px 2px rgba(160,122,62,.06), 0 4px 12px rgba(226,196,146,.26), 0 12px 28px rgba(226,196,146,.15); }
+.ds-v-danger     { --ds-edge-side: rgba(212, 124, 124, 0.50); --ds-fg: #a94b4b; --ds-cut-rgb: 140, 60, 60;
+                   --ds-fill: linear-gradient(180deg, #f5e4e4 0%, #e8c8c8 100%);
+                   --ds-glow: 0 1px 2px rgba(184,84,84,.06), 0 4px 12px rgba(226,164,164,.26), 0 12px 28px rgba(226,164,164,.15); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   The shell surface
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-surface {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  /* Zero, not `--ds-edge-w`: the ring is drawn inside the padding box. A real
+     border would push it outside, and `.ds-card` clips with `overflow:hidden`
+     — which clips to the padding box and would erase the ring entirely. */
+  border: 0 solid transparent;
+  background-color: transparent;
+  background-image: var(--ds-fill, none);
+  box-shadow: var(--ds-inner), var(--ds-glow, var(--ds-lift));
+  color: var(--ds-fg);
+  font-family: var(--ds-font);
+  /* Engraved text: a groove lit from above has its upper wall in shadow and
+     its lower wall catching light — the same light source as the ring. */
+  text-shadow:
+    0 -0.45px 0.45px rgba(var(--ds-cut-rgb), 0.19),
+    0 0.9px 0.5px rgba(255, 255, 255, 0.97);
+  transition:
+    box-shadow var(--ds-dur) var(--ds-ease),
+    transform var(--ds-dur) var(--ds-ease),
+    filter var(--ds-dur) var(--ds-ease),
+    color var(--ds-dur) var(--ds-ease);
+}
+
+/* The ring itself. A gradient cannot be a border, so it is a filled rounded
+   rect with its interior masked out. */
+.ds-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--ds-edge-w);
+  /* The top and bottom bands are FIXED LENGTHS, the middle stays relative.
+     With every stop as a percentage the dark band scaled with the element:
+     16% is 3.8px on a 24px tag and 32px on a 200px block, so the same
+     declaration produced a visibly different edge on every surface — which is
+     what "the shadow thickness differs" was. Anchoring the two ends in px
+     keeps the shading identical everywhere, while leaving the side colour on
+     percentages so it still lands on the left/right caps whatever the height. */
+  background: linear-gradient(
+    180deg,
+    var(--ds-edge-top) 0,
+    var(--ds-edge-top2) 5px,
+    var(--ds-edge-side) 42%,
+    var(--ds-edge-side) 58%,
+    var(--ds-edge-bot2) calc(100% - 4px),
+    var(--ds-edge-bot) 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Opt-in fills. Achromatic surfaces are transparent by default — on the app
+   canvas a shell genuinely takes the colour behind it. Containers that sit
+   OVER content (dialogs, side panels, overlays on the 3D view) must opt back
+   in, or their own text ends up on top of whatever is underneath. */
+.ds-fill-surface { --ds-fill: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%); }
+.ds-fill-neutral { --ds-fill: linear-gradient(180deg, #fcfcfc 0%, #f1f1f1 100%); }
+
+/* Translucent accent for surfaces over the 3D view: the opaque blue reads as
+   a solid board once there is real content behind it. */
+.ds-on-scene.ds-v-accent {
+  --ds-fill: linear-gradient(180deg, rgba(226, 243, 253, 0.46) 0%, rgba(150, 205, 238, 0.60) 100%);
+  -webkit-backdrop-filter: var(--ds-backdrop-scene);
+          backdrop-filter: var(--ds-backdrop-scene);
+}
+
+/* ── Migration bridge ──────────────────────────────────────────────────
+   Screens still on the previous opt-in pair — `shellSurface()` in the style
+   object, which sets `--edge-grad` / `--edge-w`, plus this class to draw them
+   — keep rendering correctly until they are moved onto `.ds-surface`.
+   Without it they lose their edge the moment the old rule is deleted, which
+   is a worse state than before the rewrite started.
+
+   DELETE THIS BLOCK once `grep -r glass-edge src/` comes back empty. */
+.glass-edge { position: relative; isolation: isolate; }
+.glass-edge::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--edge-w, 1.2px);
+  background: var(--edge-grad);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Pill button
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 18px;
+  min-height: var(--ds-control-h);
+  border-radius: var(--ds-r-pill);
+  font-size: var(--ds-fs-md);
+  font-weight: var(--ds-fw);
+  letter-spacing: var(--ds-tracking);
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  outline: none;
+}
+.ds-pill:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.02); }
+
+/* ── One hover rule for every interactive surface ─────────────────────
+   Previously only `.ds-pill` and hoverable cards lifted, so anything built
+   from `surfaceClass()` alone — panel headers, chips, custom controls — sat
+   dead under the pointer while its neighbours moved. Keying off the element
+   being genuinely interactive (a button, a link, an explicit role) rather
+   off which class someone remembered means new surfaces are covered by
+   default instead of needing to be added to a list. */
+button.ds-surface:not(:disabled):hover,
+a.ds-surface:hover,
+label.ds-surface:hover,
+[role='button'].ds-surface:hover,
+[role='tab'].ds-surface:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.02);
+}
+button.ds-surface:not(:disabled):active,
+a.ds-surface:active,
+label.ds-surface:active,
+[role='button'].ds-surface:active,
+[role='tab'].ds-surface:active {
+  transform: scale(0.975);
+  filter: brightness(0.985);
+}
+/* Non-interactive surfaces (tags, badges used as status) stay put — a hover
+   response on something you cannot click is a false affordance. */
+span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform: none; }
+
+/* ── Carried (press-and-hold) ─────────────────────────────────────────
+   Set by `ui/glass-drag.ts` while a surface is being held. It reads as
+   lifted clear of the canvas: the drop stack deepens and the material
+   brightens slightly, as glass does when it comes away from a surface.
+   `transform` is driven inline from the pointer, so it is not declared here;
+   the transition it springs back on comes from `.ds-surface`. */
+.ds-surface[data-ds-carrying] {
+  box-shadow:
+    var(--ds-inner),
+    0 6px 12px rgba(40, 48, 80, 0.10),
+    0 22px 44px rgba(40, 48, 80, 0.18),
+    0 48px 88px rgba(40, 48, 80, 0.12);
+  filter: brightness(1.03) saturate(1.04);
+  cursor: grabbing;
+  z-index: 20;
+}
+/* Suppress the hover lift while carrying — the two transforms would fight
+   and the surface would jump by 1px as the pointer crossed its own edge. */
+.ds-surface[data-ds-carrying]:hover { transform: none; }
+
+/* Reduced motion shortens transitions; it does NOT cancel direct manipulation.
+   `transform: none !important` here meant the carried surface refused to
+   follow the pointer at all on any machine with Windows' animation effects
+   switched off — the gesture looked broken rather than calm. What the setting
+   asks for is less incidental movement, not the loss of a control that only
+   moves because the user is moving it. */
+@media (prefers-reduced-motion: reduce) {
+  .ds-surface[data-ds-carrying] { box-shadow: var(--ds-inner), var(--ds-lift-raised); }
+}
+/* Press is a symmetric shrink, not a downward nudge: the bottom rim is the
+   lit one, so pushing the surface down implies the light moved. */
+.ds-pill:active:not(:disabled) { transform: scale(0.975); filter: brightness(0.985); }
+.ds-pill:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.ds-pill--sm { padding: 0 15px; min-height: var(--ds-control-h-sm); font-size: var(--ds-fs-sm); gap: 6px; }
+.ds-pill--lg { padding: 0 26px; min-height: 46px; font-size: var(--ds-fs-lg); }
+/* Icon buttons come in three sizes because the panels genuinely need them:
+   36 for standalone controls, 29 alongside a title, 24 inside a dense row.
+   LeftPanel had eight separate recipes covering the same three sizes. */
+.ds-pill--icon { padding: 0; width: 36px; height: 36px; }
+.ds-pill--icon.ds-pill--sm { width: 29px; height: 29px; }
+.ds-pill--icon.ds-pill--xs { width: 24px; height: 24px; }
+.ds-pill--xs { padding: 0 11px; min-height: 24px; font-size: var(--ds-fs-xs); gap: 5px; }
+.ds-pill--xs .ds-icon { width: 11px; height: 11px; }
+/* `flex: 1`, not `width: 100%`. These are used two-to-a-row to share the
+   width; at 100% each the second one is pushed out of the card entirely. */
+.ds-pill--block { flex: 1; min-width: 0; width: auto; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Card / panel
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-card { border-radius: var(--ds-r-card); overflow: hidden; }
+.ds-card--hoverable { cursor: pointer; }
+/* Only the outer drop stack lifts; the inner pair stays put. Changing it
+   would read as the light source moving rather than the card rising. */
+.ds-card--hoverable:hover { transform: translateY(-2px); box-shadow: var(--ds-inner), var(--ds-lift-raised); }
+
+/* Card interior rhythm. Lives here rather than inline at the call site: it is
+   part of what a card IS, not layout the screen chose, so every card gets the
+   same spacing without each one restating it. */
+.ds-card__media { display: block; width: 100%; position: relative; overflow: hidden; }
+/* Column, so the meta row can be pushed to the bottom with `margin-top:auto`
+   regardless of how much (or little) text sits above it. */
+.ds-card__body { flex: 1; display: flex; flex-direction: column; padding: var(--ds-space-3) var(--ds-space-4) var(--ds-space); }
+.ds-card__body > * + * { margin-top: 6px; }
+/* Tags: bottom-right, sitting directly on top of the action row. `auto`
+   absorbs the slack, so cards with and without a subtitle still line their
+   tags up with each other across the grid. */
+.ds-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 8px;
+}
+.ds-card__actions { display: flex; gap: var(--ds-space-2); padding: var(--ds-space-3) var(--ds-space-4) var(--ds-space-4); }
+
+.ds-panel { border-radius: var(--ds-r-md); padding: var(--ds-space-4) calc(var(--ds-space-4) + 2px); }
+.ds-dialog { border-radius: var(--ds-r-lg); box-shadow: var(--ds-inner), var(--ds-lift-dialog); }
+
+.ds-blur { -webkit-backdrop-filter: var(--ds-backdrop); backdrop-filter: var(--ds-backdrop); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Sidebar block
+   ─────────────────────────────────────────────────────────────────────────
+   A titled group inside a side panel. Added before touching LeftPanel
+   because that file re-derives this shape three times (`sidebarBlock`,
+   `sidebarMapBlock`, `overviewWrap`) — the sort of near-duplicate that drifts
+   apart the moment one of them is edited.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-block { border-radius: var(--ds-r-md); padding: var(--ds-space-4) var(--ds-space-4) calc(var(--ds-space-4) + 2px); }
+.ds-block__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ds-block__title {
+  font-size: var(--ds-fs-md);
+  font-weight: var(--ds-fw);
+  letter-spacing: var(--ds-tracking);
+  color: var(--ds-text);
+}
+/* Collapsed handle — the block reduced to a bar you can reopen. */
+.ds-block--closed { padding: 8px 12px; cursor: pointer; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Collapsible section — the editor panel's unit of grouping
+   ─────────────────────────────────────────────────────────────────────────
+   The body was padded 10px, written inline at the call site and below every
+   step on the spacing scale. That is what "the button is touching the frame"
+   was: a pill has a 999px radius sitting inside a 16px-radius frame, so along
+   the bottom corners the two curves converge and 10px of straight-line
+   clearance reads as none at all. Measured, every section in the panel was
+   10/10/10/10 — the complaint was about one of them only because that is the
+   one with a full-width pill as its last child. Padding on the scale gives
+   back the clearance the corner geometry eats.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-section { border-radius: var(--ds-r-md); overflow: hidden; flex-shrink: 0; }
+.ds-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px var(--ds-space-4);
+  background-image: linear-gradient(180deg, #fcfcfc 0%, #f1f1f1 100%);
+  border-bottom: 1px solid var(--ds-hairline);
+}
+.ds-section__toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ds-text);
+  font-family: var(--ds-font);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+.ds-section__chevron {
+  display: inline-block;
+  width: 10px;
+  text-align: center;
+  font-size: var(--ds-fs-xs);
+  color: var(--ds-text-mute);
+  transition: transform 0.15s var(--ds-ease);
+}
+.ds-section__title {
+  font-size: var(--ds-fs-md);
+  font-weight: var(--ds-fw);
+  letter-spacing: var(--ds-tracking);
+  color: var(--ds-text);
+}
+.ds-section__sub {
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-fs-xs);
+  font-weight: var(--ds-fw);
+  letter-spacing: var(--ds-tracking-label);
+  text-transform: uppercase;
+  color: #357fb2;
+}
+.ds-section__body { padding: var(--ds-space-4); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Chip — a small pill that toggles
+   ─────────────────────────────────────────────────────────────────────────
+   Distinct from `.ds-tag`: a tag reports state, a chip changes it. LeftPanel
+   had two independent versions (`chipBtn` and `colorChip`) whose only real
+   difference was a swatch, so they are one component with a modifier.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: var(--ds-r-pill);
+  font-size: var(--ds-fs-sm);
+  font-weight: var(--ds-fw);
+  letter-spacing: var(--ds-tracking);
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+}
+.ds-chip__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: var(--ds-inner);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Tile — a selectable thumbnail (viewpoints, plans, AI variants)
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--ds-r-sm);
+  cursor: pointer;
+  outline: none;
+  text-align: center;
+}
+.ds-tile__thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: calc(var(--ds-r-sm) - 4px);
+  overflow: hidden;
+  background: var(--ds-surface-soft);
+  box-shadow: var(--ds-inner-sunken);
+}
+.ds-tile__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ds-tile__label {
+  font-size: var(--ds-fs-xs);
+  font-weight: var(--ds-fw);
+  color: var(--ds-text-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-tile[data-active='true'] .ds-tile__label { color: var(--ds-fg); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Tag / badge
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* Tag height is set by padding + line-height, and both were short of the
+     spec's 24px cap — a tag that reads as a slot rather than a pill. */
+  padding: 4.5px 11px;
+  line-height: 1.4;
+  border-radius: var(--ds-r-pill);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-fs-xs);
+  font-weight: var(--ds-fw);
+  letter-spacing: var(--ds-tracking-label);
+  /* Small enough that the full drop stack reads as smudge — keep the shell's
+     inner orientation, drop the outer. */
+  box-shadow: var(--ds-inner);
+}
+
+.ds-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ds-badge--sm { width: 32px; height: 32px; }
+.ds-badge--lg { width: 60px; height: 60px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Segmented control
+   The active shell is ONE element that slides. Styling the active button
+   directly makes switching an instant swap, and the control then reads as
+   separate buttons rather than one with a moving selection.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-seg {
+  position: relative;
+  /* Hugs its labels. Stretched to full width the active segment becomes a
+     half-panel slab and stops reading as a pill at all. */
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 5px;
+  border-radius: var(--ds-r-pill);
+}
+.ds-seg__ind {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  border-radius: var(--ds-r-pill);
+  pointer-events: none;
+  z-index: 0;
+  transition:
+    transform 0.34s var(--ds-ease),
+    width 0.34s var(--ds-ease),
+    box-shadow var(--ds-dur) var(--ds-ease);
+}
+.ds-seg__btn {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  min-height: var(--ds-control-h);
+  border: 0 solid transparent;
+  border-radius: var(--ds-r-pill);
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: var(--ds-text-mute);
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-md);
+  font-weight: var(--ds-fw);
+  letter-spacing: var(--ds-tracking);
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  text-align: left;
+  transition: color 0.28s var(--ds-ease), text-shadow 0.28s var(--ds-ease);
+}
+.ds-seg__btn[data-active='true'] {
+  color: #357fb2;
+  text-shadow:
+    0 -0.45px 0.45px rgba(40, 96, 140, 0.19),
+    0 0.9px 0.5px rgba(255, 255, 255, 0.97);
+}
+.ds-seg__btn:disabled { opacity: 0.42; cursor: not-allowed; }
+/* Two-line variant (title + sub).
+   Centred, not left-aligned. The segment's width is set by whichever of the
+   two lines is longer — almost always the sub — so left-aligning leaves the
+   title stranded against one edge with up to 50px of empty space beside it,
+   and the two lines stop reading as one label. Centring ties them together
+   whatever their relative widths. */
+/* Two lines, but the SAME height as one. Letting the line count decide the
+   height meant a one-line and a two-line control stacked in the same panel
+   came out visibly different sizes. */
+.ds-seg__btn--stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 1px;
+  padding: 4px 16px;
+  min-height: var(--ds-control-h);
+}
+.ds-seg__title { font-size: var(--ds-fs-lg); font-weight: var(--ds-fw); letter-spacing: var(--ds-tracking); }
+.ds-seg__sub { font-size: var(--ds-fs-xs); font-weight: var(--ds-fw); color: var(--ds-text-faint); }
+.ds-seg__btn[data-active='true'] .ds-seg__sub { color: var(--ds-text-mute); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Form controls
+   These carry ELEMENT-level defaults, not just class-level. A native input,
+   select or textarea keeps OS chrome until its appearance is taken over, so
+   an unclassed one is always visibly wrong — unlike a div, which is merely
+   unstyled. Defaulting them means new markup lands in the language instead of
+   silently falling out of it.
+   ══════════════════════════════════════════════════════════════════════════ */
+input:not([type='range']):not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']),
+select,
+textarea,
+.ds-input,
+.ds-select,
+.ds-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 11px 16px;
+  border: 0 solid transparent;
+  border-radius: var(--ds-r-pill);
+  background-color: transparent;
+  background-image: linear-gradient(180deg, #ededed 0%, #f4f4f4 100%);
+  box-shadow: var(--ds-inner-sunken);
+  color: var(--ds-text);
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-lg);
+  font-weight: var(--ds-fw);
+  outline: none;
+  transition: box-shadow var(--ds-dur) var(--ds-ease);
+}
+input::placeholder, textarea::placeholder { color: var(--ds-text-faint); }
+
+input:not([type='range']):not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']):focus,
+select:focus,
+textarea:focus {
+  box-shadow: var(--ds-inner-sunken), 0 0 0 3px rgba(112, 180, 222, 0.30);
+}
+
+textarea, .ds-textarea { border-radius: var(--ds-r-md); resize: vertical; line-height: 1.6; }
+
+/* `appearance: none` removes the built-in chevron along with the OS chrome,
+   so it is redrawn as a background image. */
+select, .ds-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236e7076' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #ededed 0%, #f4f4f4 100%);
+  background-repeat: no-repeat, no-repeat;
+  background-position: right 12px center, 0 0;
+}
+
+/* ── Checkbox / radio ──────────────────────────────────────────────────
+   `accent-color` was the whole of this before: it recolours the OS control
+   but leaves its shape, its size and its shadowless flat fill alone, so the
+   one square on a panel of pills stayed a Windows checkbox wearing the app's
+   blue. Taken over properly it is the same object as everything else — sunken
+   while empty, an accent shell once filled, lit from the same direction.
+
+   Element-level, not a class: an unstyled checkbox is visibly wrong rather
+   than merely unstyled, so new markup should land in the language by default. */
+input[type='checkbox'], input[type='radio'] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  box-sizing: border-box;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 5.5px;
+  background-color: transparent;
+  background-image: linear-gradient(180deg, #ededed 0%, #f4f4f4 100%);
+  box-shadow: var(--ds-inner-sunken);
+  cursor: pointer;
+  transition:
+    background-image var(--ds-dur) var(--ds-ease),
+    box-shadow var(--ds-dur) var(--ds-ease);
+}
+input[type='radio'] { border-radius: 50%; }
+
+/* Filled: the box stops being a hole and becomes an accent surface — the
+   inner pair flips to the raised orientation and it picks up the accent glow,
+   exactly as an accent pill does. */
+input[type='checkbox']:checked, input[type='radio']:checked {
+  background-image: linear-gradient(180deg, #ecf6fc 0%, #c8e1f1 100%);
+  box-shadow:
+    var(--ds-inner),
+    0 1px 2px rgba(61, 142, 197, 0.12),
+    0 3px 8px rgba(130, 200, 235, 0.30);
+}
+
+/* The mark. Drawn from two borders rather than a glyph so its weight tracks
+   `--ds-icon`-style hairlines instead of whatever the fallback font decides,
+   and engraved with the same light source as the icons. */
+input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  left: 5.5px;
+  top: 2.5px;
+  width: 4px;
+  height: 8px;
+  border: solid #357fb2;
+  border-width: 0 1.6px 1.6px 0;
+  border-radius: 0 0 1px 0;
+  transform: rotate(43deg) scale(0.55);
+  opacity: 0;
+  filter: drop-shadow(0 0.85px 0.45px rgba(255, 255, 255, 0.95));
+  transition: opacity 0.14s var(--ds-ease), transform 0.2s var(--ds-ease);
+}
+input[type='checkbox']:checked::after { opacity: 1; transform: rotate(43deg) scale(1); }
+
+input[type='radio']::after {
+  content: '';
+  position: absolute;
+  inset: 4.5px;
+  border-radius: 50%;
+  background: #357fb2;
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity 0.14s var(--ds-ease), transform 0.2s var(--ds-ease);
+}
+input[type='radio']:checked::after { opacity: 1; transform: scale(1); }
+
+input[type='checkbox']:focus-visible, input[type='radio']:focus-visible {
+  box-shadow: var(--ds-inner-sunken), 0 0 0 3px rgba(112, 180, 222, 0.30);
+}
+input[type='checkbox']:disabled, input[type='radio']:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+/* The label a checkbox sits in. Screens were writing the row's font size and
+   colour inline at each call site, which is how two adjacent toggle rows ended
+   up at different sizes. */
+.ds-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-md);
+  font-weight: var(--ds-fw);
+  letter-spacing: var(--ds-tracking);
+  color: var(--ds-text);
+  cursor: pointer;
+}
+.ds-check[data-disabled='true'] { color: var(--ds-text-faint); cursor: not-allowed; }
+
+/* A native colour well renders as a recessed OS box — the one control on the
+   panel still showing platform chrome. Give it the shell and let the swatch
+   fill it. */
+input[type='color'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 46px;
+  height: var(--ds-control-h-sm);
+  padding: 3px;
+  border: 0;
+  border-radius: var(--ds-r-pill);
+  background-color: transparent;
+  background-image: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
+  box-shadow: var(--ds-inner), var(--ds-lift);
+  cursor: pointer;
+}
+input[type='color']::-webkit-color-swatch-wrapper { padding: 0; }
+input[type='color']::-webkit-color-swatch {
+  border: 0;
+  border-radius: var(--ds-r-pill);
+  box-shadow: var(--ds-inner-sunken);
+}
+
+/* ── Range slider ──────────────────────────────────────────────────────
+   Track and thumb are shadow-DOM pseudo-elements and unreachable from inline
+   style, which is why sliders survived every earlier pass untouched.
+   `--ds-range-p` is kept in step with the value by `ui/range-fill.ts`: a
+   native range has no filled region, and `accent-color` (which would give one)
+   stops applying once the appearance is taken over. */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: var(--ds-r-pill);
+  background-image:
+    linear-gradient(180deg, rgba(220, 240, 252, 0.98) 0%, rgba(150, 205, 238, 0.98) 100%),
+    linear-gradient(180deg, #ececec 0%, #f3f3f3 100%);
+  background-size: var(--ds-range-p, 0%) 100%, 100% 100%;
+  background-repeat: no-repeat;
+  box-shadow: var(--ds-inner-sunken);
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  /* Re-centres a 20px thumb on a 10px track. */
+  margin-top: -5px;
+  /* ONE bead, not a dot inside a disc. Tinting the whole thumb with the
+     accent fill makes it visible against a pale track without introducing a
+     second concentric edge — two rings read as two objects. Same top-down
+     gradient as every other accent surface. */
+  background-image: linear-gradient(180deg, #ecf6fc 0%, #c8e1f1 100%);
+  /* Accent glow, not the neutral drop — a blue bead casting a grey shadow
+     reads as two unrelated things. */
+  box-shadow: var(--ds-inner), 0 1px 2px rgba(61, 142, 197, 0.14), 0 4px 10px rgba(130, 200, 235, 0.34);
+  transition: box-shadow var(--ds-dur) var(--ds-ease);
+}
+input[type='range']:hover::-webkit-slider-thumb {
+  box-shadow: var(--ds-inner), 0 1px 2px rgba(61, 142, 197, 0.16), 0 6px 18px rgba(130, 200, 235, 0.46);
+}
+input[type='range']::-moz-range-track {
+  height: 10px; border-radius: var(--ds-r-pill);
+  background-image: linear-gradient(180deg, #ececec 0%, #f3f3f3 100%);
+  box-shadow: var(--ds-inner-sunken);
+}
+input[type='range']::-moz-range-progress {
+  height: 10px; border-radius: var(--ds-r-pill);
+  background-image: linear-gradient(180deg, rgba(220, 240, 252, 0.98) 0%, rgba(150, 205, 238, 0.98) 100%);
+}
+input[type='range']::-moz-range-thumb {
+  width: 20px; height: 20px; border: none; border-radius: 50%;
+  background-image: linear-gradient(180deg, #ecf6fc 0%, #c8e1f1 100%);
+  box-shadow: var(--ds-inner), 0 4px 10px rgba(130, 200, 235, 0.34);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Typography & icons
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-title { font-size: var(--ds-fs-lg); font-weight: var(--ds-fw); letter-spacing: var(--ds-tracking); color: var(--ds-text); }
+.ds-sub { font-size: var(--ds-fs-sm); font-weight: var(--ds-fw); color: var(--ds-text-mute); }
+.ds-label {
+  font-size: var(--ds-fs-xs);
+  font-weight: var(--ds-fw);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ds-text-faint);
+}
+.ds-required { color: #966f30; }
+.ds-mono { font-family: var(--ds-font-mono); font-size: var(--ds-fs-sm); letter-spacing: 0.3px; }
+
+/* Stroke follows the text weight — 2px next to 400-weight labels reads as
+   though the icons are bolder than what they sit beside. */
+.ds-icon {
+  width: 15px; height: 15px; flex-shrink: 0;
+  fill: none; stroke: currentColor; stroke-width: 1.35;
+  stroke-linecap: round; stroke-linejoin: round;
+  filter:
+    drop-shadow(0 -0.35px 0.3px rgba(var(--ds-cut-rgb), 0.16))
+    drop-shadow(0 0.85px 0.45px rgba(255, 255, 255, 0.95));
+}
+.ds-pill .ds-icon { width: 13px; height: 13px; }
+.ds-pill--sm .ds-icon { width: 11.5px; height: 11.5px; }
+.ds-badge .ds-icon { width: 18px; height: 18px; }
+.ds-badge--sm .ds-icon { width: 14px; height: 14px; }
+.ds-badge--lg .ds-icon { width: 25px; height: 25px; }
+
+.ds-divider { background: var(--ds-hairline); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Touch / mobile
+   ─────────────────────────────────────────────────────────────────────────
+   Handled here rather than per screen for the same reason as everything else:
+   a phone rule written into one screen is a rule the next screen forgets.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Coarse pointer = finger. Not a width query: a small window on a desktop
+   still has a mouse, and a large tablet still has a finger. */
+@media (pointer: coarse) {
+  /* 44px is the smallest reliably hittable target; the desktop sizes are
+     tuned for a cursor and are too small to land on with a thumb. */
+  .ds-pill { padding: 12px 20px; min-height: 44px; }
+  .ds-pill--sm { padding: 9px 16px; min-height: 38px; }
+  .ds-pill--icon { width: 44px; height: 44px; }
+  .ds-pill--icon.ds-pill--sm { width: 38px; height: 38px; }
+  .ds-seg__btn { padding: 12px 20px; min-height: 44px; }
+  .ds-badge { width: 44px; height: 44px; }
+
+  /* Hover does not exist on a touch screen; a `:hover` rule there sticks
+     after the tap and leaves the surface lifted until something else is
+     touched. */
+  button.ds-surface:hover, a.ds-surface:hover,
+  label.ds-surface:hover, [role='button'].ds-surface:hover,
+  .ds-pill:hover, .ds-card--hoverable:hover {
+    transform: none;
+    filter: none;
+    box-shadow: var(--ds-inner), var(--ds-glow, var(--ds-lift));
+  }
+
+  /* A 17px box is a cursor target, not a thumb target. */
+  input[type='checkbox'], input[type='radio'] { width: 22px; height: 22px; border-radius: 7px; }
+  input[type='radio'] { border-radius: 50%; }
+  input[type='checkbox']::after { left: 7.5px; top: 4px; width: 5px; height: 9.5px; }
+  input[type='radio']::after { inset: 6px; }
+
+  /* Fingers need a bigger slider thumb and a fatter track to aim at. */
+  input[type='range'] { height: 30px; }
+  input[type='range']::-webkit-slider-runnable-track { height: 14px; }
+  input[type='range']::-webkit-slider-thumb { width: 28px; height: 28px; margin-top: -7px; }
+
+  /* iOS zooms the page when a focused field is under 16px. */
+  input:not([type='range']), select, textarea { font-size: 16px; }
+}
+
+/* Narrow layout. Cards go single-column and dialogs become sheets — a 480px
+   dialog centred on a 390px screen has nowhere to go. */
+@media (max-width: 600px) {
+  .ds-card { border-radius: 18px; }
+  .ds-card__body { padding: 10px 14px 4px; }
+  .ds-card__actions { padding: 8px 12px 12px; }
+  /* The segmented control stops hugging: on a phone the row is the width
+     budget, so equal shares beat natural widths that overflow. */
+  .ds-seg { display: flex; width: 100%; }
+  .ds-seg__btn { flex: 1; justify-content: center; text-align: center; }
+  .ds-seg__btn--stacked { align-items: center; }
+  .ds-dialog { border-radius: 22px; }
+}
+
+/* Notch and home-indicator clearance. `env()` resolves to 0 where there is no
+   inset, so these are safe on every device. */
+.ds-safe-top { padding-top: max(env(safe-area-inset-top), 0px); }
+.ds-safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+.ds-safe-x {
+  padding-left: max(env(safe-area-inset-left), 0px);
+  padding-right: max(env(safe-area-inset-right), 0px);
+}
+
+/* Shorten, don't remove. At 0.001ms every state change became a hard cut,
+   including the segmented indicator, which then read as a bug rather than as
+   a preference being respected. 90ms is short enough to feel instant and long
+   enough to stay legible. */
+@media (prefers-reduced-motion: reduce) {
+  .ds-surface, .ds-seg__ind, .ds-seg__btn { transition-duration: 90ms; }
+}

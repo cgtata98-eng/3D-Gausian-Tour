@@ -49,8 +49,8 @@ const spinner: React.CSSProperties = {
 
 const label: React.CSSProperties = {
   marginTop: 18,
-  fontSize: 13,
-  fontWeight: 600,
+  fontSize: 11.5,
+  fontWeight: tokens.font.weight.strong,
   letterSpacing: 0.5,
   color: tokens.color.textMute,
   fontFamily: tokens.font.family,
@@ -61,7 +61,7 @@ const barTrack: React.CSSProperties = {
   marginTop: 12,
   width: 200,
   height: 4,
-  background: tokens.color.border,
+  background: tokens.color.hairline,
   borderRadius: 2,
   overflow: 'hidden',
 };

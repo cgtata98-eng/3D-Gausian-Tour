@@ -258,7 +258,7 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
           const guide = (y: number, color: string, label: string, kind: 'floor' | 'top') => (
             <g key={kind} style={{ pointerEvents: 'auto', cursor: 'ns-resize' }} onPointerDown={startLineDrag(kind)}>
               <line x1={0} y1={y} x2={9999} y2={y} stroke="transparent" strokeWidth={18} />
-              <line x1={0} y1={y} x2={9999} y2={y} stroke={color} strokeWidth={2.5} strokeDasharray="10 6" />
+              <line x1={0} y1={y} x2={9999} y2={y} stroke={color} strokeWidth={1.35} strokeDasharray="10 6" />
               <text x={14} y={y - 8} fontSize={12} fontWeight={700} fill={color}
                 stroke="rgba(255,255,255,0.9)" strokeWidth={3} paintOrder="stroke">{label}</text>
             </g>
@@ -272,16 +272,16 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
         })()}
         {view === 'top' && projPoly.length >= 2 && (
           <polygon points={projPoly.map((p) => `${p.x},${p.y}`).join(' ')}
-            fill="rgba(34,197,94,0.15)" stroke="rgba(34,197,94,0.95)" strokeWidth={2} />
+            fill="rgba(34,197,94,0.15)" stroke="rgba(34,197,94,0.95)" strokeWidth={1.35} />
         )}
         {view === 'top' && projPoly.map((p, i) => (
           <circle key={`fp-${i}`} cx={p.x} cy={p.y} r={5}
-            fill={i === 0 ? '#16a34a' : 'rgba(34,197,94,0.95)'} stroke="#fff" strokeWidth={1.5} />
+            fill={i === 0 ? '#16a34a' : 'rgba(34,197,94,0.95)'} stroke="#fff" strokeWidth={1.35} />
         ))}
         {view === 'top' && mode === 'floor' && projPoly.length > 0 && projCursor && (
           <line x1={projPoly[projPoly.length - 1].x} y1={projPoly[projPoly.length - 1].y}
             x2={projCursor.x} y2={projCursor.y}
-            stroke="rgba(34,197,94,0.6)" strokeWidth={1.5} strokeDasharray="5 4" />
+            stroke="rgba(34,197,94,0.6)" strokeWidth={1.35} strokeDasharray="5 4" />
         )}
         {view === 'top' && projSegs.map((s) => (
           <line key={`w-${s.i}`} x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y}
@@ -289,10 +289,10 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
         ))}
         {view === 'top' && mode === 'wall' && projPending && (
           <>
-            <circle cx={projPending.x} cy={projPending.y} r={5} fill="#ef4444" stroke="#fff" strokeWidth={1.5} />
+            <circle cx={projPending.x} cy={projPending.y} r={5} fill="#ef4444" stroke="#fff" strokeWidth={1.35} />
             {projCursor && (
               <line x1={projPending.x} y1={projPending.y} x2={projCursor.x} y2={projCursor.y}
-                stroke="rgba(239,68,68,0.6)" strokeWidth={2.5} strokeDasharray="5 4" />
+                stroke="rgba(239,68,68,0.6)" strokeWidth={1.35} strokeDasharray="5 4" />
             )}
           </>
         )}
@@ -316,7 +316,7 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
             title={v === 'top' ? '平面図ビュー（壁・床を描く）' : '立面ビュー（床Y と壁の高さをドラッグで合わせる）'}
             style={{ ...ST.modeBtn, ...(view === v ? ST.modeBtnActive : null) }}>{label}</button>
         ))}
-        <span style={{ width: 1, alignSelf: 'stretch', background: tokens.color.border }} />
+        <span style={{ width: 1, alignSelf: 'stretch', background: tokens.color.hairline }} />
         {view === 'top' && ([['wall', '壁'], ['floor', '床外周'], ['erase', '消す']] as [EditMode, string][]).map(([m, label]) => (
           <button key={m} type="button" onClick={() => { setMode(m); setPending(null); }}
             style={{ ...ST.modeBtn, ...(mode === m ? ST.modeBtnActive : null) }}>{label}</button>
@@ -385,16 +385,16 @@ const ST: Record<string, React.CSSProperties> = {
     borderRadius: tokens.radius.pill,
     boxShadow: tokens.shadow.glass,
     fontFamily: tokens.font.family,
-    fontSize: 11.5,
+    fontSize: 10.5,
     color: tokens.color.text,
     cursor: 'default',
     whiteSpace: 'nowrap',
   },
-  title: { fontWeight: 700, letterSpacing: 0.3 },
+  title: { fontWeight: tokens.font.weight.strong, letterSpacing: 0.3 },
   modeBtn: {
     padding: '4px 10px',
-    fontSize: 11.5,
-    fontWeight: 600,
+    fontSize: 10.5,
+    fontWeight: tokens.font.weight.strong,
     background: tokens.gradient.surface,
     color: tokens.color.textMute,
     border: `1px solid ${tokens.color.border}`,
@@ -408,22 +408,22 @@ const ST: Record<string, React.CSSProperties> = {
     border: `1px solid ${tokens.color.accentBorder}`,
     boxShadow: tokens.shadow.glassAccent,
   },
-  param: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: tokens.color.textMute },
+  param: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: tokens.color.textMute },
   numInput: {
     width: 58,
     padding: '2px 4px',
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontFamily: tokens.font.mono,
     border: `1px solid ${tokens.color.border}`,
     borderRadius: tokens.radius.sm,
     background: tokens.glass.surface,
     color: tokens.color.text,
   },
-  mono: { fontFamily: tokens.font.mono, fontSize: 10.5 },
+  mono: { fontFamily: tokens.font.mono, fontSize: 9.5 },
   generateBtn: {
     padding: '6px 12px',
-    fontSize: 11.5,
-    fontWeight: 700,
+    fontSize: 10.5,
+    fontWeight: tokens.font.weight.strong,
     background: tokens.gradient.accent,
     color: tokens.color.text,
     border: `1px solid ${tokens.color.accentBorder}`,
@@ -434,7 +434,7 @@ const ST: Record<string, React.CSSProperties> = {
   },
   closeBtn: {
     padding: '6px 10px',
-    fontSize: 11.5,
+    fontSize: 10.5,
     background: tokens.gradient.surface,
     color: tokens.color.textMute,
     border: `1px solid ${tokens.color.border}`,
@@ -448,7 +448,7 @@ const ST: Record<string, React.CSSProperties> = {
     left: '50%',
     transform: 'translateX(-50%)',
     padding: '5px 14px',
-    fontSize: 11,
+    fontSize: 10.5,
     color: tokens.color.text,
     background: tokens.glass.surfaceStrong,
     backdropFilter: tokens.backdrop,

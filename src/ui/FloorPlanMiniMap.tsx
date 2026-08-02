@@ -265,7 +265,7 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
           outline: 'none',
         }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z" />
           <path d="M9 3v15M15 6v15" />
         </svg>
@@ -289,7 +289,7 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
             borderRadius: tokens.radius.pill,
             color: tokens.color.text,
             cursor: 'pointer',
-            fontSize: 13,
+            fontSize: 11.5,
             lineHeight: 1,
             padding: 0,
             zIndex: 2,
@@ -313,7 +313,7 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
           const gx = PADDING + ((dW - PADDING * 2) / 4) * i, gy = PADDING + ((dH - PADDING * 2) / 4) * i;
           return <g key={i}><line x1={gx} y1={PADDING} x2={gx} y2={dH - PADDING} stroke="rgba(0,0,0,0.08)" strokeWidth={0.5} /><line x1={PADDING} y1={gy} x2={dW - PADDING} y2={gy} stroke="rgba(0,0,0,0.08)" strokeWidth={0.5} /></g>;
         })}
-        {!hasImage && <rect x={PADDING} y={PADDING} width={dW - PADDING * 2} height={dH - PADDING * 2} fill="none" stroke="rgba(0,0,0,0.2)" strokeWidth={1.5} rx={4} />}
+        {!hasImage && <rect x={PADDING} y={PADDING} width={dW - PADDING * 2} height={dH - PADDING * 2} fill="none" stroke="rgba(0,0,0,0.2)" strokeWidth={1.35} rx={4} />}
         {/* Render non-active viewpoints first so the active red pin always sits on top. */}
         {[...viewpoints].sort((a, b) => (a.id === activeVp ? 1 : 0) - (b.id === activeVp ? 1 : 0)).map(vp => {
           // Pins are display-only markers the author places on the floor plan (`mapPosition`).
@@ -360,10 +360,10 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
               )}
               {isA && (
                 /* Outer ring for the active red pin to make it pop against busy floor plan images. */
-                <circle cx={cx} cy={cy} r={pinR + 4} fill="none" stroke="rgba(239,68,68,0.45)" strokeWidth={2} />
+                <circle cx={cx} cy={cy} r={pinR + 4} fill="none" stroke="rgba(239,68,68,0.45)" strokeWidth={1.35} />
               )}
               <circle cx={cx} cy={cy} r={pinR} fill={pinFill} stroke={pinStroke} strokeWidth={isA ? 2 : 1} />
-              <text x={cx} y={cy - pinR - 4} textAnchor="middle" fill={labelFill} fontSize={fs} fontFamily="sans-serif" fontWeight={isA || isD ? 'bold' : 'normal'} stroke="rgba(0,0,0,0.6)" strokeWidth={2} paintOrder="stroke">{vp.label}</text>
+              <text x={cx} y={cy - pinR - 4} textAnchor="middle" fill={labelFill} fontSize={fs} fontFamily="sans-serif" fontWeight={isA || isD ? 'bold' : 'normal'} stroke="rgba(0,0,0,0.6)" strokeWidth={1.35} paintOrder="stroke">{vp.label}</text>
             </g>
           ) : (
             <g key={vp.id} style={{ cursor: canD ? (isD ? 'grabbing' : 'grab') : 'pointer' }}
@@ -385,7 +385,7 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
         {!editable && (
           <>
             <polygon points={`${camX},${camY} ${cL.x},${cL.y} ${tip.x},${tip.y} ${cR.x},${cR.y}`} fill="rgba(76,175,80,0.3)" stroke="rgba(76,175,80,0.7)" strokeWidth={0.8} />
-            <circle cx={camX} cy={camY} r={dW > 250 ? 6 : 4} fill="#4caf50" stroke="#fff" strokeWidth={1.5} />
+            <circle cx={camX} cy={camY} r={dW > 250 ? 6 : 4} fill="#4caf50" stroke="#fff" strokeWidth={1.35} />
           </>
         )}
       </svg>

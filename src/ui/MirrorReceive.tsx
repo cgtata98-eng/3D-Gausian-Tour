@@ -63,17 +63,17 @@ const waiting: React.CSSProperties = {
   gap: 14,
   color: '#fff',
   fontFamily: tokens.font.family,
-  fontSize: 14,
+  fontSize: 12.5,
   letterSpacing: 0.5,
 };
 const waitingTitle: React.CSSProperties = {
-  fontWeight: 600,
+  fontWeight: tokens.font.weight.strong,
 };
 const waitingSub: React.CSSProperties = {
-  fontSize: 11.5,
+  fontSize: 10.5,
   color: 'rgba(255,255,255,0.55)',
   marginTop: -6,
-  fontWeight: 500,
+  fontWeight: tokens.font.weight.medium,
 };
 const spinner: React.CSSProperties = {
   width: 36,

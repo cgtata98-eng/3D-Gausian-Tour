@@ -11,7 +11,8 @@ import { getOpenAIKey, getGeminiKey, getSelectedModelId, setSelectedModelId } fr
 import { getModelById, PROVIDERS, modelsForProvider, firstModelForProvider, type AiProvider } from '../utils/ai-models';
 import { getAuthHeader } from '../utils/auth';
 import { useMediaQuery } from '../utils/use-media-query';
-import { tokens } from './design-tokens';
+import { tokens, shellSurface } from './design-tokens';
+import { SegmentedControl, Tile, surfaceClass, IconClose, IconPlus, IconSettings, IconTrash } from './components';
 
 interface LeftPanelProps {
   onViewpointClick: (id: string) => void;
@@ -85,8 +86,8 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
     // 左/右上で「>」、右下では「<」のような感じだと意味が逆になるので、向きも合わせて反転。
     const chevronD = placement === 'left' ? 'M9 18l6-6-6-6' : 'M15 18l-6-6 6-6';
     return (
-      <button onClick={() => setSidebarCollapsed(false)} style={handleStyle} title={`${sceneName} を表示`}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <button onClick={() => setSidebarCollapsed(false)} className="glass-edge" style={handleStyle} title={`${sceneName} を表示`}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
           <path d={chevronD} />
         </svg>
       </button>
@@ -99,14 +100,14 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
       <div style={sStyles.sidebar}>
         {/* タイトル枠 — 右端に音声トグル + 拡大 + サイドバー全閉ボタン */}
         <div style={sidebarTitleBlock}>
-          <span style={sidebarTitle}>{sceneName}</span>
+          <span className="ds-title">{sceneName}</span>
           <div style={{ flex: 1 }} />
           {manifest?.audio && <AmbientAudioToggle />}
           {showPinsToggle && <PinsVisibilityToggle />}
           {showFullscreen && <FullscreenButton iconOnly />}
-          <button onClick={() => setSidebarCollapsed(true)} style={titleIconBtn} title="サイドバーを閉じる (ビューを最大化)">
+          <button onClick={() => setSidebarCollapsed(true)} className="glass-edge" style={titleIconBtn} title="サイドバーを閉じる (ビューを最大化)">
             <span style={titleIconGlyph}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 6l-6 6 6 6" />
               </svg>
             </span>
@@ -145,11 +146,11 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
             viewpoints: showViewpoints ? (hiddenSections.includes('viewpoints') ? (
               <ClosedSectionHandle label="シーン" onOpen={() => setSectionHidden('viewpoints', false)} />
             ) : (
-              <div style={sidebarBlock}>
+              <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
                 <div style={overviewHeaderRow}>
-                  <span style={blockHeading}>シーン</span>
+                  <span className="ds-label">シーン</span>
                   <div style={{ flex: 1 }} />
-                  <button onClick={() => setSectionHidden('viewpoints', true)} style={overviewCloseBtn} title="シーンを閉じる">×</button>
+                  <button onClick={() => setSectionHidden('viewpoints', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="シーンを閉じる"><IconClose /></button>
                 </div>
                 <ViewpointsContent onViewpointClick={onViewpointClick} />
               </div>
@@ -163,16 +164,16 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
             map: showMap ? (hiddenSections.includes('map') ? (
               <ClosedSectionHandle label={isOther ? 'MAP' : 'FLOOR MAP'} onOpen={() => setSectionHidden('map', false)} />
             ) : (
-              <div style={{ ...sidebarBlock, ...sidebarMapBlock }}>
+              <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={{ ...sidebarBlock, ...sidebarMapBlock }}>
                 <div style={overviewHeaderRow}>
-                  <span style={blockHeading}>{isOther ? 'MAP' : 'FLOOR MAP'}</span>
+                  <span className="ds-label">{isOther ? 'MAP' : 'FLOOR MAP'}</span>
                   <div style={{ flex: 1 }} />
-                  <button onClick={() => setSectionHidden('map', true)} style={overviewCloseBtn} title="MAP を閉じる">×</button>
+                  <button onClick={() => setSectionHidden('map', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="MAP を閉じる"><IconClose /></button>
                 </div>
                 {hasMap ? (
                   <MapContent onViewpointClick={onViewpointClick} />
                 ) : (
-                  <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 12, textAlign: 'center' }}>
+                  <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 11.5, textAlign: 'center' }}>
                     このプランの図面はまだ設定されていません
                   </div>
                 )}
@@ -240,7 +241,7 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
 
   if (!manifest || !floorPlan) {
     return (
-      <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 12, textAlign: 'center' }}>
+      <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 11.5, textAlign: 'center' }}>
         このプランの図面はまだ設定されていません
       </div>
     );
@@ -349,7 +350,7 @@ function ClosedSectionHandle({ label, onOpen }: { label: string; onOpen: () => v
   return (
     <button onClick={onOpen} style={overviewClosedBar} title={`${label} を表示`}>
       <span style={overviewClosedChevron}>▶</span>
-      <span style={overviewClosedLabel}>{label}</span>
+      <span className="ds-label">{label}</span>
     </button>
   );
 }
@@ -374,17 +375,17 @@ function TypeSelectBlock({ onPlanSwitch }: { onPlanSwitch?: (planId: string) => 
     return <ClosedSectionHandle label={blockLabel} onOpen={() => setSectionHidden('type', false)} />;
   }
   return (
-    <div style={sidebarBlock}>
+    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
       <div style={overviewHeaderRow}>
-        <span style={blockHeading}>{blockLabel}</span>
+        <span className="ds-label">{blockLabel}</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setSectionHidden('type', true)} style={overviewCloseBtn} title={`${blockLabel}を閉じる`}>×</button>
+        <button onClick={() => setSectionHidden('type', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title={`${blockLabel}を閉じる`}><IconClose /></button>
       </div>
       {plans.length === 0 ? (
-        <div style={emptyHint}>プラン未追加 — デバッグ画面のプランタブで追加できます</div>
+        <div className="ds-sub">プラン未追加 — デバッグ画面のプランタブで追加できます</div>
       ) : plans.length === 1 ? (
         <div style={chipRow}>
-          <button style={{ ...chipBtn, ...chipBtnActive }} disabled title="単一プラン">{plans[0].label}</button>
+          <button className={`${surfaceClass('accent')} ds-chip`} disabled title="単一プラン">{plans[0].label}</button>
         </div>
       ) : (
         <div style={chipRow}>
@@ -394,7 +395,7 @@ function TypeSelectBlock({ onPlanSwitch }: { onPlanSwitch?: (planId: string) => 
               <button
                 key={p.id}
                 onClick={() => onPlanSwitch?.(p.id)}
-                style={{ ...chipBtn, ...(isA ? chipBtnActive : null) }}
+                className={`${surfaceClass(isA ? 'accent' : 'plain')} ds-chip ${isA ? '' : 'ds-fill-surface'}`}
                 title={isA ? '使用中' : `${p.label} に切替`}
               >
                 {p.label}
@@ -427,19 +428,19 @@ function ColorSelectBlock() {
     return <ClosedSectionHandle label="カラー" onOpen={() => setSectionHidden('color', false)} />;
   }
   return (
-    <div style={sidebarBlock}>
+    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
       <div style={overviewHeaderRow}>
-        <span style={blockHeading}>カラー</span>
+        <span className="ds-label">カラー</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setSectionHidden('color', true)} style={overviewCloseBtn} title="カラーを閉じる">×</button>
+        <button onClick={() => setSectionHidden('color', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="カラーを閉じる"><IconClose /></button>
       </div>
       {variants.length === 0 ? (
-        <div style={emptyHint}>素材バリエーション未設定 — デバッグ画面の「カラー」セクションから追加できます</div>
+        <div className="ds-sub">素材バリエーション未設定 — デバッグ画面の「カラー」セクションから追加できます</div>
       ) : (
         <div style={chipRow}>
           <button
             onClick={() => setActiveColor(null)}
-            style={{ ...colorChip, ...(activeColor === null ? colorChipActive : null) }}
+            className={`${surfaceClass(activeColor === null ? 'accent' : 'plain')} ds-chip ${activeColor === null ? '' : 'ds-fill-surface'}`}
             title="標準カラー"
           >
             <span style={{ ...colorSwatch, background: '#e5e7eb' }} />
@@ -451,7 +452,7 @@ function ColorSelectBlock() {
               <button
                 key={v.id}
                 onClick={() => setActiveColor(v.id)}
-                style={{ ...colorChip, ...(isA ? colorChipActive : null) }}
+                className={`${surfaceClass(isA ? 'accent' : 'plain')} ds-chip ${isA ? '' : 'ds-fill-surface'}`}
                 title={v.label}
               >
                 <span style={{ ...colorSwatch, background: v.swatch || '#a89372' }} />
@@ -504,7 +505,7 @@ function OverviewBlock() {
     return (
       <button onClick={() => setVis('overall', true)} style={overviewClosedBar} title="間取り概要を表示">
         <span style={overviewClosedChevron}>▶</span>
-        <span style={overviewClosedLabel}>間取り概要</span>
+        <span className="ds-label">間取り概要</span>
       </button>
     );
   }
@@ -514,14 +515,14 @@ function OverviewBlock() {
   const restoreAll = () => updateInfo({ visibility: { overall: true } });
 
   return (
-    <div style={sidebarBlock}>
+    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
       <div style={overviewHeaderRow}>
-        <span style={blockHeading}>間取り概要</span>
+        <span className="ds-label">間取り概要</span>
         {anyHidden && (
-          <button onClick={restoreAll} style={overviewRestoreBtn} title="非表示にした項目を戻す" aria-label="全表示">+</button>
+          <button onClick={restoreAll} className={`${surfaceClass('accent')} ds-pill ds-pill--xs`} title="非表示にした項目を戻す" aria-label="全表示"><IconPlus /></button>
         )}
         <div style={{ flex: 1 }} />
-        <button onClick={() => setVis('overall', false)} style={overviewCloseBtn} title="間取り概要を閉じる">×</button>
+        <button onClick={() => setVis('overall', false)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="間取り概要を閉じる"><IconClose /></button>
       </div>
       <InfoSummary inline visibility={vis} />
     </div>
@@ -551,16 +552,16 @@ function InfoOverview({
   const showLocation = v.location !== false && !!info.location;
   const showNotes = v.notes !== false && !!info.notes;
   if (!showHeading && !showArea && !showFloor && !showLocation && !showNotes) {
-    return <span style={infoSummaryEmpty}>—</span>;
+    return <span className="ds-sub">—</span>;
   }
   const badgeChar = (info.type || info.roomType || '').charAt(0).toUpperCase() || '·';
   const tsuboLabel = showArea ? formatTsubo(info.area) : null;
 
   return (
     <div style={overviewWrap}>
-      <div style={overviewBadge}>
+      <div className={`${surfaceClass('accent')} ds-badge ds-badge--lg`} style={{ flexDirection: 'column' }}>
         <span style={overviewBadgeChar}>{badgeChar}</span>
-        <span style={overviewBadgeLabel}>type</span>
+        <span className="ds-label">type</span>
       </div>
       <div style={overviewBody}>
         {showHeading && (
@@ -568,22 +569,22 @@ function InfoOverview({
         )}
         {showArea && (
           <div style={overviewArea}>
-            <span style={overviewAreaLabel}>□ 専有面積</span>
+            <span className="ds-sub">□ 専有面積</span>
             <span style={overviewAreaSep}>｜</span>
-            <span style={overviewAreaValue}>{info.area}</span>
-            {tsuboLabel && <span style={overviewAreaSub}>{tsuboLabel}</span>}
+            <span className="ds-title">{info.area}</span>
+            {tsuboLabel && <span className="ds-sub">{tsuboLabel}</span>}
           </div>
         )}
         {showFloor && info.floor && (
-          <div style={overviewBullet}>・{info.floor}</div>
+          <div className="ds-sub">・{info.floor}</div>
         )}
         {showLocation && info.location && (
-          <div style={overviewBullet}>・{info.location}</div>
+          <div className="ds-sub">・{info.location}</div>
         )}
         {showNotes && info.notes && info.notes.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).length > 0 && (
           <ul style={overviewBullets}>
             {info.notes.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).map((line, i) => (
-              <li key={i} style={overviewBullet}>・{line}</li>
+              <li key={i} className="ds-sub">・{line}</li>
             ))}
           </ul>
         )}
@@ -617,7 +618,7 @@ function ViewpointsContent({ onViewpointClick }: { onViewpointClick: (id: string
   const viewpoints = activePlan?.viewpoints ?? [];
   if (viewpoints.length === 0) {
     return (
-      <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 12, textAlign: 'center' }}>
+      <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 11.5, textAlign: 'center' }}>
         このプランのシーンはまだ追加されていません
       </div>
     );
@@ -628,16 +629,14 @@ function ViewpointsContent({ onViewpointClick }: { onViewpointClick: (id: string
         const isA = activeVp === vp.id;
         const thumb = planThumbs[vp.id] ?? autoThumbs[vp.id];
         return (
-          <button
+          <Tile
             key={vp.id}
+            active={isA}
             onClick={() => onViewpointClick(vp.id)}
-            style={{ ...vpGridCard, ...(isA ? vpCardActive : null) }}
-          >
-            <div style={vpGridThumb}>
-              {thumb ? <img src={thumb} alt="" style={vpThumbImg} /> : <div style={vpThumbPh}>…</div>}
-            </div>
-            <span style={{ ...vpGridLabel, ...(isA ? vpLabelActive : null) }}>{vp.label}</span>
-          </button>
+            thumb={thumb}
+            placeholder={<span className="ds-sub">…</span>}
+            label={vp.label}
+          />
         );
       })}
     </div>
@@ -659,11 +658,11 @@ function MovementModeBlock() {
   const setValue = useUIStore((s) => s.setMovementMode);
   const setSectionHidden = useUIStore((s) => s.setSectionHidden);
   return (
-    <div style={sidebarBlock}>
+    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
       <div style={overviewHeaderRow}>
-        <span style={blockHeading}>移動モード</span>
+        <span className="ds-label">移動モード</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setSectionHidden('movement', true)} style={overviewCloseBtn} title="移動モードを閉じる">×</button>
+        <button onClick={() => setSectionHidden('movement', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="移動モードを閉じる"><IconClose /></button>
       </div>
       <SegmentedToggle
         value={value}
@@ -816,14 +815,14 @@ export function AiScreenOverlay() {
         }}
       />
       <div style={aiOverlayToolbar}>
-        <button type="button" onClick={onDownload} style={{ ...aiOverlayBtn, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} title="ダウンロード" aria-label="ダウンロード">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <button type="button" onClick={onDownload} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-fill-surface ds-blur`} title="ダウンロード" aria-label="ダウンロード">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="7 10 12 15 17 10" />
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
         </button>
-        <button type="button" onClick={() => setActiveAiId(null)} style={aiOverlayBtn} title="閉じる">×</button>
+        <button type="button" onClick={() => setActiveAiId(null)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-fill-surface ds-blur`} title="閉じる"><IconClose /></button>
       </div>
       {zoom.scale > 1 && <div style={aiOverlayZoomHud}>{zoom.scale.toFixed(1)}×</div>}
     </div>
@@ -853,8 +852,8 @@ const aiOverlayZoomHud: React.CSSProperties = {
   background: 'rgba(0,0,0,0.55)',
   color: '#fff',
   borderRadius: 12,
-  fontSize: 11,
-  fontWeight: 600,
+  fontSize: 10.5,
+  fontWeight: tokens.font.weight.strong,
   fontFamily: tokens.font.mono,
   letterSpacing: 0.5,
   pointerEvents: 'none',
@@ -902,34 +901,21 @@ const aiBusySpinner: React.CSSProperties = {
   animation: 'spin 0.9s linear infinite',
 };
 const aiBusyText: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 700,
+  fontSize: 12.5,
+  fontWeight: tokens.font.weight.strong,
   color: tokens.color.text,
   letterSpacing: 0.6,
   fontFamily: tokens.font.family,
 };
 const aiBusySubText: React.CSSProperties = {
-  fontSize: 11.5,
+  fontSize: 10.5,
   color: tokens.color.textMute,
   letterSpacing: 0.4,
   fontFamily: tokens.font.family,
   marginTop: -6,
-  fontWeight: 500,
+  fontWeight: tokens.font.weight.medium,
 };
 
-const aiOverlayBtn: React.CSSProperties = {
-  width: 32,
-  height: 32,
-  borderRadius: '50%',
-  background: 'rgba(0,0,0,0.55)',
-  color: '#fff',
-  border: '1px solid rgba(255,255,255,0.3)',
-  fontSize: 16,
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  lineHeight: 1,
-  padding: 0,
-};
 
 
 
@@ -1164,11 +1150,11 @@ function AiImageGenBlock() {
   const onPickProvider = (p: AiProvider) => setSelectedModelId(firstModelForProvider(p).id);
 
   return (
-    <div style={sidebarBlock}>
+    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
       <div style={overviewHeaderRow}>
-        <span style={blockHeading}>AI 画像生成</span>
+        <span className="ds-label">AI 画像生成</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setSectionHidden('aiGenerate', true)} style={overviewCloseBtn} title="AI 画像生成を閉じる">×</button>
+        <button onClick={() => setSectionHidden('aiGenerate', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="AI 画像生成を閉じる"><IconClose /></button>
       </div>
       <textarea
         value={prompt}
@@ -1182,17 +1168,18 @@ function AiImageGenBlock() {
         {refImages.map((url, i) => (
           <div key={i} style={aiRefThumb}>
             <img src={url} alt="" style={aiRefImg} />
-            <button type="button" onClick={() => removeRef(i)} style={aiRefRemove} title="削除">×</button>
+            <button type="button" onClick={() => removeRef(i)} className={`${surfaceClass('danger')} ds-pill ds-pill--icon ds-pill--xs`} style={{ position: 'absolute', top: 0, right: 0 }} title="削除"><IconClose /></button>
           </div>
         ))}
         <button
           type="button"
           onClick={() => refInputRef.current?.click()}
           disabled={aiBusy || refImages.length >= 3}
-          style={aiRefAddBtn}
+          className={`${surfaceClass('plain')} ds-pill ds-fill-surface`}
+          style={{ height: 40 }}
           title="参照画像を追加 (最大 3 枚)"
         >
-          <span style={{ fontSize: 16, lineHeight: 1 }}>＋</span>
+          <span style={{ fontSize: 14, lineHeight: 1 }}>＋</span>
           <span>参照画像</span>
         </button>
         <input
@@ -1225,7 +1212,7 @@ function AiImageGenBlock() {
       {!hasKey[curProvider] && (
         <div style={aiKeyHint}>
           <span>{curProvider === 'gemini' ? 'Gemini' : 'ChatGPT'} の API キーが未設定です。</span>
-          <button type="button" onClick={() => window.dispatchEvent(new Event('open-ai-settings'))} style={aiKeyHintBtn}>⚙ API を設定</button>
+          <button type="button" onClick={() => window.dispatchEvent(new Event('open-ai-settings'))} className={`${surfaceClass('plain')} ds-pill ds-pill--xs ds-fill-surface`}><IconSettings />API を設定</button>
         </div>
       )}
       <div style={aiOptRow}>
@@ -1265,18 +1252,22 @@ function AiImageGenBlock() {
           const isA = activeAiId === e.id;
           return (
             <div key={e.id} style={{ position: 'relative' }}>
-              <button
-                type="button"
+              <Tile
+                active={isA}
                 onClick={() => setActiveAiId(e.id)}
-                style={{ ...vpGridCard, ...(isA ? vpCardActive : null), width: '100%' }}
+                thumb={e.thumbnail}
+                placeholder={<span className="ds-sub">…</span>}
+                label=""
                 title={e.prompt}
-              >
-                <div style={vpGridThumb}>
-                  {e.thumbnail ? <img src={e.thumbnail} alt="" style={vpThumbImg} /> : <div style={vpThumbPh}>…</div>}
-                </div>
-              </button>
+                style={{ width: '100%' }}
+              />
               <div style={aiCardActions}>
-                <button type="button" onClick={() => onDelete(e.id)} style={aiCardActionBtn} title="削除">✕</button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(e.id)}
+                  className={`${surfaceClass('danger')} ds-pill ds-pill--icon ds-pill--xs`}
+                  title="削除"
+                ><IconTrash /></button>
               </div>
             </div>
           );
@@ -1306,56 +1297,14 @@ const aiRefImg: React.CSSProperties = {
   objectFit: 'cover',
   display: 'block',
 };
-const aiRefRemove: React.CSSProperties = {
-  position: 'absolute',
-  top: 0,
-  right: 0,
-  width: 14,
-  height: 14,
-  fontSize: 9,
-  lineHeight: 1,
-  background: 'rgba(0,0,0,0.6)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: '0 0 0 4px',
-  cursor: 'pointer',
-  padding: 0,
-  fontFamily: 'inherit',
-};
-const aiRefAddBtn: React.CSSProperties = {
-  height: 40,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 5,
-  padding: '0 14px',
-  fontSize: 12,
-  fontWeight: 600,
-  lineHeight: 1,
-  background: tokens.gradient.surface,
-  color: tokens.color.textMute,
-  border: `1px dashed ${tokens.color.border}`,
-  borderRadius: tokens.radius.sm,
-  cursor: 'pointer',
-  fontFamily: tokens.font.family,
-  whiteSpace: 'nowrap',
-  outline: 'none',
-};
 
 const aiKeyHint: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
   marginTop: 6, padding: '6px 10px',
-  fontSize: 11, color: tokens.color.warn,
+  fontSize: 10.5, color: tokens.color.warn,
   background: tokens.gradient.warn,
   border: `1px solid ${tokens.color.warnBorder}`,
   borderRadius: tokens.radius.sm,
-};
-const aiKeyHintBtn: React.CSSProperties = {
-  fontSize: 11, fontWeight: 700, color: tokens.color.text,
-  background: tokens.glass.surfaceStrong,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.pill,
-  padding: '3px 10px', cursor: 'pointer', outline: 'none',
-  fontFamily: tokens.font.family,
 };
 const aiOptRow: React.CSSProperties = {
   display: 'flex', gap: 6, marginTop: 8,
@@ -1364,23 +1313,38 @@ const aiOptLabel: React.CSSProperties = {
   flex: 1, display: 'flex', flexDirection: 'column', gap: 3,
 };
 const aiOptCap: React.CSSProperties = {
-  fontSize: 10, fontWeight: 700, color: tokens.color.textMute, letterSpacing: 0.3, paddingLeft: 2,
+  fontSize: 9.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, letterSpacing: 0.3, paddingLeft: 2,
 };
+/* Native selects keep the OS chrome unless `appearance` is taken over, which
+ * is why these five stayed square-cornered and hard-outlined while the panel
+ * around them changed. Chevron is drawn as a background image since the
+ * built-in one disappears with the appearance. */
 const aiOptSelect: React.CSSProperties = {
-  width: '100%', padding: '7px 8px',
-  background: tokens.gradient.track,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.sm,
-  color: tokens.color.text, fontSize: 12,
+  width: '100%', padding: '7px 26px 7px 12px',
+  appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
+  backgroundImage:
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236e7076' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\"), " + tokens.gradient.track,
+  backgroundRepeat: 'no-repeat, no-repeat',
+  backgroundPosition: 'right 10px center, 0 0',
+  borderWidth: 0,
+  borderStyle: 'solid',
+  borderColor: 'transparent',
+  borderRadius: tokens.radius.pill,
+  color: tokens.color.text,
+  fontSize: tokens.font.size.sm,
+  fontWeight: tokens.font.weight.medium,
   outline: 'none', fontFamily: tokens.font.family,
   boxSizing: 'border-box', cursor: 'pointer',
+  boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
 };
 const aiPromptStyle: React.CSSProperties = {
   width: '100%',
   resize: 'vertical',
-  fontSize: 12,
+  fontSize: tokens.font.size.sm,
   padding: '10px 14px',
-  border: `1px solid ${tokens.color.border}`,
+  borderWidth: 0,
+  borderStyle: 'solid',
+  borderColor: 'transparent',
   borderRadius: tokens.radius.md,
   fontFamily: tokens.font.family,
   color: tokens.color.text,
@@ -1388,15 +1352,15 @@ const aiPromptStyle: React.CSSProperties = {
   boxSizing: 'border-box',
   minHeight: 56,
   outline: 'none',
-  boxShadow: tokens.shadow.inset,
+  boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
 };
 
 const aiGenerateBtn = (disabled: boolean): React.CSSProperties => ({
   marginTop: 6,
   width: '100%',
   padding: '10px 14px',
-  fontSize: 12.5,
-  fontWeight: 700,
+  fontSize: 11.5,
+  fontWeight: tokens.font.weight.strong,
   background: disabled ? tokens.gradient.neutral : tokens.gradient.accent,
   color: tokens.color.text,
   border: `1px solid ${disabled ? tokens.color.border : tokens.color.accentBorder}`,
@@ -1416,19 +1380,6 @@ const aiCardActions: React.CSSProperties = {
   gap: 1,
 };
 
-const aiCardActionBtn: React.CSSProperties = {
-  width: 16,
-  height: 16,
-  fontSize: 9,
-  lineHeight: 1,
-  background: 'rgba(255,255,255,0.85)',
-  border: '1px solid rgba(0,0,0,0.15)',
-  borderRadius: 3,
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  padding: 0,
-  color: tokens.color.text,
-};
 
 // ── Quality preset ───────────────────────────────────────────────
 
@@ -1445,11 +1396,11 @@ function QualityBlock() {
   const setValue = useUIStore((s) => s.setQualityMode);
   const setSectionHidden = useUIStore((s) => s.setSectionHidden);
   return (
-    <div style={sidebarBlock}>
+    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
       <div style={overviewHeaderRow}>
-        <span style={blockHeading}>画質</span>
+        <span className="ds-label">画質</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setSectionHidden('quality', true)} style={overviewCloseBtn} title="画質を閉じる">×</button>
+        <button onClick={() => setSectionHidden('quality', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="画質を閉じる"><IconClose /></button>
       </div>
       <SegmentedToggle
         value={value}
@@ -1513,14 +1464,14 @@ function MobileToolsBlock({ onClose }: { onClose: () => void }) {
   }, []);
 
   return (
-    <div style={sidebarBlock}>
+    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
       <div style={overviewHeaderRow}>
-        <span style={blockHeading}>移動スピード</span>
+        <span className="ds-label">移動スピード</span>
         <div style={{ flex: 1 }} />
-        <button onClick={onClose} style={overviewCloseBtn} title="閉じる">×</button>
+        <button onClick={onClose} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="閉じる"><IconClose /></button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-        <span style={{ fontSize: 10.5, color: tokens.color.textMute }}>遅</span>
+        <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>遅</span>
         <input
           type="range"
           min={MOBILE_SPEED_MIN}
@@ -1530,11 +1481,11 @@ function MobileToolsBlock({ onClose }: { onClose: () => void }) {
           onChange={(e) => apply(parseFloat(e.target.value))}
           style={{ flex: 1, accentColor: tokens.color.accent }}
         />
-        <span style={{ fontSize: 10.5, color: tokens.color.textMute }}>速</span>
+        <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>速</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, fontSize: 11, color: tokens.color.textMute, fontFamily: 'monospace' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, fontSize: 10.5, color: tokens.color.textMute, fontFamily: 'monospace' }}>
         <span>{MOBILE_SPEED_MIN.toFixed(1)} m/s</span>
-        <span style={{ fontWeight: 700, color: tokens.color.accent }}>{speed.toFixed(1)} m/s</span>
+        <span style={{ fontWeight: tokens.font.weight.strong, color: tokens.color.accent }}>{speed.toFixed(1)} m/s</span>
         <span>{MOBILE_SPEED_MAX.toFixed(1)} m/s</span>
       </div>
     </div>
@@ -1558,11 +1509,11 @@ function DemoModeBlock() {
   const status: string = !enabled ? 'OFF' : connected ? '取得中 (face)' : 'カメラ準備中…';
   const statusColor = !enabled ? 'rgba(0,0,0,0.4)' : connected ? '#15803d' : '#b45309';
   return (
-    <div style={sidebarBlock}>
+    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
       <div style={overviewHeaderRow}>
-        <span style={blockHeading}>ヘッドトラッキング</span>
+        <span className="ds-label">ヘッドトラッキング</span>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 10.5, color: statusColor, fontWeight: 600 }}>{status}</span>
+        <span style={{ fontSize: 9.5, color: statusColor, fontWeight: tokens.font.weight.strong }}>{status}</span>
         <button onClick={() => setSectionHidden('tracking', true)} style={{ ...overviewCloseBtn, marginLeft: 6 }} title="ヘッドトラッキングを閉じる">×</button>
       </div>
       <SegmentedToggle
@@ -1582,8 +1533,8 @@ function DemoModeBlock() {
             marginTop: 6,
             width: '100%',
             padding: '6px 10px',
-            fontSize: 11,
-            fontWeight: 600,
+            fontSize: 10.5,
+            fontWeight: tokens.font.weight.strong,
             background: connected ? '#ffffff' : 'rgba(0,0,0,0.04)',
             border: `1px solid ${connected ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.08)'}`,
             color: connected ? '#1f2937' : 'rgba(0,0,0,0.35)',
@@ -1597,7 +1548,7 @@ function DemoModeBlock() {
         </button>
       )}
       {enabled && (
-        <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.55)', marginTop: 6, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 9.5, color: 'rgba(0,0,0,0.55)', marginTop: 6, lineHeight: 1.5 }}>
           ブラウザ内蔵 (MediaPipe)。初回 ON でカメラ許可。ずれたら「中央リセット」で今の向きを正面として取り直し。
         </div>
       )}
@@ -1619,41 +1570,18 @@ function LightingContent() {
   return <SegmentedToggle value={value} onChange={setValue} options={[{ id: 'day', label: '昼' }, { id: 'night', label: '夜' }]} />;
 }
 
-function SegmentedToggle<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { id: T; label: string }[] }) {
-  return (
-    <div style={{ display: 'flex', gap: 4, padding: 5, background: tokens.glass.surfaceStrong, backdropFilter: tokens.backdrop, WebkitBackdropFilter: tokens.backdrop, borderRadius: tokens.radius.pill, border: `1px solid ${tokens.color.border}`, boxShadow: tokens.shadow.glass }}>
-      {options.map((o) => {
-        const isA = value === o.id;
-        return (
-          <button
-            key={o.id}
-            onClick={() => onChange(o.id)}
-            style={{
-              flex: 1,
-              padding: '8px 14px',
-              // Long-hand border so re-renders don't leak the previous
-              // active borderColor onto the inactive state.
-              borderWidth: 1,
-              borderStyle: 'solid',
-              borderColor: isA ? tokens.color.accentBorder : 'transparent',
-              borderRadius: tokens.radius.pill,
-              background: isA ? tokens.gradient.accent : 'transparent',
-              color: tokens.color.text,
-              boxShadow: isA ? tokens.shadow.glassAccent : 'none',
-              fontWeight: isA ? 700 : 600,
-              fontSize: 12.5,
-              cursor: 'pointer',
-              fontFamily: tokens.font.family,
-              transition: `background ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
-              whiteSpace: 'nowrap',
-              minWidth: 0,
-              outline: 'none',
-            }}
-          >{o.label}</button>
-        );
-      })}
-    </div>
-  );
+/**
+ * Thin alias over the shared `SegmentedControl`.
+ *
+ * This used to be a second implementation of the segmented control — its own
+ * track, its own active recipe built from `gradient` + `borderColor`, its own
+ * weight ternary. That is why it stayed flat and full-width while the design
+ * system moved: the tokens changed underneath it, but it rebuilt the surface
+ * on top of them. Kept as a named wrapper only so existing call sites and
+ * their `{ id, label }` option shape need no edit.
+ */
+function SegmentedToggle<T extends string>(props: { value: T; onChange: (v: T) => void; options: { id: T; label: string }[] }) {
+  return <SegmentedControl {...props} />;
 }
 
 // ── Fullscreen ────────────────────────────────────────────────────
@@ -1669,16 +1597,17 @@ function AmbientAudioToggle() {
   return (
     <button
       onClick={() => setMuted(!muted)}
+      className="glass-edge"
       style={titleIconBtn}
       title={muted ? '環境音を再生' : '環境音をミュート'}
     >
       <span style={titleIconGlyph}>
         {muted ? (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
             <path d="M11 5L6 9H2v6h4l5 4z" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" />
           </svg>
         ) : (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
             <path d="M11 5L6 9H2v6h4l5 4z" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
           </svg>
         )}
@@ -1698,11 +1627,12 @@ function PinsVisibilityToggle() {
   return (
     <button
       onClick={() => setShowPins(!showPins)}
+      className="glass-edge"
       style={{ ...titleIconBtn, ...(showPins ? null : { opacity: 0.45 }) }}
       title={showPins ? 'タグを非表示にする' : 'タグを表示する'}
     >
       <span style={titleIconGlyph}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
           <circle cx="12" cy="9" r="2.5" />
         </svg>
@@ -1723,17 +1653,17 @@ function FullscreenButton({ compact = false, iconOnly = false }: { compact?: boo
     else document.documentElement.requestFullscreen().catch(() => {});
   };
   const Icon = isFs ? (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
       <path d="M8 3v4a1 1 0 0 1-1 1H3M21 8h-4a1 1 0 0 1-1-1V3M3 16h4a1 1 0 0 1 1 1v4M16 21v-4a1 1 0 0 1 1-1h4"/>
     </svg>
   ) : (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 8V3h5M21 8V3h-5M3 16v5h5M21 16v5h-5"/>
     </svg>
   );
   if (iconOnly) {
     return (
-      <button onClick={toggle} title={isFs ? 'フルスクリーン解除' : '拡大 (フルスクリーン)'} style={titleIconBtn}>
+      <button onClick={toggle} title={isFs ? 'フルスクリーン解除' : '拡大 (フルスクリーン)'} className="glass-edge" style={titleIconBtn}>
         <span style={titleIconGlyph}>{Icon}</span>
       </button>
     );
@@ -1745,7 +1675,7 @@ function FullscreenButton({ compact = false, iconOnly = false }: { compact?: boo
       style={compact ? miniIconBtn : iconBtn}
     >
       <span style={iconGlyph}>{Icon}</span>
-      <span style={compact ? miniIconLabel : iconLabel}>拡大</span>
+      <span className={compact ? "ds-title" : "ds-label"}>拡大</span>
     </button>
   );
 }
@@ -1785,10 +1715,10 @@ function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'lef
   // 縁取り: 区切り線は「キャンバスと接する辺」だけに引く。
   //   left → 右辺、right → 左辺、portrait → 下辺 (トップバー)。
   const borderEdge: React.CSSProperties = isPortrait
-    ? { borderBottom: `1px solid ${tokens.color.border}` }
+    ? { borderBottom: `1px solid ${tokens.color.hairline}` }
     : isRight
-      ? { borderLeft: `1px solid ${tokens.color.border}` }
-      : { borderRight: `1px solid ${tokens.color.border}` };
+      ? { borderLeft: `1px solid ${tokens.color.hairline}` }
+      : { borderRight: `1px solid ${tokens.color.hairline}` };
   // スマホはセクションが多いと画面いっぱいになるので、上限を画面の約半分にして
   // 下部 (キャンバス / 操作領域) を必ず見えるようにする。残りはスクロール。
   // PC は従来通り 100dvh まで許容。
@@ -1807,7 +1737,7 @@ function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'lef
       WebkitBackdropFilter: tokens.backdrop,
       ...borderEdge,
       // `small` は浮いた下端の見切りに `borderBottom` を入れる。
-      ...(isSmall ? { borderBottom: `1px solid ${tokens.color.border}` } : {}),
+      ...(isSmall ? { borderBottom: `1px solid ${tokens.color.hairline}` } : {}),
       boxShadow: tokens.shadow.glass,
       display: 'flex',
       flexDirection: 'column',
@@ -1829,19 +1759,13 @@ const sidebarScrollArea: React.CSSProperties = {
 
 const sidebarTitleBlock: React.CSSProperties = {
   padding: '12px 14px 12px 16px',
-  borderBottom: `1px solid ${tokens.color.border}`,
+  borderBottom: `1px solid ${tokens.color.hairline}`,
   flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
   gap: 8,
 };
 
-const sidebarTitle: React.CSSProperties = {
-  fontSize: 15,
-  fontWeight: 700,
-  letterSpacing: 0.3,
-  color: tokens.color.text,
-};
 
 const titleIconBtn: React.CSSProperties = {
   width: 28,
@@ -1849,15 +1773,11 @@ const titleIconBtn: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: tokens.gradient.surface,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.pill,
+  ...shellSurface('plain', { fill: 'surface' }),
   color: tokens.color.textMute,
   cursor: 'pointer',
   padding: 0,
-  fontFamily: tokens.font.family,
   flexShrink: 0,
-  boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
   outline: 'none',
 };
 
@@ -1875,15 +1795,11 @@ const collapsedHandle: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   background: tokens.glass.surfaceStrong,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.pill,
-  color: tokens.color.text,
-  cursor: 'pointer',
-  padding: 0,
-  fontFamily: tokens.font.family,
   backdropFilter: tokens.backdrop,
   WebkitBackdropFilter: tokens.backdrop,
-  boxShadow: tokens.shadow.glass,
+  ...shellSurface('plain'),
+  cursor: 'pointer',
+  padding: 0,
   zIndex: 6,
   outline: 'none',
 };
@@ -1903,8 +1819,8 @@ function collapsedHandleStyle(placement: SidebarPlacement): React.CSSProperties 
 }
 
 const sidebarBlock: React.CSSProperties = {
-  padding: '10px 16px',
-  borderBottom: `1px solid ${tokens.color.border}`,
+  padding: 0,
+  marginBottom: 10,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
@@ -1913,7 +1829,7 @@ const sidebarBlock: React.CSSProperties = {
 
 const sidebarMapBlock: React.CSSProperties = {
   padding: '10px 16px',
-  borderBottom: `1px solid ${tokens.color.border}`,
+  borderBottom: `1px solid ${tokens.color.hairline}`,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
@@ -1921,14 +1837,6 @@ const sidebarMapBlock: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const blockHeading: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  letterSpacing: 1.2,
-  color: tokens.color.text,
-  textTransform: 'uppercase',
-  fontFamily: tokens.font.mono,
-};
 
 const colorInlineToggles: React.CSSProperties = {
   display: 'flex',
@@ -1936,7 +1844,7 @@ const colorInlineToggles: React.CSSProperties = {
   gap: 8,
   marginTop: 6,
   paddingTop: 8,
-  borderTop: `1px solid ${tokens.color.border}`,
+  borderTop: `1px solid ${tokens.color.hairline}`,
 };
 
 const inlineToggleRow: React.CSSProperties = {
@@ -1946,8 +1854,8 @@ const inlineToggleRow: React.CSSProperties = {
 };
 
 const inlineToggleLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
+  fontSize: 10.5,
+  fontWeight: tokens.font.weight.strong,
   letterSpacing: 0.6,
   color: tokens.color.textMute,
   width: 32,
@@ -1976,11 +1884,6 @@ const miniIconBtn: React.CSSProperties = {
   outline: 'none',
 };
 
-const miniIconLabel: React.CSSProperties = {
-  fontSize: 13,
-  letterSpacing: 0.3,
-  fontWeight: 600,
-};
 
 
 // Legacy iconBtn styles kept for any consumer that still uses the original full-size buttons.
@@ -2007,11 +1910,6 @@ const iconGlyph: React.CSSProperties = {
   display: 'inline-flex',
 };
 
-const iconLabel: React.CSSProperties = {
-  fontSize: 10,
-  letterSpacing: 0.3,
-  fontWeight: 500,
-};
 
 // 3-column grid: thumbnail on top, room name below.
 const vpGrid: React.CSSProperties = {
@@ -2020,82 +1918,17 @@ const vpGrid: React.CSSProperties = {
   gap: 6,
 };
 
-const vpGridCard: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'stretch',
-  gap: 4,
-  padding: 4,
-  background: tokens.gradient.surface,
-  // Long-hand split (see other components) — shorthand `border` mixed
-  // with `borderColor` overlay leaks the active color onto inactive
-  // cards after a state change.
-  borderWidth: 1,
-  borderStyle: 'solid',
-  borderColor: tokens.color.border,
-  borderRadius: tokens.radius.sm,
-  cursor: 'pointer',
-  fontFamily: tokens.font.family,
-  color: tokens.color.text,
-  transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
-  outline: 'none',
-};
-
-const vpGridThumb: React.CSSProperties = {
-  width: '100%',
-  aspectRatio: '4 / 3',
-  borderRadius: tokens.radius.sm,
-  overflow: 'hidden',
-  background: tokens.color.surfaceSoft,
-  border: `1px solid ${tokens.color.border}`,
-};
-
-const vpGridLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  letterSpacing: 0.2,
-  textAlign: 'center',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  color: tokens.color.text,
-};
-
-const vpCardActive: React.CSSProperties = {
-  background: tokens.gradient.accent,
-  borderColor: tokens.color.accentBorder,
-  boxShadow: tokens.shadow.glassAccent,
-};
-
-const vpThumbImg: React.CSSProperties = {
-  width: '100%',
-  height: '100%',
-  objectFit: 'cover',
-  display: 'block',
-};
-
-const vpThumbPh: React.CSSProperties = {
-  width: '100%',
-  height: '100%',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: tokens.color.textFaint,
-  fontSize: 12,
-};
-
-const vpLabelActive: React.CSSProperties = {
-  color: tokens.color.text,
-  fontWeight: 700,
-};
+/* Eight constants for one selectable thumbnail — card, thumb, label, image,
+ * placeholder and three "active" overlays — replaced by `<Tile>`. The active
+ * state is now a variant rather than three style objects merged at render. */
 
 
 const infoSummary: React.CSSProperties = {
   marginLeft: 10,
   paddingLeft: 10,
-  borderLeft: `1px solid ${tokens.color.border}`,
-  fontSize: 11,
-  fontWeight: 500,
+  borderLeft: `1px solid ${tokens.color.hairline}`,
+  fontSize: 10.5,
+  fontWeight: tokens.font.weight.medium,
   color: tokens.color.textMute,
   letterSpacing: 0.3,
   whiteSpace: 'nowrap',
@@ -2105,10 +1938,6 @@ const infoSummary: React.CSSProperties = {
   flexShrink: 1,
 };
 
-const infoSummaryEmpty: React.CSSProperties = {
-  fontSize: 12,
-  color: tokens.color.textFaint,
-};
 
 const overviewWrap: React.CSSProperties = {
   display: 'flex',
@@ -2116,35 +1945,14 @@ const overviewWrap: React.CSSProperties = {
   gap: 12,
 };
 
-const overviewBadge: React.CSSProperties = {
-  width: 56,
-  height: 56,
-  flexShrink: 0,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: '#a89372',
-  color: '#ffffff',
-  borderRadius: 4,
-  letterSpacing: 0.5,
-};
 
 const overviewBadgeChar: React.CSSProperties = {
   fontSize: 28,
-  fontWeight: 700,
+  fontWeight: tokens.font.weight.strong,
   lineHeight: 1,
   fontFamily: 'Georgia, "Times New Roman", serif',
 };
 
-const overviewBadgeLabel: React.CSSProperties = {
-  fontSize: 9,
-  fontWeight: 600,
-  letterSpacing: 0.6,
-  marginTop: 2,
-  textTransform: 'lowercase',
-  opacity: 0.92,
-};
 
 const overviewBody: React.CSSProperties = {
   flex: 1,
@@ -2155,8 +1963,8 @@ const overviewBody: React.CSSProperties = {
 };
 
 const overviewHeading: React.CSSProperties = {
-  fontSize: 15,
-  fontWeight: 700,
+  fontSize: 13,
+  fontWeight: tokens.font.weight.strong,
   letterSpacing: 0.3,
   color: tokens.color.text,
   lineHeight: 1.3,
@@ -2167,29 +1975,17 @@ const overviewArea: React.CSSProperties = {
   alignItems: 'baseline',
   flexWrap: 'wrap',
   gap: 4,
-  fontSize: 12,
+  fontSize: 11.5,
   color: tokens.color.text,
   lineHeight: 1.4,
 };
 
-const overviewAreaLabel: React.CSSProperties = {
-  fontWeight: 500,
-};
 
 const overviewAreaSep: React.CSSProperties = {
   color: tokens.color.textMute,
 };
 
-const overviewAreaValue: React.CSSProperties = {
-  fontWeight: 700,
-  fontSize: 13,
-};
 
-const overviewAreaSub: React.CSSProperties = {
-  fontSize: 10.5,
-  color: tokens.color.textMute,
-  fontWeight: 400,
-};
 
 const overviewBullets: React.CSSProperties = {
   margin: 0,
@@ -2201,11 +1997,6 @@ const overviewBullets: React.CSSProperties = {
   gap: 2,
 };
 
-const overviewBullet: React.CSSProperties = {
-  fontSize: 12,
-  color: tokens.color.text,
-  lineHeight: 1.5,
-};
 
 const overviewHeaderRow: React.CSSProperties = {
   display: 'flex',
@@ -2224,7 +2015,7 @@ const overviewCloseBtn: React.CSSProperties = {
   borderRadius: tokens.radius.pill,
   color: tokens.color.textMute,
   cursor: 'pointer',
-  fontSize: 13,
+  fontSize: 11.5,
   lineHeight: 1,
   padding: 0,
   fontFamily: tokens.font.family,
@@ -2232,20 +2023,6 @@ const overviewCloseBtn: React.CSSProperties = {
   outline: 'none',
 };
 
-const overviewRestoreBtn: React.CSSProperties = {
-  background: tokens.gradient.accent,
-  border: `1px solid ${tokens.color.accentBorder}`,
-  color: tokens.color.text,
-  borderRadius: tokens.radius.pill,
-  fontSize: 10,
-  fontWeight: 700,
-  letterSpacing: 0.3,
-  padding: '3px 10px',
-  cursor: 'pointer',
-  fontFamily: tokens.font.family,
-  boxShadow: tokens.shadow.glassAccent,
-  outline: 'none',
-};
 
 // Closed (master-off) state — a slim handle that re-opens the block.
 const overviewClosedBar: React.CSSProperties = {
@@ -2253,7 +2030,7 @@ const overviewClosedBar: React.CSSProperties = {
   alignItems: 'center',
   gap: 8,
   padding: '8px 16px',
-  borderBottom: `1px solid ${tokens.color.border}`,
+  borderBottom: `1px solid ${tokens.color.hairline}`,
   background: 'transparent',
   border: 'none',
   borderRadius: 0,
@@ -2266,7 +2043,7 @@ const overviewClosedBar: React.CSSProperties = {
 };
 
 const overviewClosedChevron: React.CSSProperties = {
-  fontSize: 9,
+  fontSize: 9.5,
   color: tokens.color.textMute,
   width: 10,
 };
@@ -2277,62 +2054,9 @@ const chipRow: React.CSSProperties = {
   gap: 4,
 };
 
-const chipBtn: React.CSSProperties = {
-  padding: '6px 14px',
-  background: tokens.gradient.surface,
-  // Long-hand split so the active overlay's `borderColor` doesn't leak
-  // back onto the inactive state after a re-render.
-  borderWidth: 1,
-  borderStyle: 'solid',
-  borderColor: tokens.color.border,
-  borderRadius: tokens.radius.pill,
-  color: tokens.color.text,
-  fontSize: 12,
-  fontFamily: tokens.font.family,
-  cursor: 'pointer',
-  fontWeight: 600,
-  letterSpacing: 0.2,
-  boxShadow: tokens.shadow.glass,
-  outline: 'none',
-  transition: `background ${tokens.transition}, border-color ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}`,
-};
-
-const chipBtnActive: React.CSSProperties = {
-  background: tokens.gradient.accent,
-  borderColor: tokens.color.accentBorder,
-  color: tokens.color.text,
-  fontWeight: 700,
-  boxShadow: tokens.shadow.glassAccent,
-};
-
-const colorChip: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '5px 12px 5px 5px',
-  background: tokens.gradient.surface,
-  // Long-hand split for the same React shorthand-vs-longhand bug.
-  borderWidth: 1,
-  borderStyle: 'solid',
-  borderColor: tokens.color.border,
-  borderRadius: tokens.radius.pill,
-  color: tokens.color.text,
-  fontSize: 12,
-  fontFamily: tokens.font.family,
-  cursor: 'pointer',
-  fontWeight: 600,
-  boxShadow: tokens.shadow.glass,
-  outline: 'none',
-  transition: `background ${tokens.transition}, border-color ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}`,
-};
-
-const colorChipActive: React.CSSProperties = {
-  background: tokens.gradient.accent,
-  borderColor: tokens.color.accentBorder,
-  color: tokens.color.text,
-  fontWeight: 700,
-  boxShadow: tokens.shadow.glassAccent,
-};
+/* `chipBtn` / `chipBtnActive` / `colorChip` / `colorChipActive` lived here —
+ * two near-identical pairs whose only real difference was a colour swatch.
+ * They are now one `.ds-chip`, with the swatch as a modifier. */
 
 const colorSwatch: React.CSSProperties = {
   display: 'inline-block',
@@ -2342,18 +2066,5 @@ const colorSwatch: React.CSSProperties = {
   border: '1px solid rgba(0,0,0,0.15)',
 };
 
-const emptyHint: React.CSSProperties = {
-  fontSize: 11,
-  color: 'rgba(31,41,55,0.45)',
-  lineHeight: 1.5,
-  padding: '4px 0',
-};
 
-const overviewClosedLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  letterSpacing: 1.0,
-  color: tokens.color.textMute,
-  textTransform: 'uppercase',
-};
 

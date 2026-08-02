@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { verifyCredentials, markAuthenticated, isAuthenticated } from '../utils/auth';
-import { tokens, PillButton, PillInput, Card } from './components';
+import { tokens, PillButton, PillInput, Card, surfaceClass } from './components';
 
 /**
  * Wraps admin / debug routes. If not authenticated, renders a centred login
@@ -51,10 +51,10 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
     >
       <form onSubmit={submit} style={{ width: 380, maxWidth: 'calc(100vw - 32px)' }}>
         <Card tone="surface" style={{ padding: '32px 28px' }}>
-          <div style={{ fontSize: 17, fontWeight: 700, color: tokens.color.text, marginBottom: 4, letterSpacing: 0.3 }}>
+          <div style={{ fontSize: 15, fontWeight: tokens.font.weight.strong, color: tokens.color.text, marginBottom: 4, letterSpacing: 0.3 }}>
             管理画面ログイン
           </div>
-          <div style={{ fontSize: 12, color: tokens.color.textMute, marginBottom: 22, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11.5, color: tokens.color.textMute, marginBottom: 22, lineHeight: 1.5 }}>
             顧客向けビューアは下記なしでご覧いただけます。
           </div>
 
@@ -79,17 +79,10 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
           />
 
           {error && (
-            <div style={{
-              marginTop: 14,
-              padding: '10px 14px',
-              fontSize: 12,
-              fontWeight: 600,
-              color: tokens.color.text,
-              background: tokens.gradient.danger,
-              border: `1px solid ${tokens.color.dangerBorder}`,
-              borderRadius: tokens.radius.pill,
-              boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
-            }}>
+            <div
+              className={`${surfaceClass('danger')} ds-pill`}
+              style={{ marginTop: 14, display: 'block', textAlign: 'center' }}
+            >
               {error}
             </div>
           )}
@@ -106,7 +99,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
             </PillButton>
           </div>
 
-          <div style={{ marginTop: 14, fontSize: 10.5, color: tokens.color.textFaint, lineHeight: 1.5, textAlign: 'center' as const }}>
+          <div style={{ marginTop: 14, fontSize: 9.5, color: tokens.color.textFaint, lineHeight: 1.5, textAlign: 'center' as const }}>
             7 日間ログイン状態が保持されます。
           </div>
         </Card>
@@ -118,8 +111,8 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
-      fontSize: 11,
-      fontWeight: 700,
+      fontSize: 10.5,
+      fontWeight: tokens.font.weight.strong,
       letterSpacing: 0.6,
       color: tokens.color.textMute,
       textTransform: 'uppercase' as const,

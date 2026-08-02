@@ -1,6 +1,6 @@
 import { useUIStore } from '../store/ui-store';
 import { useCameraStore } from '../store/camera-store';
-import { tokens } from './design-tokens';
+import { tokens, shellSurface } from './design-tokens';
 
 /**
  * Floating dev overlay shown only when dev mode is on. Sits on top of the
@@ -19,7 +19,7 @@ export function DebugPanel() {
   const position = useCameraStore((s) => s.position);
 
   return (
-    <div style={panel}>
+    <div className="glass-edge" style={panel}>
       <div style={title}>DEV MODE</div>
 
       <div style={row}>
@@ -42,7 +42,7 @@ export function DebugPanel() {
             onChange={(e) => setCollisionOpacity(parseFloat(e.target.value))}
             style={{ width: '100%', accentColor: tokens.color.accent }}
           />
-          <div style={{ fontSize: 10.5, color: tokens.color.textMute, fontFamily: tokens.font.mono }}>
+          <div style={{ fontSize: 9.5, color: tokens.color.textMute, fontFamily: tokens.font.mono }}>
             Opacity: {collisionOpacity.toFixed(2)}
           </div>
         </div>
@@ -64,26 +64,22 @@ const panel: React.CSSProperties = {
   background: tokens.glass.surfaceStrong,
   backdropFilter: tokens.backdrop,
   WebkitBackdropFilter: tokens.backdrop,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.md,
-  boxShadow: tokens.shadow.glass,
-  color: tokens.color.text,
-  fontSize: 12,
-  fontFamily: tokens.font.family,
+  ...shellSurface('plain', { radius: tokens.radius.md }),
+  fontSize: tokens.font.size.md,
   minWidth: 200,
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
 };
 const title: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
+  fontSize: 9.5,
+  fontWeight: tokens.font.weight.strong,
   letterSpacing: 1.0,
   color: tokens.color.textMute,
   textTransform: 'uppercase',
 };
 const row: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: 10.5,
   color: tokens.color.textMute,
   display: 'flex',
   gap: 6,
@@ -98,7 +94,7 @@ const check: React.CSSProperties = {
   alignItems: 'center',
   gap: 8,
   cursor: 'pointer',
-  fontSize: 12.5,
-  fontWeight: 600,
+  fontSize: 11.5,
+  fontWeight: tokens.font.weight.strong,
   color: tokens.color.text,
 };

@@ -5,7 +5,7 @@ import { useUIStore } from '../store/ui-store';
 import { LeftPanel } from './LeftPanel';
 import { calibrateHeadTracker } from '../utils/head-tracker';
 import { navigate } from '../utils/url';
-import { tokens } from './design-tokens';
+import { tokens, shellSurface, edgeVars } from './design-tokens';
 
 interface ViewerOverlayProps {
   sceneId: string;
@@ -78,6 +78,12 @@ export function ViewerOverlay({ sceneId, onViewpointClick, showDebugLink = true,
         'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
       ]);
       if (!movementKeys.has(e.code)) return;
+      // ウォークスルー (walk graph) 持ちプランでは W/↑ = 前進として
+      // WalkthroughControls が消費する — GS へ自動復帰すると splat の無い
+      // walk プランは白背景だけになる。移動キーでの 360 離脱は無効。
+      const st = useSceneStore.getState();
+      const activePlan = st.manifest?.plans?.find((p) => p.id === st.activePlanId);
+      if (activePlan?.walk && activePlan.walk.nodes.length > 0) return;
       const ui = useUIStore.getState();
       ui.setViewMode('splat');
       const sm = (window as unknown as { __sceneManager?: { setViewMode?: (v: 'splat' | '360') => void } }).__sceneManager;
@@ -199,10 +205,11 @@ export function ViewerOverlay({ sceneId, onViewpointClick, showDebugLink = true,
           href={`/scene/${sceneId}`}
           onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(`/scene/${sceneId}`); }}
           title="デバッグモード"
+          className="glass-edge"
           style={debugBtn}
           aria-label="Debug Mode"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
@@ -223,13 +230,14 @@ function MirrorStatusBadge() {
   return (
     <button
       onClick={() => setMode('off')}
+      className="glass-edge"
       style={mirrorBadge}
       title="ミラーリング送信中 (クリックで停止)"
       aria-label="Mirror sending — click to stop"
     >
-      <span style={{ fontSize: 12, lineHeight: 1 }}>📡</span>
-      <span style={{ fontSize: 11, fontWeight: 700 }}>送信中</span>
-      <span style={{ fontSize: 12, opacity: 0.8 }}>⏹</span>
+      <span style={{ fontSize: 11.5, lineHeight: 1 }}>📡</span>
+      <span style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong }}>送信中</span>
+      <span style={{ fontSize: 11.5, opacity: 0.8 }}>⏹</span>
     </button>
   );
 }
@@ -242,14 +250,9 @@ const mirrorBadge: React.CSSProperties = {
   alignItems: 'center',
   gap: 8,
   padding: '7px 14px',
-  background: tokens.gradient.accent,
-  color: tokens.color.text,
-  border: `1px solid ${tokens.color.accentBorder}`,
-  borderRadius: tokens.radius.pill,
+  ...shellSurface('accent'),
   cursor: 'pointer',
-  fontFamily: tokens.font.family,
-  letterSpacing: 0.4,
-  boxShadow: tokens.shadow.glassAccent,
+  letterSpacing: tokens.font.tracking.base,
   zIndex: 10,
   outline: 'none',
 };
@@ -260,7 +263,10 @@ const debugBtn: React.CSSProperties = {
   width: 40, height: 40,
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   background: tokens.glass.surfaceStrong,
-  border: `1px solid ${tokens.color.border}`,
+  ...edgeVars('plain'),
+  borderWidth: 0,
+  borderStyle: 'solid',
+  borderColor: 'transparent',
   borderRadius: tokens.radius.pill,
   backdropFilter: tokens.backdrop,
   WebkitBackdropFilter: tokens.backdrop,

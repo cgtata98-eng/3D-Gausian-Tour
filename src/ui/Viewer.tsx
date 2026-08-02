@@ -193,8 +193,8 @@ export function Viewer({ sceneId }: ViewerProps) {
 
       {error && (
         <div style={errorBox}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>読み込みに失敗しました</div>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>{error}</div>
+          <div style={{ fontSize: 13, fontWeight: tokens.font.weight.strong, marginBottom: 6 }}>読み込みに失敗しました</div>
+          <div style={{ fontSize: 11.5, opacity: 0.75 }}>{error}</div>
         </div>
       )}
 

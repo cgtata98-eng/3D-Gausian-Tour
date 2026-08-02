@@ -1,0 +1,1615 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3DRoomTour — デザイン方向性 比較</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   ページ共通シェル
+   ────────────────────────────────────────────────────────────────
+   4 カラムすべて **同じ HTML マークアップ** を使い、差分は CSS 変数
+   だけで出しています。つまり見えている違いはそのままトークンの差分。
+   ══════════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #eceef1;
+  color: #22252c;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Yu Gothic UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+.wrap { max-width: 1680px; margin: 0 auto; padding: 40px 28px 96px; }
+
+header.page { margin-bottom: 40px; }
+header.page h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 8px; }
+header.page p { margin: 0 0 10px; max-width: 78ch; color: #565c68; font-size: 14px; }
+header.page code {
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  font-size: 12.5px; background: #dfe3e8; padding: 1px 6px; border-radius: 4px;
+}
+.note {
+  max-width: 78ch; font-size: 13px; margin: 0;
+  background: #fff; border-left: 3px solid #1b6fa8;
+  padding: 12px 16px; border-radius: 0 8px 8px 0; color: #4a5260;
+  box-shadow: 0 1px 2px rgba(20,24,40,.06);
+}
+.note b { color: #1e2530; }
+
+h2.section {
+  font-size: 13px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+  color: #7b8291; margin: 60px 0 18px; padding-bottom: 10px;
+  border-bottom: 1px solid #d7dbe1;
+}
+h2.section:first-of-type { margin-top: 0; }
+h2.section small { text-transform: none; letter-spacing: 0; font-weight: 500; color: #99a0ac; margin-left: 10px; font-size: 12.5px; }
+
+/* ── 比較グリッド ───────────────────────────────────────────── */
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 1400px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px)  { .grid { grid-template-columns: 1fr; } }
+
+.col { display: flex; flex-direction: column; min-width: 0; }
+.col-head { padding: 0 4px 12px; display: flex; flex-direction: column; min-height: 162px; }
+.col-head .kicker {
+  display: inline-block; align-self: flex-start;
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.1em;
+  padding: 3px 9px; border-radius: 999px; margin-bottom: 8px;
+  background: #d9dee5; color: #4a5162;
+}
+.col-head.is-rec .kicker { background: #1b6fa8; color: #fff; }
+.col-head h3 { margin: 0 0 4px; font-size: 17px; font-weight: 750; letter-spacing: -0.01em; }
+.col-head p  { margin: 0; font-size: 12.5px; color: #666d7a; line-height: 1.55; }
+
+/* テーマを適用する実際のプレビュー面 */
+.panel {
+  flex: 1;
+  background: var(--canvas);
+  border: 1px solid #d3d8df;
+  border-radius: 14px;
+  padding: 22px 20px 26px;
+  font-family: var(--font-ui);
+  color: var(--text);
+  overflow: hidden;
+}
+.panel .label {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--faint); margin: 26px 0 11px; font-family: var(--font-ui);
+}
+.panel .label:first-child { margin-top: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* ══════════════════════════════════════════════════════════════════
+   コンポーネント（全テーマ共通のマークアップ + var() 参照）
+   ══════════════════════════════════════════════════════════════════ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: var(--btn-pad);
+  border-width: var(--btn-bw); border-style: solid; border-color: var(--btn-bd-fallback, transparent);
+  border-radius: var(--btn-radius);
+  font-family: var(--font-ui);
+  font-size: var(--btn-fs); font-weight: var(--btn-fw); letter-spacing: var(--btn-ls);
+  cursor: pointer; outline: none; flex-shrink: 0;
+  -webkit-backdrop-filter: var(--btn-blur, none); backdrop-filter: var(--btn-blur, none);
+  transition: transform .22s cubic-bezier(.32,.72,.24,1), box-shadow .22s cubic-bezier(.32,.72,.24,1), filter .22s;
+}
+.btn:hover { transform: translateY(-1px); filter: brightness(var(--hover-bright)) saturate(var(--hover-sat, 1)); }
+.btn:active { transform: translateY(0) scale(var(--press-scale, 1)); }
+.btn.sm { padding: var(--btn-pad-sm); font-size: calc(var(--btn-fs) - 1px); }
+
+.btn.primary   { background: var(--pri-bg); border-color: var(--pri-bd); color: var(--pri-fg); box-shadow: var(--pri-sh); }
+.btn.secondary { background: var(--sec-bg); border-color: var(--sec-bd); color: var(--sec-fg); box-shadow: var(--sec-sh); }
+.btn.tertiary  { background: var(--ter-bg); border-color: var(--ter-bd); color: var(--ter-fg); box-shadow: var(--ter-sh); }
+.btn.success   { background: var(--suc-bg); border-color: var(--suc-bd); color: var(--suc-fg); box-shadow: var(--suc-sh); }
+.btn.danger    { background: var(--dng-bg); border-color: var(--dng-bd); color: var(--dng-fg); box-shadow: var(--dng-sh); }
+.btn.purple    { background: var(--pur-bg); border-color: var(--pur-bd); color: var(--pur-fg); box-shadow: var(--pur-sh); }
+
+/* ── ガラスの縁（スペキュラリム）─────────────────────────────
+   iOS の Liquid Glass でいちばん効いているのは、周囲を一周する
+   「明るさが場所によって変わる」縁。単色 1px ボーダーでは絶対に
+   出ない質感なので、グラデーションを mask-composite で縁だけに
+   切り抜いて重ねる。--edge-grad が none のテーマでは何も描かれない
+   ので、他案には一切影響しない。（<input> は擬似要素を持てない） */
+.btn, .seg-outer, .seg, .card, .listrow, .input, .overlay-panel, .badge,
+.ph-top, .ph-card, .ph-tabs, .ph-rb { position: relative; }
+/* 鏡面ハイライトを「背景の上・文字の下」に差し込むため、各要素に
+   自前のスタッキングコンテキストを持たせる。これが無いと z-index:-1
+   の擬似要素が親まで抜けて、要素の背景の裏に回ってしまう。 */
+.btn, .seg-outer, .card, .listrow, .overlay-panel, .ph-top, .ph-card, .ph-tabs, .ph-rb { isolation: isolate; }
+
+.btn::before, .seg-outer::before, .seg.on::before, .card::before, .listrow::before,
+.overlay-panel::before, .ph-top::before, .ph-card::before, .ph-tabs::before, .ph-rb::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  padding: var(--edge-w, 1px);
+  background: var(--edge-grad, none);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events: none; z-index: 3;
+}
+.btn.primary::before, .seg.on::before { background: var(--edge-grad-pri, var(--edge-grad, none)); }
+
+/* ── 面の鏡面反射 ───────────────────────────────────────────
+   縁だけだと「輪郭が光っているシール」に見える。本物のガラスは
+   面そのものが広く光を返すので、左上から差す幅の広いハイライトを
+   重ねる。B のブラッシュアップで最も効いた要素。 */
+.btn::after, .seg-outer::after, .card::after, .listrow::after, .overlay-panel::after,
+.ph-top::after, .ph-card::after, .ph-tabs::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: var(--specular, none);
+  pointer-events: none; z-index: -1;
+}
+
+/* セグメント切替 */
+.seg-outer {
+  display: flex; gap: var(--seg-gap); padding: var(--seg-pad);
+  background: var(--seg-track);
+  -webkit-backdrop-filter: var(--seg-blur); backdrop-filter: var(--seg-blur);
+  border: 1px solid var(--seg-track-bd);
+  border-radius: var(--seg-radius);
+  box-shadow: var(--seg-track-sh);
+}
+.seg {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: var(--seg-item-pad);
+  background: transparent;
+  border-width: 1px; border-style: solid; border-color: transparent;
+  border-radius: var(--seg-item-radius);
+  cursor: pointer; outline: none; text-align: left;
+  color: var(--seg-off-fg, var(--mute)); font-family: var(--font-ui);
+  transition: all .22s cubic-bezier(.32,.72,.24,1);
+}
+.seg .t { font-size: var(--seg-fs); font-weight: var(--seg-fw); letter-spacing: var(--btn-ls); }
+.seg .s { font-size: 10px; color: var(--faint); font-weight: 500; }
+.seg.on {
+  background: var(--seg-on-bg); border-color: var(--seg-on-bd);
+  color: var(--seg-on-fg); box-shadow: var(--seg-on-sh);
+  -webkit-backdrop-filter: var(--seg-item-blur, none); backdrop-filter: var(--seg-item-blur, none);
+}
+.seg.on .s { color: var(--seg-on-sub); }
+
+/* タグ */
+.tag {
+  display: inline-flex; align-items: center;
+  font-family: var(--tag-font);
+  font-size: var(--tag-fs); font-weight: var(--tag-fw); letter-spacing: var(--tag-ls);
+  padding: var(--tag-pad); border-radius: var(--tag-radius);
+  border: 1px solid transparent;
+  box-shadow: var(--tag-sh);
+  -webkit-backdrop-filter: var(--tag-blur, none); backdrop-filter: var(--tag-blur, none);
+}
+.tag.accent  { background: var(--t-accent-bg);  border-color: var(--t-accent-bd);  color: var(--t-accent-fg); }
+.tag.success { background: var(--t-success-bg); border-color: var(--t-success-bd); color: var(--t-success-fg); }
+.tag.warn    { background: var(--t-warn-bg);    border-color: var(--t-warn-bd);    color: var(--t-warn-fg); }
+.tag.neutral { background: var(--t-neutral-bg); border-color: var(--t-neutral-bd); color: var(--t-neutral-fg); }
+
+/* アイコンバッジ（円形） */
+.badge {
+  width: var(--badge-size, 46px); height: var(--badge-size, 46px);
+  border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: var(--badge-fs, 17px); line-height: 1;
+  border: 1px solid transparent;
+  -webkit-backdrop-filter: var(--badge-blur, none); backdrop-filter: var(--badge-blur, none);
+}
+.badge.b-accent  { background: var(--bd-accent-bg);  border-color: var(--bd-accent-bd);  color: var(--bd-accent-fg);  box-shadow: var(--bd-accent-sh); }
+.badge.b-success { background: var(--bd-success-bg); border-color: var(--bd-success-bd); color: var(--bd-success-fg); box-shadow: var(--bd-success-sh); }
+/* 虹色の球体（スクショの参照要素）。中に色の液体が入った磨りガラス球。 */
+.badge.b-orb { background: var(--orb-bg); border-color: transparent; box-shadow: var(--orb-sh); }
+/* ボタン内に埋め込む小さいオーブ。スクショ 1 枚目の生成ピルと同じ構成。 */
+.btn-orb {
+  width: var(--btn-orb-size, 20px); height: var(--btn-orb-size, 20px);
+  border-radius: 50%; flex-shrink: 0; position: relative; z-index: 4;
+  background: var(--orb-bg); box-shadow: var(--orb-sh-sm, var(--orb-sh));
+}
+
+/* 入力 */
+.input {
+  width: 100%; padding: var(--in-pad);
+  background: var(--in-bg);
+  border: 1px solid var(--in-bd);
+  border-radius: var(--in-radius);
+  color: var(--text); font-size: var(--in-fs, 13px); font-family: var(--font-ui);
+  outline: none; box-shadow: var(--in-sh);
+  -webkit-backdrop-filter: var(--in-blur, none); backdrop-filter: var(--in-blur, none);
+}
+.input::placeholder { color: var(--faint); }
+.input:focus { border-color: var(--in-focus-bd); box-shadow: var(--in-focus-sh); }
+
+/* プロジェクトカード */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-bd);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-sh);
+  overflow: hidden;
+  -webkit-backdrop-filter: var(--card-blur, none); backdrop-filter: var(--card-blur, none);
+  transition: transform .22s cubic-bezier(.32,.72,.24,1), box-shadow .22s;
+}
+.card:hover { transform: translateY(-2px); box-shadow: var(--card-sh-hover); }
+.card .thumb {
+  height: 96px; position: relative; z-index: 1;
+  background:
+    radial-gradient(120% 90% at 72% 8%, rgba(255,255,255,.92), rgba(255,255,255,0) 58%),
+    linear-gradient(160deg, #cdd6dd 0%, #b7c3cd 42%, #a9906f 42%, #c3aa88 100%);
+}
+.card .body { padding: 14px 15px 15px; position: relative; z-index: 1; }
+.card .title { font-family: var(--font-display); font-size: var(--card-title-fs); font-weight: var(--card-title-fw); letter-spacing: var(--card-title-ls); margin: 0 0 3px; }
+.card .meta  { font-size: 11.5px; color: var(--mute); margin: 0 0 11px; }
+.card .acts  { display: flex; gap: 7px; margin-top: 12px; }
+
+/* リストアイテム（カプセル行）
+   参照スクショの主役の形。縦に厚くても端は完全な半円のままで、
+   左に円形バッジ・右に 2 行テキスト + プログレスが入る。 */
+.listrow {
+  display: flex; align-items: center; gap: var(--lr-gap, 13px);
+  padding: var(--lr-pad, 13px 20px 13px 13px);
+  background: var(--card-bg);
+  border: 1px solid var(--card-bd);
+  border-radius: var(--lr-radius, 999px);
+  box-shadow: var(--card-sh);
+  -webkit-backdrop-filter: var(--card-blur, none); backdrop-filter: var(--card-blur, none);
+  transition: box-shadow .22s, transform .22s cubic-bezier(.32,.72,.24,1);
+}
+.listrow:hover { transform: translateY(-2px); box-shadow: var(--card-sh-hover); }
+.lr-body { flex: 1; min-width: 0; position: relative; z-index: 4; }
+.lr-t { margin: 0; font-family: var(--font-display); font-size: var(--lr-t-fs, 14px); font-weight: var(--lr-t-fw, 650); letter-spacing: var(--card-title-ls); }
+.lr-s { margin: 2px 0 0; font-size: var(--lr-s-fs, 11.5px); color: var(--mute); font-weight: 400; }
+.lr-bar {
+  margin-top: var(--lr-bar-mt, 9px); height: var(--lr-bar-h, 6px);
+  border-radius: 999px; background: var(--bar-track); overflow: hidden;
+}
+.lr-bar i { display: block; height: 100%; border-radius: 999px; background: var(--bar-fill); box-shadow: var(--bar-glow, none); }
+
+/* ══════════════════════════════════════════════════════════════════
+   テーマ 0 — 現行（design-tokens.ts の値をそのまま転記）
+   ══════════════════════════════════════════════════════════════════ */
+.t-current {
+  --canvas: #f8f8f8;
+  --text: #2d3142; --mute: #6b7280; --faint: #9ca3af;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-display: var(--font-ui);
+  --hover-bright: 1.02;
+  --edge-grad: none; --specular: none;
+
+  --btn-radius: 999px; --btn-pad: 10px 18px; --btn-pad-sm: 7px 14px;
+  --btn-fs: 12.5px; --btn-fw: 700; --btn-ls: 0.3px; --btn-bw: 1.5px;
+
+  --glass-sh:
+    inset 0 0 0 1.5px rgba(255,255,255,.7), inset 0 2px 2px rgba(255,255,255,.85),
+    inset 0 -1px .5px rgba(40,48,80,.07), 0 1px 2px rgba(40,48,80,.05),
+    0 4px 14px rgba(40,48,80,.07), 0 16px 36px rgba(40,48,80,.05);
+  --glass-accent-sh:
+    inset 0 0 0 1.5px rgba(255,255,255,.6), inset 0 1px .5px rgba(255,255,255,.92),
+    inset 0 -1px .5px rgba(61,142,197,.12), 0 1px 2px rgba(61,142,197,.06),
+    0 4px 12px rgba(130,200,235,.24), 0 12px 28px rgba(130,200,235,.14);
+  --glass-success-sh:
+    inset 0 0 0 1.5px rgba(255,255,255,.6), inset 0 1px .5px rgba(255,255,255,.92),
+    inset 0 -1px .5px rgba(106,157,74,.12), 0 1px 2px rgba(106,157,74,.06),
+    0 4px 12px rgba(180,220,130,.22), 0 12px 28px rgba(180,220,130,.14);
+
+  --pri-bg: linear-gradient(180deg,#ecf6fc 0%,#c8e1f1 100%); --pri-bd: #9bd0ed; --pri-fg: #2d3142; --pri-sh: var(--glass-accent-sh);
+  --sec-bg: linear-gradient(180deg,#ffffff 0%,#f0f0f0 100%);  --sec-bd: #dadada; --sec-fg: #2d3142; --sec-sh: var(--glass-sh);
+  --ter-bg: linear-gradient(180deg,#fcfcfc 0%,#f1f1f1 100%);  --ter-bd: #d8d8d8; --ter-fg: #2d3142; --ter-sh: var(--glass-sh);
+  --suc-bg: linear-gradient(180deg,#f2f7e2 0%,#dceac0 100%);  --suc-bd: #b8d088; --suc-fg: #2d3142; --suc-sh: var(--glass-success-sh);
+  --dng-bg: linear-gradient(180deg,#f5e4e4 0%,#e8c8c8 100%);  --dng-bd: #d4a8a8; --dng-fg: #2d3142; --dng-sh: var(--glass-sh);
+  --pur-bg: linear-gradient(180deg,#ece9f7 0%,#d2cde9 100%);  --pur-bd: #aea8d3; --pur-fg: #2d3142;
+  --pur-sh:
+    inset 0 0 0 1.5px rgba(255,255,255,.6), inset 0 1px .5px rgba(255,255,255,.92),
+    inset 0 -1px .5px rgba(110,106,208,.18), 0 1px 2px rgba(110,106,208,.12),
+    0 6px 16px rgba(170,160,228,.42), 0 16px 36px rgba(170,160,228,.26);
+
+  --seg-track: rgba(255,255,255,.88); --seg-track-bd: #dadada; --seg-blur: blur(10px) saturate(120%);
+  --seg-track-sh: var(--glass-sh); --seg-radius: 999px; --seg-pad: 5px; --seg-gap: 4px;
+  --seg-item-pad: 11px 16px; --seg-item-radius: 999px; --seg-fs: 13.5px; --seg-fw: 700;
+  --seg-on-bg: linear-gradient(180deg,#ecf6fc 0%,#c8e1f1 100%); --seg-on-bd: #9bd0ed;
+  --seg-on-fg: #2d3142; --seg-on-sub: #9ca3af; --seg-on-sh: var(--glass-accent-sh);
+
+  --tag-font: ui-monospace, 'SF Mono', Menlo, monospace;
+  --tag-fs: 10.5px; --tag-fw: 700; --tag-ls: 0.7px; --tag-pad: 3px 11px; --tag-radius: 999px;
+  --tag-sh: inset 0 1px .5px rgba(255,255,255,.9);
+  --t-accent-bg: linear-gradient(180deg,#ecf6fc,#c8e1f1); --t-accent-bd: #9bd0ed; --t-accent-fg: #2d3142;
+  --t-success-bg: linear-gradient(180deg,#f2f7e2,#dceac0); --t-success-bd: #b8d088; --t-success-fg: #2d3142;
+  --t-warn-bg: linear-gradient(180deg,#f7ede0,#ecdcc0); --t-warn-bd: #d6b986; --t-warn-fg: #2d3142;
+  --t-neutral-bg: linear-gradient(180deg,#fcfcfc,#f1f1f1); --t-neutral-bd: #d8d8d8; --t-neutral-fg: #2d3142;
+
+  --bd-accent-bg: linear-gradient(180deg,#ecf6fc,#c8e1f1); --bd-accent-bd: #9bd0ed; --bd-accent-fg: #3d8ec5; --bd-accent-sh: var(--glass-accent-sh);
+  --bd-success-bg: linear-gradient(180deg,#f2f7e2,#dceac0); --bd-success-bd: #b8d088; --bd-success-fg: #6a9d4a; --bd-success-sh: var(--glass-success-sh);
+  --orb-bg: linear-gradient(180deg,#fcfcfc,#f1f1f1); --orb-sh: var(--glass-sh);
+
+  --in-bg: linear-gradient(180deg,#ededed 0%,#f2f2f2 100%); --in-bd: #dadada; --in-radius: 999px;
+  --in-pad: 12px 16px; --in-sh: inset 0 1px 2px rgba(40,48,80,.07);
+  --in-focus-bd: #9bd0ed; --in-focus-sh: inset 0 1px 2px rgba(40,48,80,.07), 0 0 0 3px rgba(130,200,235,.22);
+
+  --card-bg: linear-gradient(180deg,#fcfcfc 0%,#f1f1f1 100%); --card-bd: #d8d8d8; --card-radius: 24px;
+  --card-sh: var(--glass-sh);
+  --card-sh-hover: 0 2px 4px rgba(40,48,80,.05), 0 12px 28px rgba(40,48,80,.08), 0 32px 72px rgba(40,48,80,.06);
+  --card-title-fs: 15px; --card-title-fw: 700; --card-title-ls: 0.2px;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   テーマ A — ハイブリッド（ビューア側のダーククローム）
+   B のガラスをそのまま暗いトーンに振ったもの。管理画面は現行のまま。
+   ══════════════════════════════════════════════════════════════════ */
+.t-a {
+  --canvas: #14161c;
+  --text: #eef1f6; --mute: rgba(238,241,246,.62); --faint: rgba(238,241,246,.40);
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-display: var(--font-ui);
+  --hover-bright: 1.12;
+  --press-scale: .97;
+
+  --edge-grad: linear-gradient(145deg,
+      rgba(255,255,255,.72) 0%, rgba(255,255,255,.16) 26%,
+      rgba(255,255,255,.05) 48%, rgba(255,255,255,.22) 72%,
+      rgba(255,255,255,.66) 100%);
+  --edge-grad-pri: linear-gradient(145deg,
+      rgba(210,240,255,.95) 0%, rgba(160,215,250,.30) 30%,
+      rgba(255,255,255,.10) 52%, rgba(160,215,250,.36) 76%,
+      rgba(210,240,255,.90) 100%);
+  --edge-w: 1.4px;
+  --specular: radial-gradient(120% 90% at 22% -18%, rgba(255,255,255,.20) 0%, rgba(255,255,255,.05) 42%, rgba(255,255,255,0) 68%);
+
+  --btn-radius: 999px; --btn-pad: 11px 20px; --btn-pad-sm: 8px 15px;
+  --btn-fs: 13px; --btn-fw: 600; --btn-ls: 0; --btn-bw: 0;
+  --btn-blur: blur(18px) saturate(180%);
+
+  --dark-glass-sh:
+    inset 0 1px 0 rgba(255,255,255,.13),
+    inset 0 -10px 16px -10px rgba(0,0,0,.55),
+    0 1px 2px rgba(0,0,0,.34), 0 8px 24px rgba(0,0,0,.36);
+
+  --pri-bg: linear-gradient(180deg, rgba(80,178,235,.36) 0%, rgba(40,124,190,.46) 100%);
+  --pri-bd: transparent; --pri-fg: #eaf6ff;
+  --pri-sh: inset 0 1px 0 rgba(255,255,255,.24), 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(64,168,232,.34), 0 16px 40px rgba(64,168,232,.18);
+  --sec-bg: rgba(255,255,255,.10); --sec-bd: transparent; --sec-fg: #eef1f6; --sec-sh: var(--dark-glass-sh);
+  --ter-bg: rgba(255,255,255,.045); --ter-bd: transparent; --ter-fg: rgba(238,241,246,.82); --ter-sh: none;
+  --suc-bg: linear-gradient(180deg, rgba(150,205,102,.28) 0%, rgba(112,168,68,.36) 100%);
+  --suc-bd: transparent; --suc-fg: #eefae0;
+  --suc-sh: inset 0 1px 0 rgba(255,255,255,.20), 0 6px 20px rgba(140,200,96,.26);
+  --dng-bg: linear-gradient(180deg, rgba(228,110,110,.26) 0%, rgba(186,74,74,.36) 100%);
+  --dng-bd: transparent; --dng-fg: #ffeaea;
+  --dng-sh: inset 0 1px 0 rgba(255,255,255,.18), 0 6px 20px rgba(210,90,90,.24);
+  --pur-bg: linear-gradient(180deg, rgba(150,138,238,.30) 0%, rgba(104,92,200,.40) 100%);
+  --pur-bd: transparent; --pur-fg: #ece8ff;
+  --pur-sh: inset 0 1px 0 rgba(255,255,255,.22), 0 6px 20px rgba(140,128,232,.34), 0 16px 40px rgba(140,128,232,.18);
+
+  --seg-track: rgba(16,18,24,.58); --seg-track-bd: transparent;
+  --seg-blur: blur(24px) saturate(160%);
+  --seg-track-sh: inset 0 1px 0 rgba(255,255,255,.10), 0 8px 28px rgba(0,0,0,.42);
+  --seg-radius: 999px; --seg-pad: 4px; --seg-gap: 3px;
+  --seg-item-pad: 10px 16px; --seg-item-radius: 999px; --seg-fs: 13px; --seg-fw: 600;
+  --seg-on-bg: linear-gradient(180deg, rgba(80,178,235,.32) 0%, rgba(40,124,190,.40) 100%);
+  --seg-on-bd: transparent; --seg-on-fg: #eaf6ff; --seg-on-sub: rgba(234,246,255,.55);
+  --seg-item-blur: blur(10px);
+  --seg-on-sh: inset 0 1px 0 rgba(255,255,255,.22), 0 4px 16px rgba(64,168,232,.30);
+
+  --tag-font: ui-monospace, 'SF Mono', Menlo, monospace;
+  --tag-fs: 10.5px; --tag-fw: 700; --tag-ls: 0.6px; --tag-pad: 3px 10px; --tag-radius: 999px;
+  --tag-blur: blur(10px) saturate(160%);
+  --tag-sh: inset 0 1px 0 rgba(255,255,255,.14);
+  --t-accent-bg: rgba(80,178,235,.20);  --t-accent-bd: rgba(126,205,246,.42); --t-accent-fg: #b9e2fb;
+  --t-success-bg: rgba(150,205,102,.18); --t-success-bd: rgba(176,222,128,.40); --t-success-fg: #cfeaab;
+  --t-warn-bg: rgba(220,168,90,.18);     --t-warn-bd: rgba(232,190,126,.40);   --t-warn-fg: #eed3a5;
+  --t-neutral-bg: rgba(255,255,255,.08); --t-neutral-bd: rgba(255,255,255,.15); --t-neutral-fg: rgba(238,241,246,.78);
+
+  --badge-blur: blur(14px) saturate(170%);
+  --bd-accent-bg: rgba(80,178,235,.24); --bd-accent-bd: rgba(126,205,246,.42); --bd-accent-fg: #b9e2fb;
+  --bd-accent-sh: inset 0 1px 0 rgba(255,255,255,.22), 0 6px 18px rgba(64,168,232,.30);
+  --bd-success-bg: rgba(150,205,102,.22); --bd-success-bd: rgba(176,222,128,.40); --bd-success-fg: #cfeaab;
+  --bd-success-sh: inset 0 1px 0 rgba(255,255,255,.20), 0 6px 18px rgba(140,200,96,.26);
+  --orb-bg:
+    radial-gradient(circle at 32% 26%, rgba(255,255,255,.85) 0%, rgba(255,255,255,0) 36%),
+    radial-gradient(circle at 70% 74%, rgba(255,150,210,.55) 0%, rgba(255,150,210,0) 48%),
+    radial-gradient(circle at 30% 68%, rgba(110,100,235,.70) 0%, rgba(110,100,235,0) 54%),
+    radial-gradient(circle at 74% 30%, rgba(120,215,255,.60) 0%, rgba(120,215,255,0) 50%),
+    linear-gradient(150deg, #3a3f66 0%, #262a44 100%);
+  --orb-sh: inset 0 -6px 10px rgba(0,0,0,.35), inset 0 4px 6px rgba(255,255,255,.35), 0 6px 18px rgba(120,110,220,.35);
+
+  --in-bg: rgba(0,0,0,.28); --in-bd: rgba(255,255,255,.13); --in-radius: 999px;
+  --in-pad: 12px 16px; --in-sh: inset 0 1px 2px rgba(0,0,0,.35); --in-blur: blur(12px);
+  --in-focus-bd: rgba(126,205,246,.6);
+  --in-focus-sh: inset 0 1px 2px rgba(0,0,0,.35), 0 0 0 3px rgba(80,178,235,.20);
+
+  --card-bg: rgba(255,255,255,.055); --card-bd: transparent; --card-radius: 20px;
+  --card-blur: blur(24px) saturate(170%);
+  --card-sh: var(--dark-glass-sh);
+  --card-sh-hover: inset 0 1px 0 rgba(255,255,255,.16), 0 14px 40px rgba(0,0,0,.5);
+  --card-title-fs: 15px; --card-title-fw: 650; --card-title-ls: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   テーマ B — Liquid Glass（iOS 26 の質感）／ブラッシュアップ版
+   ────────────────────────────────────────────────────────────────
+   前回からの変更点（1x ディスプレイ対策が中心）：
+     ・縁を 1.2px → 1.6px。iPhone は DPR 3 なので 1px でも物理 3px
+       で描かれるが、PC の 1x では 1px は文字どおり 1 ピクセルで
+       消えてしまう。ここが「PC だとガラスに見えない」最大の原因。
+     ・面の鏡面反射（--specular）を追加。縁だけだと「輪郭が光った
+       シール」に見える。ガラスは面そのものが広く光を返す。
+     ・縁に色収差を仕込んだ。上辺は寒色、下辺は暖色に寄せると
+       「厚みのある透明体」に見える。実際のレンズの分散。
+     ・不透明度をもう一段下げ（.42 → .36）、ぼかしを上げた（16→22px）。
+     ・hover で saturate を持ち上げ、ガラスが色を吸うのを強調。
+   ══════════════════════════════════════════════════════════════════ */
+.t-b {
+  --canvas: #eaeef4;
+  --text: #131820; --mute: #4f5a6a; --faint: #7e8998;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Yu Gothic UI', system-ui, sans-serif;
+  --font-display: var(--font-ui);
+  --hover-bright: 1.06; --hover-sat: 1.10;
+  --press-scale: .965;
+
+  /* 光源をひとつ想定した縁 + わずかな色収差。 */
+  --edge-grad: linear-gradient(140deg,
+      rgba(255,255,255,1)     0%,
+      rgba(216,240,255,.62)  16%,
+      rgba(255,255,255,.26)  34%,
+      rgba(255,255,255,.08)  50%,
+      rgba(255,245,232,.34)  68%,
+      rgba(255,255,255,.72)  86%,
+      rgba(255,255,255,1)   100%);
+  --edge-grad-pri: linear-gradient(140deg,
+      rgba(255,255,255,1)     0%,
+      rgba(206,238,255,.80)  18%,
+      rgba(255,255,255,.34)  38%,
+      rgba(150,205,245,.22)  52%,
+      rgba(255,255,255,.46)  72%,
+      rgba(255,255,255,1)   100%);
+  --edge-w: 1.6px;
+
+  /* 面の鏡面反射。左上から差す幅の広いハイライト。 */
+  --specular: radial-gradient(125% 92% at 18% -20%,
+      rgba(255,255,255,.62) 0%, rgba(255,255,255,.26) 30%,
+      rgba(255,255,255,.06) 52%, rgba(255,255,255,0) 72%);
+
+  --btn-radius: 999px; --btn-pad: 11px 20px; --btn-pad-sm: 8px 15px;
+  --btn-fs: 13px; --btn-fw: 600; --btn-ls: 0; --btn-bw: 0;
+  --btn-blur: blur(22px) saturate(200%);
+
+  /* ガラスの厚みと浮き。分けておくと状態で足し引きできる。 */
+  --glass-body:
+    inset 0 1px 1px rgba(255,255,255,.92),
+    inset 0 -12px 18px -12px rgba(18,34,60,.34),
+    inset 0 0 18px rgba(255,255,255,.34);
+  --glass-lift:
+    0 1px 2px rgba(18,28,52,.10),
+    0 8px 20px rgba(18,28,52,.14),
+    0 22px 48px rgba(18,28,52,.11);
+
+  --pri-bg: linear-gradient(180deg, rgba(84,172,234,.68) 0%, rgba(26,110,180,.80) 100%);
+  --pri-bd: transparent; --pri-fg: #ffffff;
+  --pri-sh:
+    inset 0 1px 1px rgba(255,255,255,.68),
+    inset 0 -12px 18px -12px rgba(6,42,78,.48),
+    inset 0 0 16px rgba(255,255,255,.20),
+    0 1px 2px rgba(18,28,52,.14),
+    0 8px 24px rgba(48,140,205,.42),
+    0 22px 48px rgba(48,140,205,.24);
+  --sec-bg: rgba(255,255,255,.36); --sec-bd: transparent; --sec-fg: #131820;
+  --sec-sh: var(--glass-body), var(--glass-lift);
+  --ter-bg: rgba(255,255,255,.14); --ter-bd: transparent; --ter-fg: #3a4554;
+  --ter-sh: inset 0 1px 1px rgba(255,255,255,.55), 0 2px 8px rgba(18,28,52,.07);
+  --suc-bg: linear-gradient(180deg, rgba(146,208,104,.66) 0%, rgba(88,158,58,.78) 100%);
+  --suc-bd: transparent; --suc-fg: #ffffff;
+  --suc-sh:
+    inset 0 1px 1px rgba(255,255,255,.62),
+    inset 0 -12px 18px -12px rgba(24,66,14,.46),
+    0 8px 24px rgba(120,190,80,.38), 0 22px 48px rgba(120,190,80,.18);
+  --dng-bg: linear-gradient(180deg, rgba(236,120,120,.66) 0%, rgba(188,60,60,.80) 100%);
+  --dng-bd: transparent; --dng-fg: #ffffff;
+  --dng-sh:
+    inset 0 1px 1px rgba(255,255,255,.60),
+    inset 0 -12px 18px -12px rgba(84,14,14,.46),
+    0 8px 24px rgba(214,96,96,.36), 0 22px 48px rgba(214,96,96,.16);
+  --pur-bg: linear-gradient(180deg, rgba(158,142,242,.62) 0%, rgba(102,86,206,.78) 100%);
+  --pur-bd: transparent; --pur-fg: #ffffff;
+  --pur-sh:
+    inset 0 1px 1px rgba(255,255,255,.62),
+    inset 0 -12px 18px -12px rgba(38,20,96,.48),
+    0 8px 24px rgba(132,116,226,.42), 0 22px 48px rgba(132,116,226,.22);
+
+  --seg-track: rgba(255,255,255,.20); --seg-track-bd: transparent;
+  --seg-blur: blur(26px) saturate(200%);
+  --seg-track-sh:
+    inset 0 1px 1px rgba(255,255,255,.60),
+    inset 0 -2px 3px rgba(20,35,60,.12),
+    0 4px 14px rgba(18,28,52,.10);
+  --seg-radius: 999px; --seg-pad: 4px; --seg-gap: 3px;
+  --seg-item-pad: 10px 16px; --seg-item-radius: 999px; --seg-fs: 13px; --seg-fw: 600;
+  --seg-on-bg: rgba(255,255,255,.58); --seg-on-bd: transparent;
+  --seg-on-fg: #131820; --seg-on-sub: #66717f;
+  --seg-item-blur: blur(12px) saturate(160%);
+  --seg-on-sh:
+    inset 0 1px 1px rgba(255,255,255,.95),
+    inset 0 -10px 14px -10px rgba(18,34,60,.26),
+    0 2px 6px rgba(18,28,52,.12), 0 8px 20px rgba(18,28,52,.10);
+
+  --tag-font: var(--font-ui);
+  --tag-fs: 11px; --tag-fw: 650; --tag-ls: 0.2px; --tag-pad: 3px 10px; --tag-radius: 999px;
+  --tag-blur: blur(12px) saturate(190%);
+  --tag-sh: inset 0 1px 1px rgba(255,255,255,.85), 0 1px 3px rgba(18,28,52,.10);
+  --t-accent-bg: rgba(90,175,235,.26);   --t-accent-bd: rgba(255,255,255,.62);  --t-accent-fg: #0d4a76;
+  --t-success-bg: rgba(140,205,100,.30); --t-success-bd: rgba(255,255,255,.62); --t-success-fg: #37651e;
+  --t-warn-bg: rgba(240,185,95,.32);     --t-warn-bd: rgba(255,255,255,.62);   --t-warn-fg: #77500f;
+  --t-neutral-bg: rgba(255,255,255,.34); --t-neutral-bd: rgba(255,255,255,.66); --t-neutral-fg: #46515f;
+
+  --badge-blur: blur(18px) saturate(200%);
+  --bd-accent-bg: rgba(90,175,235,.30); --bd-accent-bd: rgba(255,255,255,.55); --bd-accent-fg: #0d4a76;
+  --bd-accent-sh: var(--glass-body), 0 6px 18px rgba(48,140,205,.26);
+  --bd-success-bg: rgba(140,205,100,.32); --bd-success-bd: rgba(255,255,255,.55); --bd-success-fg: #37651e;
+  --bd-success-sh: var(--glass-body), 0 6px 18px rgba(120,190,80,.26);
+  --orb-bg:
+    radial-gradient(circle at 32% 26%, rgba(255,255,255,.95) 0%, rgba(255,255,255,0) 34%),
+    radial-gradient(circle at 70% 74%, rgba(255,160,215,.62) 0%, rgba(255,160,215,0) 46%),
+    radial-gradient(circle at 30% 68%, rgba(120,110,235,.72) 0%, rgba(120,110,235,0) 52%),
+    radial-gradient(circle at 74% 30%, rgba(120,215,255,.66) 0%, rgba(120,215,255,0) 48%),
+    linear-gradient(150deg, rgba(255,255,255,.72) 0%, rgba(226,232,250,.60) 100%);
+  --orb-sh: inset 0 -7px 11px rgba(70,62,150,.24), inset 0 5px 7px rgba(255,255,255,.92), 0 6px 18px rgba(110,100,200,.28);
+
+  /* 入力だけは「沈んだガラス」— 浮きの影を消して内側の影を強める。 */
+  --in-bg: rgba(255,255,255,.24); --in-bd: rgba(255,255,255,.50); --in-radius: 999px;
+  --in-pad: 11px 17px; --in-blur: blur(16px) saturate(180%);
+  --in-sh: inset 0 2px 5px rgba(18,34,60,.17), inset 0 -1px 1px rgba(255,255,255,.62);
+  --in-focus-bd: rgba(255,255,255,.92);
+  --in-focus-sh: inset 0 2px 5px rgba(18,34,60,.17), 0 0 0 3.5px rgba(60,150,220,.28);
+
+  --card-bg: rgba(255,255,255,.34); --card-bd: rgba(255,255,255,.26); --card-radius: 22px;
+  --card-blur: blur(28px) saturate(200%);
+  --card-sh: var(--glass-body), var(--glass-lift);
+  --card-sh-hover:
+    inset 0 1px 1px rgba(255,255,255,.95),
+    inset 0 -14px 22px -14px rgba(18,34,60,.34),
+    0 2px 6px rgba(18,28,52,.12), 0 16px 42px rgba(18,28,52,.20),
+    0 36px 74px rgba(18,28,52,.13);
+  --card-title-fs: 15.5px; --card-title-fw: 650; --card-title-ls: -0.005em;
+}
+
+/* B の背景切替 — ガラスは「背後に何かある」ときだけ成立する。
+   flat に切り替えると、同じ CSS でもガラスがほぼ消える。 */
+.t-b .panel { background: var(--panel-canvas); }
+.panel[data-bg="flat"] { --panel-canvas: #f8f8f8; }
+.panel[data-bg="mesh"] {
+  --panel-canvas:
+    radial-gradient(56% 44% at 10% 6%,  rgba(110,186,246,.62) 0%, rgba(110,186,246,0) 62%),
+    radial-gradient(50% 42% at 92% 12%, rgba(186,152,242,.50) 0%, rgba(186,152,242,0) 60%),
+    radial-gradient(58% 48% at 78% 92%, rgba(255,178,132,.48) 0%, rgba(255,178,132,0) 62%),
+    radial-gradient(52% 44% at 16% 86%, rgba(126,226,196,.50) 0%, rgba(126,226,196,0) 62%),
+    #eaeef4;
+}
+.panel[data-bg="photo"] {
+  --panel-canvas:
+    radial-gradient(64% 38% at 74% 8%, rgba(255,253,246,.95) 0%, rgba(255,251,240,0) 60%),
+    linear-gradient(178deg, #e8ecef 0%, #e2e7eb 44%, #c39d72 44.5%, #a9855f 100%);
+}
+
+.bgswitch {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  margin: auto 0 0; padding: 5px 6px;
+  background: #e2e6ec; border-radius: 9px;
+}
+.bgswitch span { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; color: #6d7480; padding: 0 5px; }
+.bgswitch button {
+  border: none; background: transparent; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 650; color: #5d6470;
+  padding: 4px 10px; border-radius: 6px; transition: all .18s;
+}
+.bgswitch button:hover { background: rgba(255,255,255,.6); }
+.bgswitch button.on { background: #fff; color: #1b6fa8; box-shadow: 0 1px 2px rgba(20,24,40,.12); }
+
+/* ══════════════════════════════════════════════════════════════════
+   テーマ C — Soft Aura（発光ニューモーフィズム）※スクショ準拠
+   ────────────────────────────────────────────────────────────────
+   前案（生成り紙 + 墨 + 明朝）を差し替え。参照スクショの原則：
+
+     1. 境界線を引かない。形は拡散影と発光だけで定義する
+     2. 色は「面」ではなく「光」として置く。アクティブな要素は
+        カプセルの外側までグロウがにじみ出す（0 0 22px 6px）
+     3. 大きくゆったり。パディングも文字も現行より一回り大きい
+     4. 文字はライトウェイト。太らせない（500〜550）
+     5. 彩度は極端に低い。パステルというより「白に色が透けた」状態
+
+   B との決定的な違い：**backdrop-filter を一切使わない**。
+   すべて不透明なので合成コストがゼロ。3D ビューアの上に何十個
+   置いても FPS に影響しない。
+   ══════════════════════════════════════════════════════════════════ */
+.t-c {
+  /* 参照は #f0f0f2 前後のニュートラルグレー。上寄りがわずかに明るい。 */
+  --canvas: radial-gradient(100% 78% at 50% 16%, #f6f6f7 0%, #f0f0f2 48%, #e8e8eb 100%);
+  --text: #3f4652; --mute: #a8adb6; --faint: #bcc0c8;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Yu Gothic UI', system-ui, sans-serif;
+  --font-display: var(--font-ui);
+  --hover-bright: 1.015;
+  --press-scale: .985;
+  --edge-grad: none;
+  --specular: none;
+
+  /* 白い面の「浮き」。
+     参照をよく見ると輪郭は完全な無ではなく、白い面のさらに外側に
+     ごく薄い灰の 1px リングがある（下の 0 0 0 1px）。これが無いと
+     背景に溶けて形が消え、有りすぎると「線で描いた UI」になる。 */
+  --aura-ring: 0 0 0 1px rgba(148,154,172,.10);
+  --aura-lift:
+    inset 0 1.5px 1px rgba(255,255,255,1),
+    inset 0 -1px 1px rgba(150,155,170,.09),
+    var(--aura-ring),
+    0 1px 1px rgba(120,126,142,.04),
+    0 6px 14px rgba(120,126,142,.10),
+    0 20px 40px rgba(120,126,142,.12);
+
+  /* 参照はとにかく大きい。ピルの高さに対して文字が小さく、
+     余白が支配的。ここが前回いちばんズレていた。 */
+  --btn-radius: 999px; --btn-pad: 15px 30px; --btn-pad-sm: 11px 22px;
+  --btn-fs: 15px; --btn-fw: 500; --btn-ls: 0; --btn-bw: 1.5px;
+  --btn-orb-size: 22px;
+
+  /* アクティブ = カプセルの外へにじむ発光。この最終層が signature。
+     参照ではハローがはっきり見えるので、前回より広く・濃く。 */
+  --pri-bg: linear-gradient(180deg, #e0eefc 0%, #cbe3f8 100%);
+  --pri-bd: rgba(255,255,255,.85); --pri-fg: #5c9cd4;
+  --pri-sh:
+    inset 0 1.5px 1px rgba(255,255,255,.95),
+    0 0 0 1px rgba(150,190,230,.30),
+    0 2px 5px rgba(110,165,215,.14),
+    0 6px 14px rgba(120,175,225,.20),
+    0 0 28px 8px rgba(150,200,245,.55);
+  --sec-bg: linear-gradient(180deg, #fdfdfe 0%, #f7f7f9 100%);
+  --sec-bd: rgba(255,255,255,1); --sec-fg: #3f4652; --sec-sh: var(--aura-lift);
+  --ter-bg: transparent; --ter-bd: transparent; --ter-fg: #a8adb6; --ter-sh: none;
+  --suc-bg: linear-gradient(180deg, #eefae0 0%, #ddefc4 100%);
+  --suc-bd: rgba(255,255,255,.85); --suc-fg: #6aa84f;
+  --suc-sh:
+    inset 0 1.5px 1px rgba(255,255,255,.95),
+    0 0 0 1px rgba(178,212,140,.30),
+    0 2px 5px rgba(140,180,110,.14),
+    0 6px 14px rgba(150,200,110,.20),
+    0 0 28px 8px rgba(184,226,142,.55);
+  --dng-bg: linear-gradient(180deg, #fdecee 0%, #f9d8dc 100%);
+  --dng-bd: rgba(255,255,255,.85); --dng-fg: #d4767e;
+  --dng-sh:
+    inset 0 1.5px 1px rgba(255,255,255,.95),
+    0 0 0 1px rgba(236,178,184,.30),
+    0 2px 5px rgba(205,140,145,.14),
+    0 6px 14px rgba(225,150,158,.20),
+    0 0 28px 8px rgba(248,190,196,.55);
+  /* 紫 = 参照 1 枚目の生成ピル。ここだけ「色のついた枠線」が
+     はっきり見えるのが特徴で、他のバリアントとは扱いが違う。 */
+  --pur-bg: linear-gradient(180deg, #ebe4fa 0%, #e0d7f6 100%);
+  --pur-bd: #c9bbea; --pur-fg: #8b7ad6;
+  --pur-sh:
+    inset 0 1.5px 1px rgba(255,255,255,.90),
+    0 2px 5px rgba(150,130,210,.12),
+    0 6px 14px rgba(160,140,220,.18),
+    0 0 28px 8px rgba(192,176,242,.50);
+
+  /* セグメント = 白いカプセルの中で、選択中だけが光る。
+     参照の "My Projects" は薄いグレーではなく **濃いグレー**。
+     非選択が沈まないので、選択側は色ではなく「光」で差をつける。
+     トラックの内側余白が極端に太いのも参照どおり。 */
+  --seg-track: linear-gradient(180deg, #fdfdfe 0%, #f7f7f9 100%);
+  --seg-track-bd: rgba(255,255,255,1); --seg-blur: none;
+  --seg-track-sh: var(--aura-lift);
+  --seg-radius: 999px; --seg-pad: 13px; --seg-gap: 4px;
+  --seg-item-pad: 13px 22px; --seg-item-radius: 999px; --seg-fs: 15.5px; --seg-fw: 500;
+  --seg-off-fg: #3f4652;
+  --seg-on-bg: linear-gradient(180deg, #e0eefc 0%, #cbe3f8 100%);
+  --seg-on-bd: rgba(255,255,255,.85); --seg-on-fg: #5c9cd4; --seg-on-sub: #a3c8e6;
+  --seg-on-sh:
+    inset 0 1.5px 1px rgba(255,255,255,.95),
+    0 0 0 1px rgba(150,190,230,.28),
+    0 2px 6px rgba(120,175,225,.16),
+    0 0 26px 8px rgba(150,200,245,.55);
+
+  --tag-font: var(--font-ui);
+  --tag-fs: 11.5px; --tag-fw: 500; --tag-ls: 0.2px; --tag-pad: 5px 14px; --tag-radius: 999px;
+  --tag-sh: inset 0 1px 1px rgba(255,255,255,.95), var(--aura-ring), 0 0 14px 3px rgba(160,170,195,.14);
+  --t-accent-bg: linear-gradient(180deg,#e8f3fd,#d9ebfa);  --t-accent-bd: rgba(255,255,255,.85); --t-accent-fg: #5c9cd4;
+  --t-success-bg: linear-gradient(180deg,#f1fae4,#e4f2d0); --t-success-bd: rgba(255,255,255,.85); --t-success-fg: #6aa84f;
+  --t-warn-bg: linear-gradient(180deg,#fdf5e4,#f9ecd0);    --t-warn-bd: rgba(255,255,255,.85);   --t-warn-fg: #c69a4e;
+  --t-neutral-bg: linear-gradient(180deg,#fdfdfe,#f5f5f7); --t-neutral-bd: rgba(255,255,255,1); --t-neutral-fg: #a8adb6;
+
+  /* 円形バッジ = 参照の緑アイコン。塗りは中心やや左上が明るい球面
+     グラデ、外周にはっきりしたグリーンのハロー。輪郭線は無い。 */
+  --badge-size: 52px; --badge-fs: 19px;
+  --bd-accent-bg: radial-gradient(circle at 34% 27%, #eef7fe 0%, #d5eafb 78%, #cbe4f9 100%);
+  --bd-accent-bd: rgba(255,255,255,.85); --bd-accent-fg: #5c9cd4;
+  --bd-accent-sh: inset 0 2px 2px rgba(255,255,255,.95), 0 3px 8px rgba(120,175,225,.16), 0 0 30px 9px rgba(150,200,245,.55);
+  --bd-success-bg: radial-gradient(circle at 34% 27%, #f4fce8 0%, #e0f1c8 78%, #d7ecbb 100%);
+  --bd-success-bd: rgba(255,255,255,.85); --bd-success-fg: #6aa84f;
+  --bd-success-sh: inset 0 2px 2px rgba(255,255,255,.95), 0 3px 8px rgba(150,200,110,.16), 0 0 30px 9px rgba(184,226,142,.58);
+
+  /* 虹色オーブ（参照 1 枚目）。外周は磨りガラスで白く濁り、
+     色は球の内側に溜まっている。単なる虹グラデの円ではない。 */
+  --orb-bg:
+    radial-gradient(circle at 34% 25%, rgba(255,255,255,.98) 0%, rgba(255,255,255,.55) 14%, rgba(255,255,255,0) 27%),
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0) 42%, rgba(255,255,255,.62) 82%, rgba(255,255,255,.88) 100%),
+    radial-gradient(circle at 57% 38%, rgba(112,206,255,.78) 0%, rgba(112,206,255,0) 33%),
+    radial-gradient(circle at 60% 63%, rgba(255,148,205,.72) 0%, rgba(255,148,205,0) 34%),
+    radial-gradient(circle at 42% 56%, rgba(102,86,235,.88) 0%, rgba(102,86,235,0) 37%),
+    linear-gradient(150deg, #f4f5ff 0%, #e5e8fb 100%);
+  --orb-sh:
+    inset 0 -8px 12px rgba(88,78,178,.20), inset 0 6px 8px rgba(255,255,255,.98),
+    0 5px 12px rgba(110,100,200,.22), 0 0 28px 8px rgba(172,160,244,.48);
+  --orb-sh-sm:
+    inset 0 -3px 5px rgba(88,78,178,.22), inset 0 2px 3px rgba(255,255,255,.98),
+    0 1px 3px rgba(110,100,200,.26);
+
+  --in-bg: linear-gradient(180deg, #fdfdfe 0%, #f8f8fa 100%);
+  --in-bd: rgba(255,255,255,1); --in-radius: 999px;
+  --in-pad: 15px 24px; --in-fs: 14.5px;
+  --in-sh: inset 0 1.5px 1px rgba(255,255,255,1), inset 0 2px 5px rgba(150,155,170,.09), var(--aura-ring), 0 5px 12px rgba(120,126,142,.07);
+  --in-focus-bd: rgba(255,255,255,1);
+  --in-focus-sh: inset 0 1.5px 1px rgba(255,255,255,1), 0 0 24px 6px rgba(150,200,245,.45);
+
+  --card-bg: linear-gradient(180deg, #fdfdfe 0%, #f7f7f9 100%);
+  --card-bd: rgba(255,255,255,1); --card-radius: 30px;
+  --card-sh: var(--aura-lift);
+  --card-sh-hover:
+    inset 0 1.5px 1px rgba(255,255,255,1), var(--aura-ring),
+    0 2px 4px rgba(120,126,142,.06),
+    0 12px 26px rgba(120,126,142,.13),
+    0 32px 60px rgba(120,126,142,.14);
+  --card-title-fs: 17px; --card-title-fw: 500; --card-title-ls: 0;
+
+  /* リストアイテム = 参照 2 枚目。縦に厚くても端は完全な半円。 */
+  --lr-pad: 15px 26px 15px 15px; --lr-gap: 15px; --lr-radius: 999px;
+  --lr-t-fs: 16.5px; --lr-t-fw: 500; --lr-s-fs: 12.5px;
+  --lr-bar-h: 7px; --lr-bar-mt: 11px;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   スマートフォン UI
+   ────────────────────────────────────────────────────────────────
+   Liquid Glass はもともとモバイルの言語。全面 3D の上に浮く前提で
+   設計されているので、PC の余白だらけの画面より本来の姿が出る。
+   ══════════════════════════════════════════════════════════════════ */
+.phones { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 22px; justify-items: center; }
+@media (max-width: 1400px) { .phones { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 760px)  { .phones { grid-template-columns: 1fr; } }
+
+.phone-wrap { width: 100%; max-width: 300px; }
+.phone-cap { margin: 0 0 12px; text-align: center; font-size: 12.5px; font-weight: 700; color: #5a616e; }
+
+.phone {
+  position: relative; width: 100%; aspect-ratio: 390 / 844;
+  border-radius: 46px; padding: 9px;
+  background: linear-gradient(160deg, #3a3d44 0%, #16181c 40%, #26292f 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,.22), 0 18px 44px rgba(20,25,45,.30), 0 40px 80px rgba(20,25,45,.18);
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+.ph-screen {
+  position: relative; width: 100%; height: 100%; border-radius: 38px; overflow: hidden;
+  /* 明るい室内 3DGS を近似 */
+  background:
+    radial-gradient(58% 30% at 74% 12%, rgba(255,253,246,.98) 0%, rgba(255,251,240,0) 62%),
+    radial-gradient(46% 26% at 16% 34%, rgba(226,235,242,.80) 0%, rgba(226,235,242,0) 72%),
+    linear-gradient(178deg, #e9edf0 0%, #e1e6ea 58%, #c49e73 58.4%, #a5815b 100%);
+}
+.ph-screen::before { /* 窓 */
+  content: ''; position: absolute; left: 56%; top: 9%; width: 34%; height: 30%;
+  background: linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,.05));
+  border: 1px solid rgba(255,255,255,.65); border-radius: 3px;
+}
+.ph-screen::after { /* 床の映り込み */
+  content: ''; position: absolute; left: 0; right: 0; top: 58.4%; bottom: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.38), rgba(255,255,255,0) 45%);
+}
+
+.ph-status {
+  position: absolute; z-index: 6; top: 0; left: 0; right: 0; height: 46px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 26px 0;
+  font-size: 12px; font-weight: 650; color: var(--ph-status-fg, #2a2f38);
+}
+.ph-ind { display: flex; gap: 3px; align-items: flex-end; }
+.ph-ind i { display: block; width: 3px; background: currentColor; border-radius: 1px; }
+.ph-ind i:nth-child(1) { height: 5px; } .ph-ind i:nth-child(2) { height: 7px; }
+.ph-ind i:nth-child(3) { height: 9px; } .ph-ind i:nth-child(4) { height: 11px; opacity: .35; }
+
+.ph-top {
+  position: absolute; z-index: 5; top: 50px; left: 12px; right: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 16px; border-radius: 999px;
+  background: var(--panel-bg); border: 1px solid var(--panel-bd);
+  box-shadow: var(--panel-sh);
+  -webkit-backdrop-filter: var(--panel-blur); backdrop-filter: var(--panel-blur);
+}
+.ph-top-t { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; z-index: 4; }
+.ph-x { font-size: 13px; color: var(--mute); position: relative; z-index: 4; }
+
+.ph-side { position: absolute; z-index: 5; right: 12px; top: 108px; display: flex; flex-direction: column; gap: 8px; }
+.ph-rb {
+  width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-family: var(--font-ui); color: var(--text);
+  background: var(--panel-bg); border: 1px solid var(--panel-bd);
+  box-shadow: var(--panel-sh);
+  -webkit-backdrop-filter: var(--panel-blur); backdrop-filter: var(--panel-blur);
+}
+
+.ph-card {
+  position: absolute; z-index: 5; left: 12px; right: 12px; bottom: 84px;
+  padding: 13px 14px; border-radius: var(--card-radius);
+  background: var(--panel-bg); border: 1px solid var(--panel-bd);
+  box-shadow: var(--panel-sh);
+  -webkit-backdrop-filter: var(--panel-blur); backdrop-filter: var(--panel-blur);
+}
+.ph-card-h { display: flex; align-items: center; gap: 11px; position: relative; z-index: 4; }
+.ph-badge { width: 36px; height: 36px; font-size: 14px; }
+.ph-card-t { margin: 0; font-size: 13.5px; font-weight: 600; }
+.ph-card-s { margin: 1px 0 0; font-size: 10.5px; color: var(--mute); }
+.ph-bar {
+  position: relative; z-index: 4; margin-top: 11px; height: 5px; border-radius: 999px;
+  background: var(--bar-track); overflow: hidden;
+}
+.ph-bar i { display: block; height: 100%; border-radius: 999px; background: var(--bar-fill); box-shadow: var(--bar-glow, none); }
+
+.ph-tabs {
+  position: absolute; z-index: 5; left: 12px; right: 12px; bottom: 26px;
+  display: flex; gap: var(--seg-gap); padding: var(--seg-pad);
+  border-radius: 999px;
+  background: var(--panel-bg); border: 1px solid var(--panel-bd);
+  box-shadow: var(--panel-sh);
+  -webkit-backdrop-filter: var(--panel-blur); backdrop-filter: var(--panel-blur);
+}
+.ph-tab {
+  flex: 1; padding: 9px 4px; border: 1px solid transparent; border-radius: 999px;
+  background: transparent; cursor: pointer;
+  font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; color: var(--mute);
+  position: relative; z-index: 4;
+}
+.ph-tab.on {
+  background: var(--seg-on-bg); border-color: var(--seg-on-bd);
+  color: var(--seg-on-fg); box-shadow: var(--seg-on-sh);
+}
+.ph-home {
+  position: absolute; z-index: 6; bottom: 8px; left: 50%; transform: translateX(-50%);
+  width: 34%; height: 4px; border-radius: 999px; background: rgba(30,35,45,.30);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ビューア文脈（PC）
+   ══════════════════════════════════════════════════════════════════ */
+.scenes { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; }
+@media (max-width: 900px) { .scenes { grid-template-columns: 1fr; } }
+
+.scene {
+  position: relative; height: 330px; border-radius: 14px; overflow: hidden;
+  border: 1px solid #d3d8df;
+  background:
+    radial-gradient(64% 52% at 76% 16%, rgba(255,253,246,.98) 0%, rgba(255,251,240,0) 62%),
+    radial-gradient(40% 30% at 18% 30%, rgba(228,236,242,.75) 0%, rgba(228,236,242,0) 70%),
+    linear-gradient(178deg, #e8ecef 0%, #e2e7eb 54%, #c39d72 54.5%, #a9855f 100%);
+  font-family: var(--font-ui);
+}
+.scene::before {
+  content: ''; position: absolute; left: 58%; top: 6%; width: 30%; height: 44%;
+  background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0));
+  border: 1px solid rgba(255,255,255,.6); border-radius: 2px;
+}
+.scene::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 54.5%; bottom: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,0) 40%);
+}
+.scene .tagline {
+  position: absolute; top: 12px; left: 14px; z-index: 6;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 999px;
+  background: rgba(20,22,28,.55); color: #fff; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.overlay-bottom {
+  position: absolute; z-index: 4; left: 50%; bottom: 18px; transform: translateX(-50%);
+  display: flex; gap: 8px; align-items: center;
+}
+.overlay-panel {
+  position: absolute; z-index: 4; right: 16px; top: 46px; width: 194px;
+  padding: 13px 14px;
+  background: var(--panel-bg); border: 1px solid var(--panel-bd); border-radius: var(--card-radius);
+  box-shadow: var(--panel-sh);
+  -webkit-backdrop-filter: var(--panel-blur); backdrop-filter: var(--panel-blur);
+  color: var(--text);
+}
+.overlay-panel h4 { margin: 0 0 9px; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); position: relative; z-index: 4; }
+.overlay-panel .kv { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; color: var(--mute); position: relative; z-index: 4; }
+.overlay-panel .kv b { color: var(--text); font-weight: 650; }
+
+/* 各テーマのオーバーレイ面（PC ビューア + スマホ共通） */
+.t-current {
+  --panel-bg: rgba(255,255,255,.88); --panel-bd: #dadada;
+  --panel-blur: blur(10px) saturate(120%); --panel-sh: var(--glass-sh);
+  --bar-track: #e3e3e3; --bar-fill: linear-gradient(90deg,#b6cdf2,#97b6e8);
+}
+.t-a {
+  --panel-bg: rgba(16,18,24,.60); --panel-bd: transparent;
+  --panel-blur: blur(26px) saturate(160%);
+  --panel-sh: inset 0 1px 0 rgba(255,255,255,.10), 0 10px 34px rgba(0,0,0,.45);
+  --ph-status-fg: #ffffff;
+  --bar-track: rgba(255,255,255,.16); --bar-fill: linear-gradient(90deg,#6cc0f0,#3f9ad8);
+  --bar-glow: 0 0 10px rgba(80,178,235,.6);
+}
+.t-b {
+  --panel-bg: rgba(255,255,255,.32); --panel-bd: rgba(255,255,255,.28);
+  --panel-blur: blur(28px) saturate(200%);
+  --panel-sh: var(--glass-body), 0 2px 6px rgba(18,28,52,.14), 0 14px 38px rgba(18,28,52,.18);
+  --bar-track: rgba(255,255,255,.30); --bar-fill: linear-gradient(90deg, rgba(120,195,245,.9), rgba(48,140,205,.95));
+  --bar-glow: inset 0 1px 1px rgba(255,255,255,.7);
+}
+.t-c {
+  /* C は blur を使わないので、3D の上でも完全不透明。背後は隠れるが
+     合成コストはゼロ。ここが B との最大のトレードオフ。 */
+  --panel-bg: linear-gradient(180deg,#fdfdfe 0%,#f7f7f9 100%); --panel-bd: rgba(255,255,255,1);
+  --panel-blur: none;
+  --panel-sh: var(--aura-lift);
+  --bar-track: #e7e7ea; --bar-fill: linear-gradient(90deg,#a9d5f5,#82c0f2);
+  --bar-glow: 0 0 10px 1px rgba(140,195,242,.60);
+}
+
+/* ── C の精度確認ステージ ─────────────────────────────────────
+   参照スクショと同じ構成・同じ比率で組み直したもの。比較カラムは
+   幅が狭くて参照の「大きさ」が再現できないので、原寸に近い場を別に
+   用意している。 */
+.repro {
+  border-radius: 16px; border: 1px solid #d3d8df; overflow: hidden;
+  background: var(--canvas); color: var(--text); font-family: var(--font-ui);
+  padding: 58px 24px 66px;
+}
+.repro-stage { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 34px; }
+.repro-seg { padding: 16px; }
+.repro-seg .seg {
+  flex-direction: row; align-items: center; justify-content: center;
+  gap: 9px; padding: 15px 24px;
+}
+.repro-seg .seg .t { font-size: 17px; display: inline-flex; align-items: center; gap: 9px; }
+.repro-row { padding: 18px 30px 18px 18px; }
+.repro-row .badge { --badge-size: 66px; }
+.repro-row .lr-t { font-size: 19px; }
+.repro-row .lr-s { font-size: 14px; }
+.repro-row .lr-bar { height: 8px; margin-top: 13px; }
+.repro-gen { align-self: flex-start; font-size: 19px; padding: 17px 34px; gap: 13px; --btn-orb-size: 30px; }
+.repro-notes { margin: 22px 0 0; padding: 0 0 0 20px; font-size: 13px; color: #5a616e; }
+.repro-notes li { margin-bottom: 5px; }
+.repro-notes b { color: #1e2530; }
+
+/* ── 比較表 ─────────────────────────────────────────────────── */
+table.cmp { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(20,24,40,.06); }
+table.cmp th, table.cmp td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #e7eaee; vertical-align: top; }
+table.cmp thead th { background: #f4f6f8; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6d7480; }
+table.cmp tbody th { font-weight: 650; color: #3b414d; width: 132px; background: #fafbfc; }
+table.cmp tr:last-child td, table.cmp tr:last-child th { border-bottom: none; }
+table.cmp code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; background: #eef1f4; padding: 1px 5px; border-radius: 3px; }
+.cost { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.cost.low  { background: #e7f2e4; color: #43703a; }
+.cost.mid  { background: #fdf1dd; color: #8a6524; }
+.cost.high { background: #fbe6e6; color: #a94848; }
+
+footer.page { margin-top: 56px; padding-top: 20px; border-top: 1px solid #d7dbe1; font-size: 12.5px; color: #767d8a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>3DRoomTour — デザイン方向性の比較</h1>
+  <p>
+    4 カラムはすべて<strong>まったく同じ HTML マークアップ</strong>で、差分は CSS 変数の値だけです。
+    つまりここで見えている違いが、そのまま <code>src/ui/design-tokens.ts</code> の変更差分にあたります。
+    「現行」列は <code>design-tokens.ts</code> と <code>components/Pill.tsx</code> の実値をそのまま転記しています。
+  </p>
+  <p class="note">
+    <b>「PC だからガラス感が出ないのでは？」— レンダリングの制約ではありません。</b>
+    Windows の Chromium は <code>backdrop-filter</code> を完全にサポートしています。効きが弱く見える理由は 3 つで、うち 2 つは PC 固有です。
+    <b>①</b> 背景に情報がない（B 列の背景スイッチで確認できます）。
+    <b>②</b> DPR が 1x — iPhone は 3x なので 1px の縁が物理 3 ピクセルで描かれてクッキリ出ますが、1x モニタでは文字どおり 1 ピクセルなので消し飛びます。今回 B の縁を 1.6px に上げたのはこの対策です。
+    <b>③</b> 画面に対する要素の比率 — iPhone は幅 390pt にボタンが 120pt 占めますが、27 インチでは同じボタンが画面の数 % しかなく、光学効果が視認サイズを下回ります。
+    下の「スマートフォン UI」セクションが、本来の見え方です。
+  </p>
+</header>
+
+<h2 class="section">コンポーネント比較</h2>
+<div class="grid">
+
+  <!-- ═══ 現行 ═══ -->
+  <div class="col">
+    <div class="col-head">
+      <span class="kicker">現行</span>
+      <h3>Liquid Glass（名ばかり）</h3>
+      <p>白い持ち上がりガラスピル。不透明度 .78〜.88 で実質は不透明白。全要素が同じ 6 層シャドウで階層差がない。</p>
+    </div>
+    <div class="panel t-current">
+      <div class="label">ボタン階層</div>
+      <div class="row">
+        <button class="btn primary">保存する</button>
+        <button class="btn secondary">複製</button>
+        <button class="btn tertiary">閉じる</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn success sm">書き出し</button>
+        <button class="btn danger sm">削除</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn purple"><span class="btn-orb"></span>AI ステージング</button>
+      </div>
+
+      <div class="label">セグメント切替</div>
+      <div class="seg-outer">
+        <button class="seg on"><span class="t">全体</span><span class="s">Project</span></button>
+        <button class="seg"><span class="t">プラン</span><span class="s">Plan</span></button>
+      </div>
+
+      <div class="label">アイコンバッジ</div>
+      <div class="row">
+        <span class="badge b-accent">▶</span>
+        <span class="badge b-success">✓</span>
+        <span class="badge b-orb"></span>
+      </div>
+
+      <div class="label">リストアイテム</div>
+      <div class="listrow">
+        <span class="badge b-success">▶</span>
+        <div class="lr-body">
+          <p class="lr-t">SPZ 変換中</p>
+          <p class="lr-s">living.ply · 20 MB · 残り 15 秒</p>
+          <div class="lr-bar"><i style="width:58%"></i></div>
+        </div>
+      </div>
+
+      <div class="label">タグ</div>
+      <div class="row">
+        <span class="tag accent">SPZ</span>
+        <span class="tag success">READY</span>
+        <span class="tag warn">未校正</span>
+        <span class="tag neutral">3.2 MB</span>
+      </div>
+
+      <div class="label">入力</div>
+      <input class="input" placeholder="プロジェクト名">
+
+      <div class="label">プロジェクトカード</div>
+      <div class="card">
+        <div class="thumb"></div>
+        <div class="body">
+          <p class="title">港区 3LDK モデルルーム</p>
+          <p class="meta">プラン 3 件 · 更新 8月1日</p>
+          <div class="row"><span class="tag accent">SOG</span><span class="tag success">公開中</span></div>
+          <div class="acts">
+            <button class="btn primary sm">開く</button>
+            <button class="btn tertiary sm">設定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ A ═══ -->
+  <div class="col">
+    <div class="col-head is-rec">
+      <span class="kicker">案 A ・ 推し</span>
+      <h3>ハイブリッド（暗ガラス）</h3>
+      <p>B のガラスをそのまま暗いトーンに振ったもの。管理画面は現行のまま、ビューア上だけこれに差し替える。</p>
+    </div>
+    <div class="panel t-a">
+      <div class="label">ボタン階層</div>
+      <div class="row">
+        <button class="btn primary">保存する</button>
+        <button class="btn secondary">複製</button>
+        <button class="btn tertiary">閉じる</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn success sm">書き出し</button>
+        <button class="btn danger sm">削除</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn purple"><span class="btn-orb"></span>AI ステージング</button>
+      </div>
+
+      <div class="label">セグメント切替</div>
+      <div class="seg-outer">
+        <button class="seg on"><span class="t">全体</span><span class="s">Project</span></button>
+        <button class="seg"><span class="t">プラン</span><span class="s">Plan</span></button>
+      </div>
+
+      <div class="label">アイコンバッジ</div>
+      <div class="row">
+        <span class="badge b-accent">▶</span>
+        <span class="badge b-success">✓</span>
+        <span class="badge b-orb"></span>
+      </div>
+
+      <div class="label">リストアイテム</div>
+      <div class="listrow">
+        <span class="badge b-success">▶</span>
+        <div class="lr-body">
+          <p class="lr-t">SPZ 変換中</p>
+          <p class="lr-s">living.ply · 20 MB · 残り 15 秒</p>
+          <div class="lr-bar"><i style="width:58%"></i></div>
+        </div>
+      </div>
+
+      <div class="label">タグ</div>
+      <div class="row">
+        <span class="tag accent">SPZ</span>
+        <span class="tag success">READY</span>
+        <span class="tag warn">未校正</span>
+        <span class="tag neutral">3.2 MB</span>
+      </div>
+
+      <div class="label">入力</div>
+      <input class="input" placeholder="プロジェクト名">
+
+      <div class="label">プロジェクトカード</div>
+      <div class="card">
+        <div class="thumb"></div>
+        <div class="body">
+          <p class="title">港区 3LDK モデルルーム</p>
+          <p class="meta">プラン 3 件 · 更新 8月1日</p>
+          <div class="row"><span class="tag accent">SOG</span><span class="tag success">公開中</span></div>
+          <div class="acts">
+            <button class="btn primary sm">開く</button>
+            <button class="btn tertiary sm">設定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ B ═══ -->
+  <div class="col">
+    <div class="col-head">
+      <span class="kicker">案 B ・ 更新</span>
+      <h3>Liquid Glass（本物）</h3>
+      <p>縁を 1.6px に厚くし、面の鏡面反射と色収差を追加。背景を切り替えて、ガラスが何に依存しているか確かめてください。</p>
+      <div class="bgswitch">
+        <span>背景</span>
+        <button data-bg-set="flat">フラット</button>
+        <button data-bg-set="mesh" class="on">メッシュ</button>
+        <button data-bg-set="photo">室内</button>
+      </div>
+    </div>
+    <div class="panel t-b" id="panel-b" data-bg="mesh">
+      <div class="label">ボタン階層</div>
+      <div class="row">
+        <button class="btn primary">保存する</button>
+        <button class="btn secondary">複製</button>
+        <button class="btn tertiary">閉じる</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn success sm">書き出し</button>
+        <button class="btn danger sm">削除</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn purple"><span class="btn-orb"></span>AI ステージング</button>
+      </div>
+
+      <div class="label">セグメント切替</div>
+      <div class="seg-outer">
+        <button class="seg on"><span class="t">全体</span><span class="s">Project</span></button>
+        <button class="seg"><span class="t">プラン</span><span class="s">Plan</span></button>
+      </div>
+
+      <div class="label">アイコンバッジ</div>
+      <div class="row">
+        <span class="badge b-accent">▶</span>
+        <span class="badge b-success">✓</span>
+        <span class="badge b-orb"></span>
+      </div>
+
+      <div class="label">リストアイテム</div>
+      <div class="listrow">
+        <span class="badge b-success">▶</span>
+        <div class="lr-body">
+          <p class="lr-t">SPZ 変換中</p>
+          <p class="lr-s">living.ply · 20 MB · 残り 15 秒</p>
+          <div class="lr-bar"><i style="width:58%"></i></div>
+        </div>
+      </div>
+
+      <div class="label">タグ</div>
+      <div class="row">
+        <span class="tag accent">SPZ</span>
+        <span class="tag success">READY</span>
+        <span class="tag warn">未校正</span>
+        <span class="tag neutral">3.2 MB</span>
+      </div>
+
+      <div class="label">入力</div>
+      <input class="input" placeholder="プロジェクト名">
+
+      <div class="label">プロジェクトカード</div>
+      <div class="card">
+        <div class="thumb"></div>
+        <div class="body">
+          <p class="title">港区 3LDK モデルルーム</p>
+          <p class="meta">プラン 3 件 · 更新 8月1日</p>
+          <div class="row"><span class="tag accent">SOG</span><span class="tag success">公開中</span></div>
+          <div class="acts">
+            <button class="btn primary sm">開く</button>
+            <button class="btn tertiary sm">設定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ C ═══ -->
+  <div class="col">
+    <div class="col-head">
+      <span class="kicker">案 C ・ 新規</span>
+      <h3>Soft Aura</h3>
+      <p>いただいたスクショの言語。境界線を引かず、拡散影と外へにじむ発光だけで形を作る。<b>blur を一切使わない</b>ので合成コストがゼロ。</p>
+    </div>
+    <div class="panel t-c">
+      <div class="label">ボタン階層</div>
+      <div class="row">
+        <button class="btn primary">保存する</button>
+        <button class="btn secondary">複製</button>
+        <button class="btn tertiary">閉じる</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn success sm">書き出し</button>
+        <button class="btn danger sm">削除</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn purple"><span class="btn-orb"></span>AI ステージング</button>
+      </div>
+
+      <div class="label">セグメント切替</div>
+      <div class="seg-outer">
+        <button class="seg on"><span class="t">全体</span><span class="s">Project</span></button>
+        <button class="seg"><span class="t">プラン</span><span class="s">Plan</span></button>
+      </div>
+
+      <div class="label">アイコンバッジ</div>
+      <div class="row">
+        <span class="badge b-accent">▶</span>
+        <span class="badge b-success">✓</span>
+        <span class="badge b-orb"></span>
+      </div>
+
+      <div class="label">リストアイテム</div>
+      <div class="listrow">
+        <span class="badge b-success">▶</span>
+        <div class="lr-body">
+          <p class="lr-t">SPZ 変換中</p>
+          <p class="lr-s">living.ply · 20 MB · 残り 15 秒</p>
+          <div class="lr-bar"><i style="width:58%"></i></div>
+        </div>
+      </div>
+
+      <div class="label">タグ</div>
+      <div class="row">
+        <span class="tag accent">SPZ</span>
+        <span class="tag success">READY</span>
+        <span class="tag warn">未校正</span>
+        <span class="tag neutral">3.2 MB</span>
+      </div>
+
+      <div class="label">入力</div>
+      <input class="input" placeholder="プロジェクト名">
+
+      <div class="label">プロジェクトカード</div>
+      <div class="card">
+        <div class="thumb"></div>
+        <div class="body">
+          <p class="title">港区 3LDK モデルルーム</p>
+          <p class="meta">プラン 3 件 · 更新 8月1日</p>
+          <div class="row"><span class="tag accent">SOG</span><span class="tag success">公開中</span></div>
+          <div class="acts">
+            <button class="btn primary sm">開く</button>
+            <button class="btn tertiary sm">設定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.grid -->
+
+
+<h2 class="section">C の精度確認 <small>参照スクショと同じ構成・同じ比率で組み直したもの</small></h2>
+<div class="repro t-c">
+  <div class="repro-stage">
+
+    <div class="seg-outer repro-seg">
+      <button class="seg on"><span class="t">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="10.5" cy="13.5" r="7.5"/><path d="M10.5 10.5v6M7.5 13.5h6"/>
+          <path d="M19 2.5l.75 1.95L21.7 5.2l-1.95.75L19 7.9l-.75-1.95L16.3 5.2l1.95-.75z"/>
+        </svg>Create Project</span></button>
+      <button class="seg"><span class="t">My Projects</span></button>
+    </div>
+
+    <div class="listrow repro-row">
+      <span class="badge b-success">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+          <path d="M14 3v5h5"/><path d="M10 12.4v4.2l3.6-2.1z"/>
+        </svg>
+      </span>
+      <div class="lr-body">
+        <p class="lr-t">Uploading File</p>
+        <p class="lr-s">Vid001.mp4 • 20 MB • 15 sec left</p>
+        <div class="lr-bar"><i style="width:58%"></i></div>
+      </div>
+    </div>
+
+    <button class="btn purple repro-gen"><span class="btn-orb"></span>Generate</button>
+
+  </div>
+
+  <ul class="repro-notes">
+    <li><b>トラックの内側余白</b> — 参照はコントロール高の約 28% が余白。前回の 6px から 13px（この場では 16px）へ。ここが最大のズレでした。</li>
+    <li><b>非選択の文字色</b> — 参照の "My Projects" は薄いグレーではなく <b>濃いグレー</b>。選択側との差を色の濃さではなく「発光の有無」で作っています。</li>
+    <li><b>輪郭</b> — 完全な無ではなく、白い面のさらに外側にごく薄い灰の 1px リング（<code>0 0 0 1px rgba(148,154,172,.10)</code>）。無いと背景に溶け、濃いと「線で描いた UI」になります。</li>
+    <li><b>オーブ</b> — 単なる虹グラデの円ではなく、<b>外周は磨りガラスで白く濁り、色は球の内側に溜まっている</b>。白のリング層を色の上に重ねて再現しています。</li>
+    <li><b>紫だけ枠線が有色</b> — 他のバリアントは白枠ですが、生成ピルだけ <code>#c9bbea</code> のはっきりした枠を持ちます。参照でもここだけ扱いが違います。</li>
+    <li><b>ハローの強さ</b> — <code>0 0 28px 8px</code>。カプセルの外へ明確ににじむ量で、前回（24px / 7px・不透明度 .45）より広く濃くしています。</li>
+  </ul>
+</div>
+
+
+<h2 class="section">スマートフォン UI <small>全面 3D の上に浮く前提。Liquid Glass 本来の姿はこちら</small></h2>
+<div class="phones">
+
+  <div class="phone-wrap">
+    <p class="phone-cap">現行 — 白ガラス</p>
+    <div class="phone t-current"><div class="ph-screen">
+      <div class="ph-status"><span>9:41</span><span class="ph-ind"><i></i><i></i><i></i><i></i></span></div>
+      <div class="ph-top"><span class="ph-top-t">港区 3LDK モデルルーム</span><span class="ph-x">✕</span></div>
+      <div class="ph-side"><button class="ph-rb">＋</button><button class="ph-rb">−</button><button class="ph-rb">⟲</button></div>
+      <div class="ph-card">
+        <div class="ph-card-h">
+          <span class="badge b-orb ph-badge"></span>
+          <div><p class="ph-card-t">リビング</p><p class="ph-card-s">視点 1 / 4 · 18.2 帖</p></div>
+        </div>
+        <div class="ph-bar"><i style="width:62%"></i></div>
+      </div>
+      <div class="ph-tabs">
+        <button class="ph-tab on">歩く</button><button class="ph-tab">俯瞰</button>
+        <button class="ph-tab">図面</button><button class="ph-tab">VR</button>
+      </div>
+      <div class="ph-home"></div>
+    </div></div>
+  </div>
+
+  <div class="phone-wrap">
+    <p class="phone-cap">案 A — 暗ガラス</p>
+    <div class="phone t-a"><div class="ph-screen">
+      <div class="ph-status"><span>9:41</span><span class="ph-ind"><i></i><i></i><i></i><i></i></span></div>
+      <div class="ph-top"><span class="ph-top-t">港区 3LDK モデルルーム</span><span class="ph-x">✕</span></div>
+      <div class="ph-side"><button class="ph-rb">＋</button><button class="ph-rb">−</button><button class="ph-rb">⟲</button></div>
+      <div class="ph-card">
+        <div class="ph-card-h">
+          <span class="badge b-orb ph-badge"></span>
+          <div><p class="ph-card-t">リビング</p><p class="ph-card-s">視点 1 / 4 · 18.2 帖</p></div>
+        </div>
+        <div class="ph-bar"><i style="width:62%"></i></div>
+      </div>
+      <div class="ph-tabs">
+        <button class="ph-tab on">歩く</button><button class="ph-tab">俯瞰</button>
+        <button class="ph-tab">図面</button><button class="ph-tab">VR</button>
+      </div>
+      <div class="ph-home"></div>
+    </div></div>
+  </div>
+
+  <div class="phone-wrap">
+    <p class="phone-cap">案 B — Liquid Glass</p>
+    <div class="phone t-b"><div class="ph-screen">
+      <div class="ph-status"><span>9:41</span><span class="ph-ind"><i></i><i></i><i></i><i></i></span></div>
+      <div class="ph-top"><span class="ph-top-t">港区 3LDK モデルルーム</span><span class="ph-x">✕</span></div>
+      <div class="ph-side"><button class="ph-rb">＋</button><button class="ph-rb">−</button><button class="ph-rb">⟲</button></div>
+      <div class="ph-card">
+        <div class="ph-card-h">
+          <span class="badge b-orb ph-badge"></span>
+          <div><p class="ph-card-t">リビング</p><p class="ph-card-s">視点 1 / 4 · 18.2 帖</p></div>
+        </div>
+        <div class="ph-bar"><i style="width:62%"></i></div>
+      </div>
+      <div class="ph-tabs">
+        <button class="ph-tab on">歩く</button><button class="ph-tab">俯瞰</button>
+        <button class="ph-tab">図面</button><button class="ph-tab">VR</button>
+      </div>
+      <div class="ph-home"></div>
+    </div></div>
+  </div>
+
+  <div class="phone-wrap">
+    <p class="phone-cap">案 C — Soft Aura</p>
+    <div class="phone t-c"><div class="ph-screen">
+      <div class="ph-status"><span>9:41</span><span class="ph-ind"><i></i><i></i><i></i><i></i></span></div>
+      <div class="ph-top"><span class="ph-top-t">港区 3LDK モデルルーム</span><span class="ph-x">✕</span></div>
+      <div class="ph-side"><button class="ph-rb">＋</button><button class="ph-rb">−</button><button class="ph-rb">⟲</button></div>
+      <div class="ph-card">
+        <div class="ph-card-h">
+          <span class="badge b-orb ph-badge"></span>
+          <div><p class="ph-card-t">リビング</p><p class="ph-card-s">視点 1 / 4 · 18.2 帖</p></div>
+        </div>
+        <div class="ph-bar"><i style="width:62%"></i></div>
+      </div>
+      <div class="ph-tabs">
+        <button class="ph-tab on">歩く</button><button class="ph-tab">俯瞰</button>
+        <button class="ph-tab">図面</button><button class="ph-tab">VR</button>
+      </div>
+      <div class="ph-home"></div>
+    </div></div>
+  </div>
+
+</div>
+
+
+<h2 class="section">ビューア文脈（PC） <small>明るい室内 3DGS の上に重ねたとき</small></h2>
+<div class="scenes">
+
+  <div class="scene t-current">
+    <span class="tagline">現行 — 白ガラス</span>
+    <div class="overlay-panel">
+      <h4>視点</h4>
+      <div class="kv"><span>リビング</span><b>1 / 4</b></div>
+      <div class="kv"><span>画質</span><b>HIGH</b></div>
+      <div class="kv"><span>FPS</span><b>58</b></div>
+    </div>
+    <div class="overlay-bottom">
+      <button class="btn secondary sm">◀</button>
+      <button class="btn primary sm">歩く</button>
+      <button class="btn secondary sm">俯瞰</button>
+      <button class="btn secondary sm">▶</button>
+    </div>
+  </div>
+
+  <div class="scene t-a">
+    <span class="tagline">案 A — 暗ガラス</span>
+    <div class="overlay-panel">
+      <h4>視点</h4>
+      <div class="kv"><span>リビング</span><b>1 / 4</b></div>
+      <div class="kv"><span>画質</span><b>HIGH</b></div>
+      <div class="kv"><span>FPS</span><b>58</b></div>
+    </div>
+    <div class="overlay-bottom">
+      <button class="btn secondary sm">◀</button>
+      <button class="btn primary sm">歩く</button>
+      <button class="btn secondary sm">俯瞰</button>
+      <button class="btn secondary sm">▶</button>
+    </div>
+  </div>
+
+  <div class="scene t-b">
+    <span class="tagline">案 B — Liquid Glass</span>
+    <div class="overlay-panel">
+      <h4>視点</h4>
+      <div class="kv"><span>リビング</span><b>1 / 4</b></div>
+      <div class="kv"><span>画質</span><b>HIGH</b></div>
+      <div class="kv"><span>FPS</span><b>58</b></div>
+    </div>
+    <div class="overlay-bottom">
+      <button class="btn secondary sm">◀</button>
+      <button class="btn primary sm">歩く</button>
+      <button class="btn secondary sm">俯瞰</button>
+      <button class="btn secondary sm">▶</button>
+    </div>
+  </div>
+
+  <div class="scene t-c">
+    <span class="tagline">案 C — Soft Aura</span>
+    <div class="overlay-panel">
+      <h4>視点</h4>
+      <div class="kv"><span>リビング</span><b>1 / 4</b></div>
+      <div class="kv"><span>画質</span><b>HIGH</b></div>
+      <div class="kv"><span>FPS</span><b>58</b></div>
+    </div>
+    <div class="overlay-bottom">
+      <button class="btn secondary sm">◀</button>
+      <button class="btn primary sm">歩く</button>
+      <button class="btn secondary sm">俯瞰</button>
+      <button class="btn secondary sm">▶</button>
+    </div>
+  </div>
+
+</div>
+
+
+<h2 class="section">判断材料</h2>
+<table class="cmp">
+  <thead>
+    <tr><th></th><th>現行</th><th>A 暗ガラス</th><th>B Liquid Glass</th><th>C Soft Aura</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>形の定義</th>
+      <td>1.5px の線 + 影</td>
+      <td>半透明の面 + 明るい縁</td>
+      <td>透過 + 縁のスペキュラ + 面の鏡面反射</td>
+      <td><b>線を一切引かない。</b>拡散影と外へにじむ発光のみ</td>
+    </tr>
+    <tr>
+      <th>3D が主役か</th>
+      <td>白パネルが室内と同輝度で UI に目が行く</td>
+      <td>暗い面が背景に沈み、実写が前に出る</td>
+      <td>背後が透けるので UI が「面」として立たない</td>
+      <td>不透明なので背後は隠れる。ただし白が柔らかく主張は弱い</td>
+    </tr>
+    <tr>
+      <th>操作の階層</th>
+      <td>主／副の差がほぼ無い</td>
+      <td>発光する 1 個が主、他は暗く沈む</td>
+      <td>色つきガラス / 白ガラス / ほぼ透明 の 3 段</td>
+      <td>光るもの 1 個 / 白カプセル / 文字のみ の 3 段</td>
+    </tr>
+    <tr>
+      <th>初見の印象</th>
+      <td>iOS ウィジェット寄り</td>
+      <td>Matterport / Polycam 系の専用ツール</td>
+      <td>iOS 26 / visionOS のネイティブアプリ</td>
+      <td>プロダクト系 SaaS のランディング。高級感が出やすい</td>
+    </tr>
+    <tr>
+      <th>背景の前提</th>
+      <td>不問</td>
+      <td>3D 映像の上でのみ成立</td>
+      <td><b>背景に情報量が必須。</b>フラット <code>#f8f8f8</code> だと成立しない</td>
+      <td><b>不問。</b>むしろ無地の明るい背景が最も映える。現行の canvas をそのまま使える</td>
+    </tr>
+    <tr>
+      <th>性能</th>
+      <td>backdrop-filter は数箇所</td>
+      <td>オーバーレイのみ。3D の上に数枚</td>
+      <td><b>要注意。</b>ボタン 1 個ずつが backdrop-filter を持つ。ビューア上は枚数を絞る前提</td>
+      <td><b>ゼロコスト。</b>blur を一切使わない。3D の上に何十個置いても FPS に影響しない</td>
+    </tr>
+    <tr>
+      <th>1x モニタでの再現性</th>
+      <td>—</td>
+      <td>良好（面で見せるので細線に依存しない）</td>
+      <td>縁を 1.6px に上げて対策済み。それでも Retina には劣る</td>
+      <td><b>最も安定。</b>光の広がりで見せるので DPR に一切依存しない</td>
+    </tr>
+    <tr>
+      <th>作業範囲</th>
+      <td>—</td>
+      <td>トークンの CSS 変数化 + ダークセット + viewer スコープ適用</td>
+      <td>トークン差し替え + 縁／鏡面用の擬似要素を各プリミティブに追加 + canvas の背景設計</td>
+      <td>トークン差し替え + 擬似要素は不要（box-shadow だけで完結）+ 余白とフォントサイズの一段拡大</td>
+    </tr>
+    <tr>
+      <th>工数感</th>
+      <td>—</td>
+      <td><span class="cost mid">中</span></td>
+      <td><span class="cost mid">中</span></td>
+      <td><span class="cost low">小</span></td>
+    </tr>
+    <tr>
+      <th>共通の前提作業</th>
+      <td colspan="4">
+        どれを選んでも先に：<b>①</b> トークンを inline style から CSS 変数へ
+        <b>②</b> タイプスケールの整理（現状 10.5 / 11.5 / 12.5 / 13.5px が手打ちで散在）
+        <b>③</b> トークン外のハードコード色を回収（<code>#dc2626</code> 12 件 / <code>#3b82f6</code> 9 件 / <code>#22c55e</code> 4 件）
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<footer class="page">
+  A と B は排他ではありません — <b>B のガラスをそのまま暗いトーンに振ったものが A</b> なので、
+  「管理画面 = B の明るいガラス / ビューア = A の暗いガラス」で 1 つの言語に統合できます。
+  C はそれとは別系統で、<b>管理画面は C・ビューアは A</b> という組み合わせも成立します（C は blur を使わないので、
+  重い 3D 画面の外側で使うぶんには最も安全）。前案の「生成り紙 + 墨 + 明朝」はこの C に差し替えました。
+</footer>
+
+</div>
+
+<script>
+  // B 列の背景切替。ガラスが「背後にあるもの」に依存していることを
+  // 実際に見て確かめるためだけのもの。
+  var panelB = document.getElementById('panel-b');
+  var btns = document.querySelectorAll('[data-bg-set]');
+  Array.prototype.forEach.call(btns, function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(btns, function (x) { x.classList.toggle('on', x === b); });
+      panelB.setAttribute('data-bg', b.getAttribute('data-bg-set'));
+    });
+  });
+</script>
+</body>
+</html>

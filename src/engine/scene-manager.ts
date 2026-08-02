@@ -41,6 +41,9 @@ import { useUIStore } from '../store/ui-store';
 import type { FurnitureMode, LightingMode, ViewMode } from '../store/ui-store';
 import { isIdbRef, resolveBlobRef } from '../utils/idb';
 import { panoramaToThumbnail } from '../utils/panorama-thumbnail';
+import { resolveStartNode } from '../core/walk-graph';
+import type { WalkNode } from '../core/types';
+import { walkPlaceholderPanorama } from '../utils/walk-placeholder';
 
 /**
  * Resolve a manifest path (splat / panorama / floor plan) to a fetchable URL.
@@ -1046,15 +1049,60 @@ export class SceneManager {
   }
   private walkDollyBaseFov: number | null = null;
 
+  /**
+   * Walk-only plans (dense walkthrough, no viewpoint panorama): resolve the
+   * node whose panorama 360 mode should open on, mirroring WalkthroughControls'
+   * fallback order — start node with image → any in-range node with image →
+   * start node in range → any in-range node — then, as a last resort, ANY node
+   * (even excluded/gray: an unpainted grid must still show the direction-guide
+   * placeholder, not a blank studio backdrop = ほぼ白 [0.92,0.92,0.92], which
+   * reads as the "真っ白画面" bug).
+   */
+  private resolveWalkFallbackNode(): WalkNode | null {
+    const planId = useSceneStore.getState().activePlanId;
+    const plan = this.manifest?.plans?.find((p) => p.id === planId);
+    const walk = plan?.walk;
+    if (!walk || walk.nodes.length === 0) return null;
+    const start = resolveStartNode(walk);
+    const inRange = (n?: WalkNode) => !!n && !n.excluded;
+    return (inRange(start) && start?.panorama ? start : undefined)
+      ?? walk.nodes.find((n) => !n.excluded && n.panorama)
+      ?? (inRange(start) ? start : walk.nodes.find((n) => !n.excluded))
+      ?? start
+      ?? walk.nodes[0]
+      ?? null;
+  }
+
   private async applyActiveViewpointPanorama(): Promise<void> {
     if (!this.manifest) return;
-    const path = this.resolveActivePanoramaPath();
-    if (!path) {
-      removeHdri(this.app);
+    const vpPath = this.resolveActivePanoramaPath();
+    if (!vpPath) {
+      // No viewpoint panorama — walk plans fall back to a node panorama, and on
+      // ANY failure (e.g. dangling idb: ref) to the generated placeholder, which
+      // is a data URL and cannot fail to load.
+      const node = this.resolveWalkFallbackNode();
+      if (!node) {
+        removeHdri(this.app);
+        return;
+      }
+      if (node.panorama) {
+        try {
+          const url = await resolveAssetUrl(node.panorama, this.manifest.id);
+          await applyHdri(this.app, url);
+          return;
+        } catch (err) {
+          console.error(`walk panorama load failed (${node.id}) — showing placeholder:`, err);
+        }
+      }
+      try {
+        await applyHdri(this.app, walkPlaceholderPanorama(node));
+      } catch (err) {
+        console.error('walk placeholder apply failed:', err);
+      }
       return;
     }
     try {
-      const url = await resolveAssetUrl(path, this.manifest.id);
+      const url = await resolveAssetUrl(vpPath, this.manifest.id);
       await applyHdri(this.app, url);
     } catch (err) {
       console.error(`panorama load failed:`, err);

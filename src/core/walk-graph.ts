@@ -95,8 +95,9 @@ export function resolveNeighbors(node: WalkNode, graph: WalkGraph): WalkNeighbor
  *
  * `node.yawOffset` (panorama north correction) is added to the live yaw
  * before matching, so an unaligned 360° image still steps where the user is
- * visually looking. Neighbors without an assigned panorama are skipped —
- * stepping onto an empty node would blank the view.
+ * visually looking. Neighbors without an assigned panorama are fair targets —
+ * the runtime shows a generated direction-guide placeholder for them
+ * (walk-placeholder.ts), so authoring can be tested before any photo exists.
  */
 export function stepForward(
   node: WalkNode,
@@ -108,7 +109,7 @@ export function stepForward(
   let best: WalkNode | null = null;
   let bestErr = thresholdDeg;
   for (const nb of resolveNeighbors(node, graph)) {
-    if (!nb.node.panorama) continue;
+    if (nb.node.excluded) continue; // VR 範囲外 (gray) — walls / outside
     const err = Math.abs(angleDiffDeg(effectiveYaw, nb.bearing));
     if (err < bestErr) {
       bestErr = err;
@@ -131,10 +132,9 @@ export function gridAxisLabel(i: number): string {
   return s;
 }
 
-/** Node label for a cell: `rowLabel + colLabel`, matching the requirement's
- *  grid example (`AA AB AC / BA BB BC / CA CB CC` — first letter = row, so
- *  BB→BC is a step along the row). Honors authored `rows` / `cols` label
- *  arrays when present. */
+/** Node label for a cell: letter-letter pairs `rowLetter + colLetter` —
+ *  `AA AB AC / BA BB BC / …` (both axes spreadsheet letters). Honors authored
+ *  `rows` / `cols` label arrays when present. */
 export function cellLabel(graph: WalkGraph, row: number, col: number): string {
   const r = graph.rows?.[row] ?? gridAxisLabel(row);
   const c = graph.cols?.[col] ?? gridAxisLabel(col);

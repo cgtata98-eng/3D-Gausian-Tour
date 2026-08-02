@@ -1,35 +1,33 @@
 import { type CSSProperties, type InputHTMLAttributes, forwardRef } from 'react';
-import { tokens } from '../design-tokens';
 
 /**
- * Sunken pill input. The track gradient + inset shadow gives it the
- * "pressed-into-the-surface" feel that matches the design language of
- * cards / pills floating *up* via shadows.
+ * Sunken input.
+ *
+ * Class-only. Note that `design-system.css` already styles bare `<input>`,
+ * `<select>` and `<textarea>` at ELEMENT level — a native form control keeps
+ * OS chrome until its appearance is taken over, so an unclassed one is always
+ * visibly wrong rather than merely unstyled. This component exists for
+ * explicitness at call sites, not because the class is required.
+ *
+ * The recess keeps the shell's light source (shadow above, light below) but
+ * pushes the top shadow harder and casts nothing outward — a groove has no
+ * outer rim to catch light.
  */
 type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'style'> & {
+  /** Layout only. */
   style?: CSSProperties;
 };
 
 export const PillInput = forwardRef<HTMLInputElement, Props>(function PillInput(
-  { style, ...rest },
+  { style, className, ...rest },
   ref,
 ) {
   return (
     <input
       ref={ref}
       {...rest}
-      style={{
-        width: '100%', padding: '12px 16px',
-        background: tokens.gradient.track,
-        border: `1px solid ${tokens.color.border}`,
-        borderRadius: tokens.radius.pill,
-        color: tokens.color.text, fontSize: 13,
-        outline: 'none', fontFamily: tokens.font.family,
-        boxSizing: 'border-box',
-        boxShadow: tokens.shadow.inset,
-        transition: `border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
-        ...style,
-      }}
+      className={['ds-input', className].filter(Boolean).join(' ')}
+      style={style}
     />
   );
 });

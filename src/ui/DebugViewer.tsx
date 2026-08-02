@@ -11,6 +11,7 @@ import { publishScene } from '../utils/publish';
 import { TopDownCollisionEditor, type TopDownManager } from './TopDownCollisionEditor';
 import { WalkGraphEditor } from './WalkGraphEditor';
 import { WalkthroughControls } from './WalkthroughControls';
+import { walkPlaceholderPanorama } from '../utils/walk-placeholder';
 import { buildWallBlockGlb, buildFloorWalkableGlb } from '../utils/wall-collision-builder';
 import type { CollisionWallData, WalkNode } from '../core/types';
 import { getAuthRole } from '../utils/auth';
@@ -39,7 +40,8 @@ import { useDemoModeCamera } from './useDemoModeCamera';
 import { targetFromYaw } from '../core/viewpoint';
 import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
-import { tokens } from './design-tokens';
+import { tokens , shellSurface } from './design-tokens';
+import { surfaceClass, Chip, IconClose, IconTrash } from './components';
 import * as idb from '../utils/idb';
 import { unzipSync } from 'fflate';
 
@@ -1054,7 +1056,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         <a
           href="/"
           onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate('/'); }}
-          style={{
+          className="glass-edge" style={{
             ...S.viewerBtn,
             background: tokens.gradient.surface,
             color: COLOR.text,
@@ -1063,7 +1065,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
           }}
         >← Project</a>
         <div style={S.logo}>
-          <span style={S.badge}>DEV</span>
+          <span className="glass-edge" style={S.badge}>DEV</span>
           <span style={S.sceneName}>{manifest?.name || sceneId}</span>
         </div>
         <div style={{ flex: 1 }} />
@@ -1072,7 +1074,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         <a
           href={`/viewer/${sceneId}`}
           onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(`/viewer/${sceneId}`); }}
-          style={S.viewerBtn}
+          className="glass-edge" style={S.viewerBtn}
         >Viewer →</a>
       </div>
 
@@ -1149,7 +1151,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 <Section
                   title={`基本情報${activePlan ? ` — ${activePlan.label}` : ''}`}
                   subtitle="PLAN INFO"
-                  action={<button onClick={exportInfoJson} style={S.btn}>{infoJsonCopied ? '✓ コピー済' : 'JSONエクスポート'}</button>}
+                  action={<button onClick={exportInfoJson} className="glass-edge" style={S.btn}>{infoJsonCopied ? '✓ コピー済' : 'JSONエクスポート'}</button>}
                   defaultOpen={false}
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1157,12 +1159,17 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       <LabeledInput label="タイプ" value={info.type ?? ''} onChange={(v) => updateInfo({ type: v })} placeholder="type" />
                       <LabeledInput label="間取り" value={info.roomType ?? ''} onChange={(v) => updateInfo({ roomType: v })} placeholder="1LDK" />
                     </div>
-                    <LabeledInput label="面積" value={info.area ?? ''} onChange={(v) => updateInfo({ area: v })} placeholder="42.5㎡" />
-                    <LabeledInput label="階数 / 構造" value={info.floor ?? ''} onChange={(v) => updateInfo({ floor: v })} placeholder="3F / RC造 5階建" />
+                    {/* Paired for the same reason as タイプ / 間取り above: both are short
+                        one-line facts, and stacking them full-width left a column of wide
+                        fields holding a handful of characters each. */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <LabeledInput label="面積" value={info.area ?? ''} onChange={(v) => updateInfo({ area: v })} placeholder="42.5㎡" />
+                      <LabeledInput label="階数 / 構造" value={info.floor ?? ''} onChange={(v) => updateInfo({ floor: v })} placeholder="3F / RC造" />
+                    </div>
                     <LabeledInput label="所在地" value={info.location ?? ''} onChange={(v) => updateInfo({ location: v })} placeholder="東京都千代田区…" />
                     <LabeledInput label="メモ" value={info.notes ?? ''} onChange={(v) => updateInfo({ notes: v })} placeholder="自由記入 (改行で複数行)" />
                     <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, color: tokens.color.textMute, textTransform: 'uppercase' }}>
+                      <div style={{ fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.5, color: tokens.color.textMute, textTransform: 'uppercase' }}>
                         ビューア「物件概要」表示
                       </div>
                       <VisRow label="全体 (このブロックを表示)" checked={vis.overall !== false} onChange={(c) => setVis('overall', c)} />
@@ -1223,10 +1230,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               return (
                 <Section title={`カラー (素材バリエーション)`} subtitle="COLOR VARIANTS" defaultOpen={false}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontSize: 11, color: tokens.color.textMute, lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.5 }}>
                       同じ視点で素材色違いに切り替えるバリエーション。各バリアントに視点ごとの 360° パノラマを登録します (未登録の視点は標準パノラマを利用)。
                     </div>
-                    <button onClick={addVariant} style={S.btnPrimary}>+ バリアント追加</button>
+                    <button onClick={addVariant} className="glass-edge" style={S.btnPrimary}>+ バリアント追加</button>
                     {variants.map((v) => (
                       <div key={v.id} style={{ border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1244,19 +1251,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             style={{ flex: 1, ...S.formInput }}
                             placeholder="ラベル (例: ナチュラル)"
                           />
-                          <button onClick={() => removeVariant(v.id)} style={{ ...S.btn, color: '#dc2626', borderColor: 'rgba(220,38,38,0.35)' }} title="削除">削除</button>
+                          <button onClick={() => removeVariant(v.id)} className={dangerIconClass} title="削除"><IconTrash /></button>
                         </div>
                         {/* 視点ごとのパノラマ登録 */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           {(activePlan.viewpoints ?? []).map((vp) => {
                             const has = !!v.panoramas?.[vp.id];
                             return (
-                              <div key={vp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                              <div key={vp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
                                 <span style={{ flex: 1, color: 'rgba(0,0,0,0.78)' }}>{vp.label}</span>
-                                <span style={{ fontSize: 10, color: has ? '#16a34a' : tokens.color.textFaint }}>
+                                <span style={{ fontSize: 9.5, color: has ? '#16a34a' : tokens.color.textFaint }}>
                                   {has ? '登録済' : '未登録'}
                                 </span>
-                                <label style={{ ...S.btn, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <label className="glass-edge" style={{ ...S.btn, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                   パノラマ
                                   <input
                                     type="file"
@@ -1270,19 +1277,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                                   />
                                 </label>
                                 {has && (
-                                  <button onClick={() => setVariantPano(v.id, vp.id, undefined)} style={{ ...S.btn, color: '#dc2626' }}>×</button>
+                                  <button onClick={() => setVariantPano(v.id, vp.id, undefined)} className="glass-edge" style={{ ...S.btn, color: tokens.color.danger }}>×</button>
                                 )}
                               </div>
                             );
                           })}
                           {(activePlan.viewpoints ?? []).length === 0 && (
-                            <span style={{ fontSize: 11, color: tokens.color.textFaint }}>視点がまだありません</span>
+                            <span style={{ fontSize: 10.5, color: tokens.color.textFaint }}>視点がまだありません</span>
                           )}
                         </div>
                       </div>
                     ))}
                     {variants.length === 0 && (
-                      <span style={{ fontSize: 11, color: tokens.color.textFaint }}>まだバリアントがありません</span>
+                      <span style={{ fontSize: 10.5, color: tokens.color.textFaint }}>まだバリアントがありません</span>
                     )}
                   </div>
                 </Section>
@@ -1318,7 +1325,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         <span style={S.projThumbEmpty}>未設定</span>
                       )}
                     </div>
-                    <div style={{ flex: 1, fontSize: 11, color: tokens.color.textMute, lineHeight: 1.5 }}>
+                    <div style={{ flex: 1, fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.5 }}>
                       プロジェクト一覧カードに表示されるサムネ。下から好きな視点を選択してください。
                     </div>
                     {currentThumb && (
@@ -1387,7 +1394,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             <Section
               title={`プラン (${manifest?.plans?.length ?? 0})`}
               subtitle="PLANS"
-              action={<button onClick={() => { setShowAddPlan(true); setNewPlanName(''); }} style={S.btnPrimary}>+ プランを追加</button>}
+              action={<button onClick={() => { setShowAddPlan(true); setNewPlanName(''); }} className="glass-edge" style={S.btnPrimary}>+ プランを追加</button>}
               defaultOpen={false}
             >
               {manifest?.plans && manifest.plans.length > 0 ? (
@@ -1476,9 +1483,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                                 <button
                                   title="このプランの Splat を削除"
                                   onClick={() => void handlePlanSplatClear(p.id)}
-                                  style={{ ...S.iconBtn, color: '#dc2626' }}
+                                  className={dangerIconClass}
                                   disabled={isBusy}
-                                >×</button>
+                                ><IconClose /></button>
                               )}
                             </>
                           )}
@@ -1486,9 +1493,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           <button
                             title="プランを削除"
                             onClick={() => { if (manifest.plans!.length > 1) removePlanStore(p.id); }}
-                            style={{ ...S.iconBtn, color: '#f87171', opacity: manifest.plans!.length > 1 ? 1 : 0.3, cursor: manifest.plans!.length > 1 ? 'pointer' : 'not-allowed' }}
+                            className={dangerIconClass}
                             disabled={manifest.plans!.length <= 1}
-                          >✕</button>
+                          ><IconTrash /></button>
                         </div>
                       </div>
                     );
@@ -1503,14 +1510,14 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     onChange={e => setNewPlanName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addPlan(); if (e.key === 'Escape') setShowAddPlan(false); }}
                     autoFocus style={S.input} />
-                  <div style={{ fontSize: 11, color: tokens.color.textMute, marginTop: 6 }}>
+                  <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 6 }}>
                     {isVRMode
                       ? '新規プランは完全に空（VR視点 / 画像 / 図面 / info すべて未設定）で作成されます。'
                       : '新規プランは完全に空（splat / 視点 / 図面 / info すべて未設定）で作成されます。'}
                   </div>
                   <div style={S.btnRow}>
-                    <button onClick={addPlan} style={S.btnPrimary}>追加</button>
-                    <button onClick={() => setShowAddPlan(false)} style={S.btn}>キャンセル</button>
+                    <button onClick={addPlan} className="glass-edge" style={S.btnPrimary}>追加</button>
+                    <button onClick={() => setShowAddPlan(false)} className="glass-edge" style={S.btn}>キャンセル</button>
                   </div>
                 </div>
               )}
@@ -1538,11 +1545,11 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   {/* BGM (ループ環境音) */}
                   <div style={S.subTitle}>BGM (ループ環境音)</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                    <span style={{ fontSize: 11, color: manifest?.audio ? '#16a34a' : tokens.color.textFaint }}>
+                    <span style={{ fontSize: 10.5, color: manifest?.audio ? '#16a34a' : tokens.color.textFaint }}>
                       {manifest?.audio ? '設定済' : '未設定'}
                     </span>
                     <div style={{ flex: 1 }} />
-                    <label style={{ ...S.btn, cursor: 'pointer' }}>
+                    <label className="glass-edge" style={{ ...S.btn, cursor: 'pointer' }}>
                       {manifest?.audio ? '差し替え' : '+ 音声ファイル'}
                       <input
                         type="file"
@@ -1556,36 +1563,25 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       />
                     </label>
                     {manifest?.audio && (
-                      <button onClick={() => setSceneAudio(undefined)} style={{ ...S.btn, color: '#dc2626' }}>削除</button>
+                      <button onClick={() => setSceneAudio(undefined)} className={dangerPillClass}><IconTrash />削除</button>
                     )}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                     {BGM_PRESETS.map((preset) => {
                       const isActive = manifest?.audio === preset.path;
                       return (
-                        <button
+                        <Chip
                           key={preset.id}
-                          type="button"
+                          active={isActive}
                           onClick={() => setSceneAudio(preset.path)}
-                          style={{
-                            padding: '4px 10px',
-                            fontSize: 11,
-                            background: isActive ? 'rgba(59,130,246,0.14)' : '#ffffff',
-                            border: `1px solid ${isActive ? 'rgba(59,130,246,0.5)' : 'rgba(0,0,0,0.12)'}`,
-                            color: isActive ? '#1d4ed8' : '#1f2937',
-                            borderRadius: 999,
-                            cursor: 'pointer',
-                            fontFamily: 'inherit',
-                            fontWeight: isActive ? 600 : 500,
-                          }}
                           title={isActive ? '使用中' : `${preset.label} を設定`}
                         >
                           {preset.label}
-                        </button>
+                        </Chip>
                       );
                     })}
                   </div>
-                  <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginTop: 4, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginTop: 4, lineHeight: 1.5 }}>
                     プリセットから選ぶか、独自の音声ファイルをアップロード。ビューア側のスピーカーアイコンから再生切替。
                   </div>
 
@@ -1595,7 +1591,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
                     <div style={S.subTitle}>足音</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                      <span style={{ fontSize: 11, color: tokens.color.textMute }}>
+                      <span style={{ fontSize: 10.5, color: tokens.color.textMute }}>
                         WASD で歩行、Shift で走行
                       </span>
                       <div style={{ flex: 1 }} />
@@ -1607,14 +1603,14 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             onClick={() => useSceneStore.getState().updateSettings({ footstepEnabled: !enabled })}
                             style={{
                               padding: '4px 12px',
-                              fontSize: 11,
+                              fontSize: 10.5,
                               background: enabled ? 'rgba(34,197,94,0.14)' : '#ffffff',
                               border: `1px solid ${enabled ? 'rgba(34,197,94,0.5)' : 'rgba(0,0,0,0.2)'}`,
                               color: enabled ? '#15803d' : tokens.color.textMute,
                               borderRadius: 999,
                               cursor: 'pointer',
                               fontFamily: 'inherit',
-                              fontWeight: 600,
+                              fontWeight: tokens.font.weight.strong,
                             }}
                           >
                             {enabled ? 'ON' : 'OFF'}
@@ -1627,7 +1623,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       const vol = Math.max(0, Math.min(1, manifest?.settings.footstepVolume ?? 0.7));
                       return (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, opacity: enabled ? 1 : 0.4 }}>
-                          <span style={{ fontSize: 11, color: tokens.color.textMute, minWidth: 64 }}>ボリューム</span>
+                          <span style={{ fontSize: 10.5, color: tokens.color.textMute, minWidth: 64 }}>ボリューム</span>
                           <input
                             type="range"
                             min={0}
@@ -1638,7 +1634,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             onChange={(e) => useSceneStore.getState().updateSettings({ footstepVolume: Number(e.target.value) })}
                             style={{ flex: 1, accentColor: tokens.color.accent }}
                           />
-                          <span style={{ fontSize: 11, color: tokens.color.textMute, minWidth: 32, textAlign: 'right', fontFamily: tokens.font.mono }}>
+                          <span style={{ fontSize: 10.5, color: tokens.color.textMute, minWidth: 32, textAlign: 'right', fontFamily: tokens.font.mono }}>
                             {Math.round(vol * 100)}%
                           </span>
                         </div>
@@ -1804,19 +1800,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           <span style={S.subTitle}>PLY 軸 / 位置</span>
                           <div style={{ flex: 1 }} />
                           {isModified && (
-                            <button type="button" onClick={reset} style={{ ...S.btn, fontSize: 11, color: '#dc2626' }} title="既定 (rot=[180,0,0], pos=[0,0,0]) に戻す">
+                            <button type="button" onClick={reset} className="glass-edge" style={{ ...S.btn, fontSize: 10.5, color: tokens.color.danger }} title="既定 (rot=[180,0,0], pos=[0,0,0]) に戻す">
                               リセット
                             </button>
                           )}
                         </div>
-                        <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginBottom: 6, lineHeight: 1.5 }}>
+                        <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginBottom: 6, lineHeight: 1.5 }}>
                           PLY が上下逆さま / 床にめり込む場合に調整。プランごとに保存されます。
                         </div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginTop: 4 }}>回転 (°)</div>
+                        <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginTop: 4 }}>回転 (°)</div>
                         <Slider label="X (前後の傾き)" min={-180} max={180} step={1} value={rot[0]} onChange={(v) => setRot(0, v)} />
                         <Slider label="Y (水平回転)"   min={-180} max={180} step={1} value={rot[1]} onChange={(v) => setRot(1, v)} />
                         <Slider label="Z (左右の傾き)" min={-180} max={180} step={1} value={rot[2]} onChange={(v) => setRot(2, v)} />
-                        <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginTop: 8 }}>位置 (m)</div>
+                        <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginTop: 8 }}>位置 (m)</div>
                         <Slider label="X (左右)" min={-50} max={50} step={0.05} value={pos[0]} onChange={(v) => setPos(0, v)} />
                         <Slider label="Y (前後)" min={-50} max={50} step={0.05} value={pos[2]} onChange={(v) => setPos(2, v)} />
                         <Slider label="Z (高さ)" min={-50} max={50} step={0.05} value={pos[1]} onChange={(v) => setPos(1, v)} />
@@ -1825,8 +1821,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   })()}
 
                   <div style={S.btnRow}>
-                    <button onClick={copyCamera} style={S.btn}>{copied ? '✓ コピー済' : 'JSONコピー'}</button>
-                    <button onClick={() => { setShowAddVp(true); setNewVpName(''); }} style={S.btnPrimary}>+ 視点として保存</button>
+                    <button onClick={copyCamera} className="glass-edge" style={S.btn}>{copied ? '✓ コピー済' : 'JSONコピー'}</button>
+                    <button onClick={() => { setShowAddVp(true); setNewVpName(''); }} className="glass-edge" style={S.btnPrimary}>+ 視点として保存</button>
                   </div>
                   {showAddVp && (
                     <div style={S.inlineCard}>
@@ -1835,15 +1831,15 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         onKeyDown={e => { if (e.key === 'Enter') addVp(); if (e.key === 'Escape') setShowAddVp(false); }}
                         autoFocus style={S.input} />
                       <div style={S.btnRow}>
-                        <button onClick={addVp} style={S.btnPrimary}>保存</button>
-                        <button onClick={() => setShowAddVp(false)} style={S.btn}>キャンセル</button>
+                        <button onClick={addVp} className="glass-edge" style={S.btnPrimary}>保存</button>
+                        <button onClick={() => setShowAddVp(false)} className="glass-edge" style={S.btn}>キャンセル</button>
                       </div>
                     </div>
                   )}
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: 11, color: tokens.color.textMute, marginBottom: 6, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 6, lineHeight: 1.5 }}>
                     プレビュー上で <strong>マウスホイール</strong> でズーム可能。<br />
                     範囲は <code style={S.codeInline}>{manifest?.settings.zoomFovMin ?? 25}°〜{manifest?.settings.zoomFovMax ?? 100}°</code> で固定。
                   </div>
@@ -1851,7 +1847,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     <button
                       type="button"
                       onClick={() => setShowZoomRange(true)}
-                      style={{ ...S.btn, fontSize: 11, padding: '4px 10px' }}
+                      className="glass-edge" style={{ ...S.btn, fontSize: 10.5, padding: '4px 10px' }}
                       title="ロック範囲を変更（通常は変更不要）"
                     >
                       ズーム範囲を変更…
@@ -1922,8 +1918,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               defaultOpen={false}
               action={
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => { setShowAddVp(true); setNewVpName(''); setAddVpPanoFile(null); setAddVpPanoName(null); }} style={S.btnPrimary}>+ {isVRMode ? 'VR視点' : '視点'}を追加</button>
-                  <button onClick={exportVps} style={S.btn}>{exportedVp ? '✓ コピー済' : 'JSONエクスポート'}</button>
+                  <button onClick={() => { setShowAddVp(true); setNewVpName(''); setAddVpPanoFile(null); setAddVpPanoName(null); }} className="glass-edge" style={S.btnPrimary}>+ {isVRMode ? 'VR視点' : '視点'}を追加</button>
+                  <button onClick={exportVps} className="glass-edge" style={S.btn}>{exportedVp ? '✓ コピー済' : 'JSONエクスポート'}</button>
                 </div>
               }
             >
@@ -1996,7 +1992,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             ) : (
                               <div onClick={() => handleVpClick(vp.id)} style={{ ...S.vpLabel, color: isA ? '#92400e' : '#1f2937' }}>
                                 {vp.label}
-                                {isStart && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, color: tokens.color.accent }}>🏁 初期位置</span>}
+                                {isStart && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: tokens.font.weight.strong, color: tokens.color.accent }}>🏁 初期位置</span>}
                               </div>
                             )}
                             <div style={S.vpMeta}>
@@ -2046,10 +2042,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               {panoLoading === vp.id ? '⏳' : '🌐'}
                             </button>
                             {activePlan?.panoramas?.[vp.id] && (
-                              <button title="360パノラマを削除" onClick={() => handlePanoRemove(vp.id)} style={{ ...S.iconBtn, color: '#f87171' }}>×360</button>
+                              <button title="360パノラマを削除" onClick={() => handlePanoRemove(vp.id)} className={dangerXsClass}>360 を削除</button>
                             )}
                             <button title="名前を変更" onClick={() => { setEditId(vp.id); setEditLabel(vp.label); }} style={S.iconBtn}>✎</button>
-                            <button title="削除" onClick={() => removeViewpoint(vp.id)} style={{ ...S.iconBtn, color: '#f87171' }}>✕</button>
+                            <button title="削除" onClick={() => removeViewpoint(vp.id)} className={dangerIconClass}><IconTrash /></button>
                           </div>
                         </div>
                         {showVrPreview && activePlanId && vpPanoSrc && (
@@ -2077,17 +2073,17 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   {isVRMode && (
                     <>
                       <div style={{ height: 6 }} />
-                      <button type="button" onClick={() => addVpPanoInputRef.current?.click()} style={S.fileBtn}>
+                      <button type="button" onClick={() => addVpPanoInputRef.current?.click()} className={`${shellClass}`} style={S.fileBtn}>
                         {addVpPanoName ? `🌐 ${addVpPanoName}` : '🌐 360 画像を選択（任意 / .jpg .png .hdr .exr）'}
                       </button>
-                      <div style={{ fontSize: 11, color: tokens.color.textMute, marginTop: 6 }}>
+                      <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 6 }}>
                         画像はあとから視点行の 🌐 ボタンでも差し替えできます。
                       </div>
                     </>
                   )}
                   <div style={S.btnRow}>
-                    <button onClick={addVp} style={S.btnPrimary}>保存</button>
-                    <button onClick={cancelAddVp} style={S.btn}>キャンセル</button>
+                    <button onClick={addVp} className="glass-edge" style={S.btnPrimary}>保存</button>
+                    <button onClick={cancelAddVp} className="glass-edge" style={S.btn}>キャンセル</button>
                   </div>
                 </div>
               )}
@@ -2104,15 +2100,15 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             <Section title="コリジョン" subtitle="COLLISION" defaultOpen={false}>
               <label style={S.toggle}>
                 <input type="checkbox" checked={useCollisionWalkable} onChange={toggleUseCollisionWalkable} />
-                <span>walkable を使用 <span style={{ fontSize: 10, color: tokens.color.textMute }}>（床スナップ／重力）</span></span>
+                <span>walkable を使用 <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>（床スナップ／重力）</span></span>
               </label>
               <label style={S.toggle}>
                 <input type="checkbox" checked={useCollisionBlock} onChange={toggleUseCollisionBlock} />
-                <span>block を使用 <span style={{ fontSize: 10, color: tokens.color.textMute }}>（壁衝突）</span></span>
+                <span>block を使用 <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>（壁衝突）</span></span>
               </label>
               <label style={S.toggle}>
                 <input type="checkbox" checked={showCollision} onChange={toggleCollision} />
-                <span>コリジョンを表示 <span style={{ fontSize: 10, color: tokens.color.textMute }}>（デバッグメッシュ）</span></span>
+                <span>コリジョンを表示 <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>（デバッグメッシュ）</span></span>
               </label>
               {showCollision && (
                 <Slider label="不透明度" min={0} max={1} step={0.05} value={collisionOpacity} onChange={setCollisionOpacity} />
@@ -2146,12 +2142,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   <>
                     <div style={{ ...S.subTitle, marginTop: 14 }}>全体調整（図面⇄GS 合わせ込み）</div>
                     {!hasAny ? (
-                      <div style={{ fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.55 }}>
+                      <div style={{ fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.55 }}>
                         コリジョンを生成/アップロードすると、ここで全体のオフセット・スケール・回転を調整できます。
                       </div>
                     ) : (
                       <>
-                        <div style={{ fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.55, marginBottom: 6 }}>
+                        <div style={{ fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.55, marginBottom: 6 }}>
                           「コリジョンを表示」を ON にして、緑/赤メッシュが GS に重なるように調整してください。歩行判定は操作を止めた 0.3 秒後に追従します。
                         </div>
                         {(['X', 'Y', 'Z'] as const).map((label, axis) => (
@@ -2172,7 +2168,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         {tf && (
                           <button
                             type="button"
-                            style={{ ...S.btn, marginTop: 4 }}
+                            className="glass-edge" style={{ ...S.btn, marginTop: 4 }}
                             onClick={() => {
                               if (!activePlanId) return;
                               setPlanCollisionTransformStore(activePlanId, undefined);
@@ -2192,7 +2188,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               <div style={{ ...S.subTitle, marginTop: 14 }}>俯瞰で描く（GS 直接）</div>
               <button
                 type="button"
-                style={{ ...S.fileBtn, opacity: topDownColOpen ? 0.6 : 1 }}
+                className={`${shellClass}`} style={{ ...S.fileBtn, opacity: topDownColOpen ? 0.6 : 1 }}
                 disabled={topDownColOpen}
                 onClick={() => {
                   const sm = smRef.current;
@@ -2206,20 +2202,20 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               >
                 ⬇ GS を切って上から描く
               </button>
-              <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.55 }}>
+              <div style={{ fontSize: 9.5, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.55 }}>
                 断面スライダーで切断高さを変えながら、見えている壁をなぞってください。
               </div>
 
               {/* ── GLB アップロード (外部ツールで作った場合) ── */}
               <div style={{ ...S.subTitle, marginTop: 14 }}>GLB アップロード</div>
               <div style={{ ...S.subTitle, marginTop: 6 }}><span style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
-              <button onClick={() => walkableRef.current?.click()} style={S.fileBtn} disabled={busy}>
+              <button onClick={() => walkableRef.current?.click()} className={`${shellClass}`} style={S.fileBtn} disabled={busy}>
                 {colLoading === 'walkable' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>
               <input ref={walkableRef} type="file" accept=".glb" style={{ display: 'none' }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'walkable', 'manual'); e.target.value = ''; }} />
               <div style={{ ...S.subTitle, marginTop: 10 }}><span style={{ ...S.colorDot, background: '#ef4444' }} />BLOCK</div>
-              <button onClick={() => blockRef.current?.click()} style={S.fileBtn} disabled={busy}>
+              <button onClick={() => blockRef.current?.click()} className={`${shellClass}`} style={S.fileBtn} disabled={busy}>
                 {colLoading === 'block' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>
               <input ref={blockRef} type="file" accept=".glb" style={{ display: 'none' }}
@@ -2235,7 +2231,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               const walkAssigned = walkNodes.filter(n => n.panorama).length;
               return (
                 <Section title="ウォークスルー" subtitle="WALKTHROUGH" defaultOpen={false}>
-                  <div style={{ fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.6, marginBottom: 8 }}>
+                  <div style={{ fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.6, marginBottom: 8 }}>
                     100枚超の360°画像をグリッド配置し、向いている方向へ「前進」して隣のノードへ移動する
                     ストリートビュー型ナビ。シーン一覧の視点とは独立です。
                   </div>
@@ -2243,11 +2239,11 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   <InfoRow label="開始ノード" value={planForWalk?.walk?.startNodeId ?? (walkNodes[0]?.id ?? '—')} mono />
                   <InfoRow label="隣接方式" value={planForWalk?.walk?.adjacency ?? 'grid4'} mono />
                   {planForWalk?.floorPlan?.image ? (
-                    <button type="button" style={S.fileBtn} onClick={() => setWalkEditorOpen(v => !v)}>
+                    <button type="button" className={`${shellClass}`} style={S.fileBtn} onClick={() => setWalkEditorOpen(v => !v)}>
                       {walkEditorOpen ? '▼ エディタを閉じる' : '🗺 グリッドエディタを開く（画面下部）'}
                     </button>
                   ) : (
-                    <div style={{ fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.55 }}>
+                    <div style={{ fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.55 }}>
                       図面画像が未設定です。「図面設定」で画像と bounds を設定するとグリッドエディタが使えます。
                     </div>
                   )}
@@ -2261,10 +2257,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               const fp = activePlan?.floorPlan;
               return (
                 <Section title="図面設定" subtitle="FLOOR PLAN" defaultOpen={false}>
-                  <button onClick={() => fileInputRef.current?.click()} style={S.fileBtn}>
+                  <button onClick={() => fileInputRef.current?.click()} className={`${shellClass}`} style={S.fileBtn}>
                     {fp?.image ? '画像を変更' : '画像を選択'}（またはプレビューにドロップ）
                   </button>
-                  <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.45)', marginTop: 6 }}>
+                  <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.45)', marginTop: 6 }}>
                     対応形式: JPG / PNG / GIF / WebP / BMP / SVG / AVIF / HEIC / TIFF
                   </div>
                   {fp?.image && (
@@ -2283,7 +2279,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           onMoveViewpointEnd={() => { /* map-only: dragging the dot never moves the camera (use 📍 reflect) */ }}
                         />
                       </div>
-                      <div style={{ fontSize: 11, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.6 }}>
+                      <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.6 }}>
                         ・<strong style={{ color: '#fecaca' }}>赤ピン</strong>（選択中の視点）— マップクリックで配置。<strong>初期位置</strong>は視点リストの 🏁 で指定<br />
                         ・他の視点のドットを直接ドラッグして移動も可<br />
                         ・三角コーン = その視点の向き（下の yaw スライダーで調整）
@@ -2353,7 +2349,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       <button
                         type="button"
                         onClick={syncMapPositionsToCameraAnchors}
-                        style={S.btn}
+                        className="glass-edge" style={S.btn}
                         title="MAP 上の dot 位置を、各視点の camera 位置 (position) に焼き込みます。古い視点 (= MAP ドラッグだけで配置してジャンプ先が同じ場所になってしまった視点) の一括移行に使用。target も同じ delta だけ平行移動して向きを保ちます。"
                       >
                         📍 MAP 位置で position を焼き直し
@@ -2361,26 +2357,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       <button
                         type="button"
                         onClick={clearFloorPlan}
-                        style={S.floorPlanRemoveBtn}
+                        className={dangerPillClass}
+                        style={{ alignSelf: 'flex-end' }}
                         title="図面画像を削除"
                       >
-                        ✕ 削除
+                        <IconTrash />削除
                       </button>
                     </div>
                   )}
-                  <div style={{ height: 8 }} />
-                  {fp ? (
-                    <>
-                      <InfoRow label="Image" value={fp.image?.startsWith('data:') ? '(アップロード済)' : (fp.image || '—')} mono />
-                      <InfoRow label="Bounds Min" value={`[${fp.bounds.min.join(', ')}]`} mono />
-                      <InfoRow label="Bounds Max" value={`[${fp.bounds.max.join(', ')}]`} mono />
-                      <InfoRow label="Offset X / Z" value={`${fp.worldToImage.offsetX} / ${fp.worldToImage.offsetZ}`} mono />
-                      <InfoRow label="Scale X / Z" value={`${fp.worldToImage.scaleX} / ${fp.worldToImage.scaleZ}`} mono />
-                      <InfoRow label="Rotation" value={`${fp.worldToImage.rotation}°`} mono />
-                    </>
-                  ) : (
-                    <div style={S.empty}>このプランの図面はまだ設定されていません</div>
-                  )}
+                  {/* The image path and the bounds / offset / scale / rotation readout used
+                      to be printed here. They are derived values the panel already lets you
+                      set by direct manipulation, so on screen they were six rows of noise
+                      under the thing they describe. */}
+                  {!fp && <div style={S.empty}>このプランの図面はまだ設定されていません</div>}
                 </Section>
               );
             })()}
@@ -2388,20 +2377,20 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             {/* ===== Environment (HDRI) — プランタブ最下部 ===== */}
             {debugTab === 'plan' && (
             <Section title="環境" subtitle="ENVIRONMENT" defaultOpen={false}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginTop: 4, marginBottom: 4 }}>HDRI (360° 背景)</div>
-              <button onClick={() => hdriInputRef.current?.click()} style={S.fileBtn}>
+              <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginTop: 4, marginBottom: 4 }}>HDRI (360° 背景)</div>
+              <button onClick={() => hdriInputRef.current?.click()} className={`${shellClass}`} style={S.fileBtn}>
                 {hdriLoading ? '読み込み中…' : (hdriName || '画像ファイルを選択 (HDR / PNG / JPG)')}
               </button>
               <input ref={hdriInputRef} type="file" accept=".hdr,.png,.jpg,.jpeg" style={{ display: 'none' }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleHdriFile(f); e.target.value = ''; }}
               />
               {hdriName && (
-                <button onClick={handleHdriRemove} style={S.btnDanger}>HDRI を削除</button>
+                <button onClick={handleHdriRemove} className={dangerPillClass}><IconTrash />HDRI を削除</button>
               )}
 
               <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginBottom: 4 }}>背景色</div>
-                <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginBottom: 4 }}>背景色</div>
+                <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
                   HDRI 未設定時に見える背景の色。HDRI を読み込むとその裏側になります。
                 </div>
                 <StudioColorRow label="背景色" value={studioBgColor} onChange={setStudioBgColor} />
@@ -2578,8 +2567,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
           {isLoading && <LoadingScreen />}
           {error && (
             <div style={S.errorBox}>
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>読み込みエラー</div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>{error}</div>
+              <div style={{ fontWeight: tokens.font.weight.strong, marginBottom: 6 }}>読み込みエラー</div>
+              <div style={{ fontSize: 11.5, opacity: 0.75 }}>{error}</div>
             </div>
           )}
           {ready && !isLoading && !error && (
@@ -2670,7 +2659,13 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             floorPlan={planForWalk.floorPlan}
             cameraHeight={manifest.settings.cameraHeight ?? 1.6}
             onChange={(walk) => { if (activePlanId) setPlanWalkStore(activePlanId, walk); }}
-            onPreviewNode={(node: WalkNode) => { if (node.panorama) void smRef.current?.showPanoramaPreview(node.panorama); }}
+            onPreviewNode={(node: WalkNode) => {
+              void smRef.current?.showPanoramaPreview(node.panorama ?? walkPlaceholderPanorama(node)).then((ok) => {
+                // Assigned image failed (e.g. dangling idb: ref) — show the
+                // direction-guide placeholder instead of leaving the old view.
+                if (!ok && node.panorama) void smRef.current?.showPanoramaPreview(walkPlaceholderPanorama(node));
+              });
+            }}
             onClose={() => setWalkEditorOpen(false)}
           />
         );
@@ -2693,7 +2688,7 @@ function PlanCameraLinkToggle() {
     marginLeft: 'auto',
     width: 28,
     height: 24,
-    fontSize: 13,
+    fontSize: 11.5,
     lineHeight: 1,
     background: linkPlanCamera ? 'rgba(59,130,246,0.18)' : '#ffffff',
     border: `1px solid ${linkPlanCamera ? 'rgba(59,130,246,0.55)' : 'rgba(0,0,0,0.18)'}`,
@@ -2831,8 +2826,8 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
         title="現在のシーンを R2 に公開して、顧客が URL でアクセスできるようにする"
         style={{
           padding: '7px 16px',
-          fontSize: 12,
-          fontWeight: 700,
+          fontSize: 11.5,
+          fontWeight: tokens.font.weight.strong,
           letterSpacing: 0.3,
           color: tokens.color.text,
           background: busy ? tokens.gradient.neutral : tokens.gradient.success,
@@ -2863,8 +2858,8 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
         >
           {busy && progress && (
             <>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2937', marginBottom: 6 }}>公開中…</div>
-              <div style={{ fontSize: 11.5, color: tokens.color.textMute, marginBottom: 6 }}>
+              <div style={{ fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: '#1f2937', marginBottom: 6 }}>公開中…</div>
+              <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 6 }}>
                 {progress.message}
                 <span style={{ marginLeft: 6, color: tokens.color.textFaint }}>{progress.current}/{progress.total}</span>
               </div>
@@ -2875,36 +2870,36 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
           )}
           {!busy && doneUrl && (
             <>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#15803d', marginBottom: 8 }}>✓ 公開完了</div>
-              <div style={{ fontSize: 11, color: tokens.color.textMute, marginBottom: 6 }}>顧客に送る URL:</div>
+              <div style={{ fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: '#15803d', marginBottom: 8 }}>✓ 公開完了</div>
+              <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 6 }}>顧客に送る URL:</div>
               <input
                 readOnly
                 value={doneUrl}
                 onClick={(e) => (e.target as HTMLInputElement).select()}
-                style={{ width: '100%', padding: '6px 8px', fontSize: 11, border: '1px solid #d1d5db', borderRadius: 4, fontFamily: 'monospace', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '6px 8px', fontSize: 10.5, border: '1px solid #d1d5db', borderRadius: 4, fontFamily: 'monospace', boxSizing: 'border-box' }}
               />
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(doneUrl)}
-                  style={{ flex: 1, padding: '5px 8px', fontSize: 11, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                  style={{ flex: 1, padding: '5px 8px', fontSize: 10.5, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
                 >コピー</button>
                 <button
                   type="button"
                   onClick={() => setDoneUrl(null)}
-                  style={{ padding: '5px 10px', fontSize: 11, background: '#fff', color: tokens.color.textMute, border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
+                  style={{ padding: '5px 10px', fontSize: 10.5, background: '#fff', color: tokens.color.textMute, border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
                 >閉じる</button>
               </div>
             </>
           )}
           {!busy && error && (
             <>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>公開失敗</div>
-              <div style={{ fontSize: 11, color: '#7f1d1d', marginBottom: 8, wordBreak: 'break-word' }}>{error}</div>
+              <div style={{ fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: '#991b1b', marginBottom: 6 }}>公開失敗</div>
+              <div style={{ fontSize: 10.5, color: '#7f1d1d', marginBottom: 8, wordBreak: 'break-word' }}>{error}</div>
               <button
                 type="button"
                 onClick={() => setError(null)}
-                style={{ padding: '5px 10px', fontSize: 11, background: '#fff', color: tokens.color.textMute, border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
+                style={{ padding: '5px 10px', fontSize: 10.5, background: '#fff', color: tokens.color.textMute, border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
               >閉じる</button>
             </>
           )}
@@ -3007,7 +3002,7 @@ function PinsPlanSection({
             const newId = `pin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
             addPin({ id: newId, title: '新しいタグ' });
           }}
-          style={S.btnPrimary}
+          className="glass-edge" style={S.btnPrimary}
           title="タグをリストに追加 (配置はあとからドラッグ or 📍 で)"
         >
           + タグを追加
@@ -3020,7 +3015,7 @@ function PinsPlanSection({
         </div>
       )}
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: tokens.color.textMute, marginBottom: 8, cursor: 'pointer' }}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: tokens.color.textMute, marginBottom: 8, cursor: 'pointer' }}
         title="配置一覧を、今表示中の視点に束縛された配置だけに絞ります">
         <input type="checkbox" checked={onlyCurrentVp} onChange={(e) => setOnlyCurrentVp(e.target.checked)} />
         この視点の配置のみ表示
@@ -3093,8 +3088,8 @@ function PinsPlanSection({
                   type="button"
                   title="このタグを完全削除 (すべての配置も消える)"
                   onClick={() => removePin(pin.id)}
-                  style={{ ...S.iconBtn, color: '#dc2626' }}
-                >✕</button>
+                  className={dangerIconClass}
+                ><IconTrash /></button>
               </div>
 
               <textarea
@@ -3117,7 +3112,7 @@ function PinsPlanSection({
                 {pin.image ? (
                   <img src={pin.image} alt="" style={pinThumbStyle} />
                 ) : (
-                  <div style={{ ...pinThumbStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.color.textFaint, fontSize: 18 }}>
+                  <div style={{ ...pinThumbStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.color.textFaint, fontSize: 15.5 }}>
                     🖼
                   </div>
                 )}
@@ -3125,7 +3120,7 @@ function PinsPlanSection({
                   <button
                     type="button"
                     onClick={() => { fileTargetRef.current = pin.id; fileInputRef.current?.click(); }}
-                    style={{ ...S.btn, fontSize: 11 }}
+                    className="glass-edge" style={{ ...S.btn, fontSize: 10.5 }}
                   >
                     {pin.image ? '画像を差し替え' : '+ 画像を追加'}
                   </button>
@@ -3133,8 +3128,8 @@ function PinsPlanSection({
                     <button
                       type="button"
                       onClick={() => updatePin(pin.id, { image: undefined })}
-                      style={{ ...S.btn, fontSize: 11, color: '#dc2626' }}
-                    >画像を削除</button>
+                      className={dangerPillClass}
+                    ><IconTrash />画像を削除</button>
                   )}
                 </div>
               </div>
@@ -3145,11 +3140,11 @@ function PinsPlanSection({
                   : placements;
                 return (
               <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: tokens.color.textMute, marginBottom: 6 }}>
+                <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginBottom: 6 }}>
                   配置一覧 ({onlyCurrentVp ? `この視点 ${visiblePlacements.length} / 全 ${placementCount}` : `${placementCount}箇所`})
-                  {placementCount === 0 && <span style={{ marginLeft: 8, color: tokens.color.textFaint, fontWeight: 500 }}>未配置 — タイトル行をドラッグでプレビューに配置</span>}
+                  {placementCount === 0 && <span style={{ marginLeft: 8, color: tokens.color.textFaint, fontWeight: tokens.font.weight.medium }}>未配置 — タイトル行をドラッグでプレビューに配置</span>}
                   {placementCount > 0 && visiblePlacements.length === 0 && (
-                    <span style={{ marginLeft: 8, color: tokens.color.textFaint, fontWeight: 500 }}>この視点への配置なし（フィルタ解除で全表示）</span>
+                    <span style={{ marginLeft: 8, color: tokens.color.textFaint, fontWeight: tokens.font.weight.medium }}>この視点への配置なし（フィルタ解除で全表示）</span>
                   )}
                 </div>
                 {visiblePlacements.length > 0 && (
@@ -3196,7 +3191,7 @@ function PinsPlanSection({
                             type="button"
                             title={isMoving ? 'クリックして位置変更モードを解除' : 'プレビューをクリックでこの配置の位置を変更'}
                             onClick={() => isMoving ? onCancelMove() : onStartMove(pin.id, pl.id)}
-                            style={{ ...S.iconBtn, ...(isMoving ? { background: tokens.gradient.success, borderColor: tokens.color.successBorder } : null) }}
+                            style={{ ...S.iconBtn, ...(isMoving ? { background: tokens.gradient.surface, borderColor: 'transparent' } : null) }}
                           >📍</button>
                           <button
                             type="button"
@@ -3215,8 +3210,8 @@ function PinsPlanSection({
                             type="button"
                             title="この配置だけ削除 (タグ自体は残る)"
                             onClick={() => removePinPlacement(pin.id, pl.id)}
-                            style={{ ...S.iconBtn, color: '#dc2626' }}
-                          >✕</button>
+                            className={dangerIconClass}
+                          ><IconClose /></button>
                         </div>
                         {/* 数値微調整 (X/Y/Z を ±0.05m ずつ、または直接入力) */}
                         <div style={placementNudgeRow}>
@@ -3336,7 +3331,7 @@ const pinHeaderRow: React.CSSProperties = {
 };
 
 const pinHeaderChevron: React.CSSProperties = {
-  fontSize: 10,
+  fontSize: 9.5,
   color: tokens.color.textMute,
   width: 12,
   flexShrink: 0,
@@ -3344,16 +3339,16 @@ const pinHeaderChevron: React.CSSProperties = {
 
 const pinHeaderTitle: React.CSSProperties = {
   flex: 1,
-  fontSize: 13,
-  fontWeight: 700,
+  fontSize: 11.5,
+  fontWeight: tokens.font.weight.strong,
   whiteSpace: 'nowrap' as const,
   overflow: 'hidden' as const,
   textOverflow: 'ellipsis' as const,
 };
 
 const pinHeaderHint: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 500,
+  fontSize: 9.5,
+  fontWeight: tokens.font.weight.medium,
   color: tokens.color.textFaint,
   flexShrink: 0,
 };
@@ -3369,8 +3364,8 @@ const placementRowStyle: React.CSSProperties = {
 
 const placementVpLabel: React.CSSProperties = {
   flex: 1,
-  fontSize: 11.5,
-  fontWeight: 600,
+  fontSize: 10.5,
+  fontWeight: tokens.font.weight.strong,
   color: tokens.color.text,
   whiteSpace: 'nowrap' as const,
   overflow: 'hidden' as const,
@@ -3391,8 +3386,8 @@ const nudgeAxisGroup: React.CSSProperties = {
 };
 
 const nudgeAxisLabel: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
+  fontSize: 9.5,
+  fontWeight: tokens.font.weight.strong,
   color: tokens.color.textMute,
   width: 10,
   flexShrink: 0,
@@ -3402,7 +3397,7 @@ const nudgeBtn: React.CSSProperties = {
   width: 18,
   height: 18,
   padding: 0,
-  fontSize: 12,
+  fontSize: 11.5,
   lineHeight: 1,
   display: 'flex',
   alignItems: 'center',
@@ -3421,7 +3416,7 @@ const nudgeInput: React.CSSProperties = {
   width: '100%',
   minWidth: 0,
   padding: '2px 3px',
-  fontSize: 10,
+  fontSize: 9.5,
   fontFamily: tokens.font.mono,
   textAlign: 'center' as const,
   background: 'rgba(255,255,255,0.6)',
@@ -3435,13 +3430,13 @@ const nudgeInput: React.CSSProperties = {
 const pinPlacementBanner: React.CSSProperties = {
   padding: '8px 10px',
   marginBottom: 10,
-  background: tokens.gradient.success,
-  borderWidth: 1,
+  background: tokens.gradient.surface,
+  borderWidth: 0,
   borderStyle: 'solid' as const,
-  borderColor: tokens.color.successBorder,
+  borderColor: 'transparent',
   borderRadius: tokens.radius.md,
-  fontSize: 11.5,
-  fontWeight: 600,
+  fontSize: 10.5,
+  fontWeight: tokens.font.weight.strong,
   color: tokens.color.text,
   boxShadow: tokens.shadow.glassSuccess,
 };
@@ -3466,8 +3461,8 @@ const fpsOverlayStyle: React.CSSProperties = {
   color: '#fff',
   borderRadius: 6,
   fontFamily: tokens.font.mono,
-  fontSize: 12,
-  fontWeight: 600,
+  fontSize: 11.5,
+  fontWeight: tokens.font.weight.strong,
   letterSpacing: 0.4,
   zIndex: 50,
   pointerEvents: 'none',
@@ -3504,7 +3499,7 @@ function SaveIndicator({ state, lastSavedAt, onClick }: {
         border: `1px solid ${COLOR.border}`,
         borderRadius: tokens.radius.pill,
         boxShadow: tokens.shadow.glass,
-        color: tokens.color.text, fontSize: 11, fontWeight: 600,
+        color: tokens.color.text, fontSize: 10.5, fontWeight: tokens.font.weight.strong,
         cursor: 'pointer', fontFamily: tokens.font.family,
         outline: 'none',
       }}
@@ -3518,21 +3513,22 @@ function SaveIndicator({ state, lastSavedAt, onClick }: {
 function Section({ title, subtitle, action, children, defaultOpen = true }: { title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section style={S.section}>
-      <header style={S.sectionHeader}>
+    <section className={`${surfaceClass('plain')} ds-section ds-fill-surface`}>
+      <header className="ds-section__head">
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          style={S.sectionToggle}
+          className="ds-section__toggle"
           aria-expanded={open}
         >
-          <span style={{ ...S.chevron, transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-          <span style={S.sectionTitle}>{title}</span>
-          {subtitle && <span style={S.sectionSubtitle}>{subtitle}</span>}
+          {/* Rotation is state, so it stays inline; everything else is in the class. */}
+          <span className="ds-section__chevron" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+          <span className="ds-section__title">{title}</span>
+          {subtitle && <span className="ds-section__sub">{subtitle}</span>}
         </button>
         {open && action}
       </header>
-      {open && <div style={S.sectionBody}>{children}</div>}
+      {open && <div className="ds-section__body">{children}</div>}
     </section>
   );
 }
@@ -3567,13 +3563,12 @@ function LabeledInput({ label, value, onChange, placeholder }: { label: string; 
 /** Small checkbox row for the 物件概要 visibility toggles. */
 function VisRow({ label, checked, onChange, disabled = false }: { label: string; checked: boolean; onChange: (c: boolean) => void; disabled?: boolean }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: disabled ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.78)', cursor: disabled ? 'not-allowed' : 'pointer' }}>
+    <label className="ds-check" data-disabled={disabled || undefined} style={{ display: 'flex' }}>
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => !disabled && onChange(e.target.checked)}
         disabled={disabled}
-        style={{ cursor: disabled ? 'not-allowed' : 'pointer' }}
       />
       <span>{label}</span>
     </label>
@@ -3614,9 +3609,9 @@ function ViewerToolbarSection({
       title="ツールバー表示"
       subtitle="VIEWER TOOLBAR"
       defaultOpen={false}
-      action={<button onClick={onReset} style={S.btn} title="すべて表示 (既定) に戻す">既定に戻す</button>}
+      action={<button onClick={onReset} className="glass-edge" style={S.btn} title="すべて表示 (既定) に戻す">既定に戻す</button>}
     >
-      <div style={{ fontSize: 11, color: tokens.color.textMute, marginBottom: 8, lineHeight: 1.55 }}>
+      <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 8, lineHeight: 1.55 }}>
         ビューアに出す項目を選びます。チェックを外すと閲覧者にも非表示になります。<br />
         薄く表示されている項目は、現在のプロジェクト種別 / モードでは元から出ない項目です。
       </div>
@@ -3647,7 +3642,7 @@ function ViewerToolbarSection({
               style={{
                 flex: 1,
                 padding: '8px 10px',
-                fontSize: 12,
+                fontSize: 11.5,
                 lineHeight: 1.3,
                 background: isA ? tokens.gradient.accent : 'transparent',
                 borderWidth: 1,
@@ -3658,7 +3653,7 @@ function ViewerToolbarSection({
                 boxShadow: isA ? tokens.shadow.glassAccent : 'none',
                 cursor: 'pointer',
                 fontFamily: tokens.font.family,
-                fontWeight: isA ? 700 : 600,
+                fontWeight: tokens.font.weight.strong,
                 textAlign: 'center',
                 outline: 'none',
                 transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
@@ -3666,12 +3661,12 @@ function ViewerToolbarSection({
               title={`サイドバーを ${labels[s].label} で表示`}
             >
               <div>{labels[s].label}</div>
-              <div style={{ fontSize: 9.5, color: tokens.color.textMute, marginTop: 2, fontWeight: 500 }}>{labels[s].sub}</div>
+              <div style={{ fontSize: 9.5, color: tokens.color.textMute, marginTop: 2, fontWeight: tokens.font.weight.medium }}>{labels[s].sub}</div>
             </button>
           );
         })}
       </div>
-      <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginTop: 6, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginTop: 6, lineHeight: 1.5 }}>
         どちらも幅は 320px。「小」は表示中のセクション分だけ縦に伸びます。
       </div>
 
@@ -3819,11 +3814,11 @@ function SidebarOrderEditor({ tb, isVRMode, onChange }: { tb: ToolbarPatch; isVR
 
   return (
     <div>
-      <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginBottom: 6, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginBottom: 6, lineHeight: 1.5 }}>
         サイドバーに表示される項目だけが並びます。ドラッグで順序を入替。表示／非表示は上のチェックボックスで切替。
       </div>
       {visibleOrdered.length === 0 ? (
-        <div style={{ fontSize: 11, color: tokens.color.textFaint, padding: '8px 10px', background: 'rgba(0,0,0,0.03)', borderRadius: 6, textAlign: 'center' }}>
+        <div style={{ fontSize: 10.5, color: tokens.color.textFaint, padding: '8px 10px', background: 'rgba(0,0,0,0.03)', borderRadius: 6, textAlign: 'center' }}>
           表示中の項目がありません
         </div>
       ) : (
@@ -3852,15 +3847,15 @@ function SidebarOrderEditor({ tb, isVRMode, onChange }: { tb: ToolbarPatch; isVR
                   userSelect: 'none',
                 }}
               >
-                <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.35)', minWidth: 14, lineHeight: 1, cursor: 'grab' }} title="ドラッグして並び替え">⋮⋮</span>
-                <span style={{ fontSize: 10, color: tokens.color.textFaint, fontFamily: tokens.font.mono, minWidth: 18 }}>{idx + 1}</span>
-                <span style={{ fontSize: 11.5, color: '#1f2937', flex: 1 }}>{ORDER_LABELS[id]}</span>
+                <span style={{ fontSize: 11.5, color: 'rgba(0,0,0,0.35)', minWidth: 14, lineHeight: 1, cursor: 'grab' }} title="ドラッグして並び替え">⋮⋮</span>
+                <span style={{ fontSize: 9.5, color: tokens.color.textFaint, fontFamily: tokens.font.mono, minWidth: 18 }}>{idx + 1}</span>
+                <span style={{ fontSize: 10.5, color: '#1f2937', flex: 1 }}>{ORDER_LABELS[id]}</span>
               </div>
             );
           })}
         </div>
       )}
-      <button onClick={reset} style={{ ...S.btn, marginTop: 8, fontSize: 11 }} title="並び順を既定に戻す">並び順を既定に戻す</button>
+      <button onClick={reset} className="glass-edge" style={{ ...S.btn, marginTop: 8, fontSize: 10.5 }} title="並び順を既定に戻す">並び順を既定に戻す</button>
     </div>
   );
 }
@@ -3888,7 +3883,7 @@ function EngineSwitchButton({
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1,
         padding: '8px 12px',
-        fontSize: 12,
+        fontSize: 11.5,
         background: isActive ? tokens.gradient.accent : tokens.gradient.surface,
         // Long-hand split for the React shorthand-vs-longhand bug.
         borderWidth: 1,
@@ -3897,7 +3892,7 @@ function EngineSwitchButton({
         borderRadius: tokens.radius.pill,
         boxShadow: isActive ? tokens.shadow.glassAccent : tokens.shadow.glass,
         cursor: isActive ? 'default' : 'pointer',
-        fontWeight: isActive ? 700 : 600,
+        fontWeight: tokens.font.weight.strong,
         color: tokens.color.text,
         fontFamily: tokens.font.family,
         width: '100%',
@@ -3909,10 +3904,10 @@ function EngineSwitchButton({
       title={isActive ? '使用中' : `${label} に切替えてリロード`}
     >
       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 10 }}>{isActive ? '●' : '○'}</span>
+        <span style={{ fontSize: 9.5 }}>{isActive ? '●' : '○'}</span>
         <span>{label}</span>
       </span>
-      <span style={{ fontSize: 9.5, color: tokens.color.textMute, fontWeight: 500 }}>{sub}</span>
+      <span style={{ fontSize: 9.5, color: tokens.color.textMute, fontWeight: tokens.font.weight.medium }}>{sub}</span>
     </button>
   );
 }
@@ -4002,9 +3997,9 @@ function RenderQualitySection({
       title="描画品質"
       subtitle="RENDER QUALITY"
       defaultOpen={false}
-      action={<button onClick={onReset} style={S.btn} title="manifest.settings.render を未設定に戻す">既定に戻す</button>}
+      action={<button onClick={onReset} className="glass-edge" style={S.btn} title="manifest.settings.render を未設定に戻す">既定に戻す</button>}
     >
-      <div style={{ fontSize: 11, color: tokens.color.textMute, marginBottom: 8, lineHeight: 1.55 }}>
+      <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 8, lineHeight: 1.55 }}>
         露出 / 背景色は両エンジン反映。彩度・コントラスト・明るさ・トーンマップは PlayCanvas のみ反映。
       </div>
 
@@ -4027,7 +4022,7 @@ function RenderQualitySection({
               onClick={() => onSwitchEngine('spark')}
             />
           </div>
-          <div style={{ fontSize: 10.5, color: tokens.color.textFaint, marginTop: 6, lineHeight: 1.4 }}>
+          <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginTop: 6, lineHeight: 1.4 }}>
             ボタンを押すと自動でリロードしてエンジンが切り替わります。
           </div>
         </>
@@ -4057,7 +4052,7 @@ function RenderQualitySection({
       <Slider label="露出 (EV)" min={-3} max={3} step={0.1} value={ev} onChange={(v) => patch({ exposureEV: +v.toFixed(2) })} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-        <span style={{ fontSize: 11, color: tokens.color.textMute, width: 56 }}>背景色</span>
+        <span style={{ fontSize: 10.5, color: tokens.color.textMute, width: 56 }}>背景色</span>
         <input
           type="color"
           value={colorHex}
@@ -4070,18 +4065,23 @@ function RenderQualitySection({
           }}
           style={{ width: 36, height: 24, border: '1px solid rgba(0,0,0,0.12)', borderRadius: 4, padding: 0, cursor: 'pointer' }}
         />
-        <span style={{ fontSize: 10.5, fontFamily: tokens.font.mono, color: tokens.color.textMute }}>{colorHex}</span>
+        <span style={{ fontSize: 9.5, fontFamily: tokens.font.mono, color: tokens.color.textMute }}>{colorHex}</span>
       </div>
 
       {/* カラー調整 — PlayCanvas (CameraFrame) でのみ反映。Spark / mkkellogg では無視される。
           bypass ON 中は CameraFrame が無いので、これらのスライダーは保存はされるが描画には反映されない。 */}
       <div style={S.toolbarGroupHead}>カラー調整 (PlayCanvas)</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-        <span style={{ fontSize: 11, color: tokens.color.textMute, width: 80 }}>トーン</span>
+        <span style={{ fontSize: 10.5, color: tokens.color.textMute, width: 80 }}>トーン</span>
         <select
+          className="glass-edge"
           value={cfg.toneMapping ?? 'linear'}
           onChange={(e) => patch({ toneMapping: e.target.value as NonNullable<import('../core/types').RenderQualityConfig['toneMapping']> })}
-          style={{ flex: 1, padding: '4px 6px', fontSize: 11, border: '1px solid rgba(0,0,0,0.18)', borderRadius: 4, fontFamily: 'inherit' }}
+          style={{
+            flex: 1, padding: '6px 12px', fontSize: tokens.font.size.sm,
+            ...shellSurface('plain', { fill: 'surface' }),
+            cursor: 'pointer', outline: 'none',
+          }}
         >
           <option value="linear">Linear (既定)</option>
           <option value="neutral">Neutral</option>
@@ -4144,18 +4144,23 @@ function Slider({ label, min, max, step, value, onChange }: { label: string; min
 function StudioColorRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0' }}>
-      <span style={{ flex: 1, fontSize: 12, color: tokens.color.textMute }}>{label}</span>
+      <span style={{ flex: 1, fontSize: 11.5, color: tokens.color.textMute }}>{label}</span>
+      {/* Both wells were still on platform chrome: a 4px-radius OS colour box
+          and a text field that inherited the sunken recipe. The hex readout is
+          something you read far more often than you type into, so it takes the
+          raised shell like every other pill instead of reading as a slot. */}
       <input
         type="color"
         value={value}
         onChange={e => onChange(e.target.value)}
-        style={{ width: 36, height: 24, padding: 0, border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4, cursor: 'pointer' }}
+        style={{ width: 44 }}
       />
       <input
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
-        style={{ ...S.input, width: 84, marginBottom: 0, fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace', fontSize: 11 }}
+        className={`${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`}
+        style={{ width: 92, textAlign: 'center', fontFamily: tokens.font.mono }}
       />
     </div>
   );
@@ -4239,7 +4244,7 @@ function VideoTabPanel(props: {
     <Section title="動画" subtitle="VIDEO" defaultOpen={true}>
       {/* movement mode (walk / fly) — locked while a path recording / countdown is mid-flow */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 10, padding: 5, background: tokens.glass.surfaceStrong, backdropFilter: tokens.backdrop, WebkitBackdropFilter: tokens.backdrop, border: `1px solid ${COLOR.border}`, borderRadius: tokens.radius.pill, boxShadow: tokens.shadow.glass }}>
-        <span style={{ fontSize: 11, color: COLOR.textMute, minWidth: 64, paddingLeft: 8, fontWeight: 600 }}>移動モード</span>
+        <span style={{ fontSize: 10.5, color: COLOR.textMute, minWidth: 64, paddingLeft: 8, fontWeight: tokens.font.weight.strong }}>移動モード</span>
         {([['walk', '歩く'], ['fly', 'フライ']] as const).map(([k, label]) => (
           <button
             key={k}
@@ -4248,7 +4253,7 @@ function VideoTabPanel(props: {
             onClick={() => setMovementMode(k)}
             disabled={movementLocked}
             style={{
-              flex: 1, padding: '7px 12px', fontSize: 12, fontWeight: 700,
+              flex: 1, padding: '7px 12px', fontSize: 11.5, fontWeight: tokens.font.weight.strong,
               borderRadius: tokens.radius.pill, cursor: movementLocked ? 'not-allowed' : 'pointer',
               background: movementMode === k ? tokens.gradient.accent : 'transparent',
               border: `1px solid ${movementMode === k ? tokens.color.accentBorder : 'transparent'}`,
@@ -4274,19 +4279,19 @@ function VideoTabPanel(props: {
             onClick={() => props.setMode(k)}
             disabled={props.recState !== 'idle' || props.freeRecState !== 'idle'}
             style={{
-              padding: '8px 8px', fontSize: 12, lineHeight: 1.3,
+              padding: '8px 8px', fontSize: 11.5, lineHeight: 1.3,
               borderRadius: tokens.radius.pill, cursor: 'pointer', textAlign: 'center',
               background: props.mode === k ? tokens.gradient.accent : 'transparent',
               border: `1px solid ${props.mode === k ? tokens.color.accentBorder : 'transparent'}`,
               boxShadow: props.mode === k ? tokens.shadow.glassAccent : 'none',
               color: COLOR.text,
-              fontWeight: 700,
+              fontWeight: tokens.font.weight.strong,
               fontFamily: tokens.font.family, outline: 'none',
               transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
             }}
           >
             <div>{label}</div>
-            <div style={{ fontSize: 9.5, fontWeight: 500, color: COLOR.textMute, marginTop: 1 }}>{sub}</div>
+            <div style={{ fontSize: 9.5, fontWeight: tokens.font.weight.medium, color: COLOR.textMute, marginTop: 1 }}>{sub}</div>
           </button>
         ))}
       </div>
@@ -4294,7 +4299,7 @@ function VideoTabPanel(props: {
       {props.mode === 'path' ? <PathRecordingPanel {...props} /> : <FreeRecordingPanel {...props} />}
 
       {props.error && (
-        <div style={{ marginTop: 8, padding: '6px 8px', fontSize: 11, color: '#991b1b', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 6 }}>
+        <div style={{ marginTop: 8, padding: '6px 8px', fontSize: 10.5, color: '#991b1b', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 6 }}>
           {props.error}
         </div>
       )}
@@ -4473,13 +4478,13 @@ function PathRecordingPanel({
 
   return (
     <>
-      <div style={{ fontSize: 11.5, color: 'rgba(0,0,0,0.65)', lineHeight: 1.5, marginBottom: 8 }}>
+      <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.65)', lineHeight: 1.5, marginBottom: 8 }}>
         カメラを動かし「+ 現在のカメラを scene として追加」を繰り返すと、その順にカメラが動く動画になります。
         scene 行の右の数値は「次の scene までの秒数」。
       </div>
 
       {keyframes.length === 0 && (
-        <div style={{ padding: '12px', fontSize: 11.5, color: tokens.color.textFaint, textAlign: 'center', border: '1px dashed rgba(0,0,0,0.2)', borderRadius: 6 }}>
+        <div style={{ padding: '12px', fontSize: 10.5, color: tokens.color.textFaint, textAlign: 'center', border: '1px dashed rgba(0,0,0,0.2)', borderRadius: 6 }}>
           まだ scene がありません。下の「+ scene を追加」を押してください。
         </div>
       )}
@@ -4507,7 +4512,7 @@ function PathRecordingPanel({
               transition: 'border-color 100ms, opacity 100ms',
             }}
           >
-            <span title="ドラッグで並べ替え" style={{ fontSize: 14, color: 'rgba(0,0,0,0.35)', userSelect: 'none', cursor: isBusy ? 'default' : 'grab', flexShrink: 0 }}>⋮⋮</span>
+            <span title="ドラッグで並べ替え" style={{ fontSize: 12.5, color: 'rgba(0,0,0,0.35)', userSelect: 'none', cursor: isBusy ? 'default' : 'grab', flexShrink: 0 }}>⋮⋮</span>
             {/* thumbnail */}
             {kf.thumbnail ? (
               <img
@@ -4519,11 +4524,11 @@ function PathRecordingPanel({
                 style={{ width: 84, height: 56, objectFit: 'cover', borderRadius: 4, cursor: isBusy ? 'default' : 'pointer', flexShrink: 0 }}
               />
             ) : (
-              <div style={{ width: 84, height: 56, background: 'rgba(0,0,0,0.08)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: tokens.color.textFaint, flexShrink: 0 }}>no img</div>
+              <div style={{ width: 84, height: 56, background: 'rgba(0,0,0,0.08)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, color: tokens.color.textFaint, flexShrink: 0 }}>no img</div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11.5, fontWeight: 700 }}>scene{i + 1}</span>
+                <span style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong }}>scene{i + 1}</span>
                 {/* 通過 / 停止 toggle — only meaningful on middle waypoints. First / last
                     always stop because the path starts and ends at rest. */}
                 {i > 0 && !isLast && (
@@ -4534,7 +4539,7 @@ function PathRecordingPanel({
                     disabled={isBusy}
                     title={kf.passThrough ? '通過 (止まらない) — クリックで停止に切替' : '停止 (waypoint で減速) — クリックで通過に切替'}
                     style={{
-                      padding: '1px 6px', fontSize: 9.5, fontWeight: 700, borderRadius: 999,
+                      padding: '1px 6px', fontSize: 9.5, fontWeight: tokens.font.weight.strong, borderRadius: 999,
                       background: kf.passThrough ? 'rgba(168,85,247,0.14)' : 'rgba(0,0,0,0.04)',
                       border: `1px solid ${kf.passThrough ? 'rgba(168,85,247,0.5)' : 'rgba(0,0,0,0.15)'}`,
                       color: kf.passThrough ? '#7e22ce' : tokens.color.textMute,
@@ -4545,7 +4550,7 @@ function PathRecordingPanel({
                   </button>
                 )}
               </div>
-              <div style={{ fontSize: 10, color: tokens.color.textFaint, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 9.5, color: tokens.color.textFaint, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 ({kf.pose.position[0].toFixed(1)}, {kf.pose.position[1].toFixed(1)}, {kf.pose.position[2].toFixed(1)})
               </div>
               {!isLast && (
@@ -4557,10 +4562,10 @@ function PathRecordingPanel({
                     onClick={() => adjustSegmentDuration(i, -1)}
                     disabled={isBusy || kf.durationSec <= 1}
                     title="−1 秒"
-                    style={{ ...btnIcon(isBusy || kf.durationSec <= 1), padding: '2px 8px', fontSize: 13, lineHeight: 1, fontWeight: 700 }}
+                    style={{ ...btnIcon(isBusy || kf.durationSec <= 1), padding: '2px 8px', fontSize: 11.5, lineHeight: 1, fontWeight: tokens.font.weight.strong }}
                   >−</button>
                   <span style={{
-                    minWidth: 28, textAlign: 'center', fontSize: 12, fontWeight: 700,
+                    minWidth: 28, textAlign: 'center', fontSize: 11.5, fontWeight: tokens.font.weight.strong,
                     fontFamily: 'monospace', color: 'rgba(0,0,0,0.8)',
                     padding: '2px 4px', background: '#fff', border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4,
                   }}>
@@ -4572,7 +4577,7 @@ function PathRecordingPanel({
                     onClick={() => adjustSegmentDuration(i, +1)}
                     disabled={isBusy || kf.durationSec >= 60}
                     title="+1 秒"
-                    style={{ ...btnIcon(isBusy || kf.durationSec >= 60), padding: '2px 8px', fontSize: 13, lineHeight: 1, fontWeight: 700 }}
+                    style={{ ...btnIcon(isBusy || kf.durationSec >= 60), padding: '2px 8px', fontSize: 11.5, lineHeight: 1, fontWeight: tokens.font.weight.strong }}
                   >+</button>
                   <span style={{ fontSize: 9.5, color: tokens.color.textFaint }}>秒</span>
                 </div>
@@ -4586,7 +4591,7 @@ function PathRecordingPanel({
               <div style={{ display: 'flex', gap: 2 }}>
                 <button type="button" className="video-btn-tap" onClick={() => moveScene(i, -1)} disabled={isBusy || i === 0} title="上へ" style={btnIcon(isBusy || i === 0)}>▲</button>
                 <button type="button" className="video-btn-tap" onClick={() => moveScene(i, 1)} disabled={isBusy || isLast} title="下へ" style={btnIcon(isBusy || isLast)}>▼</button>
-                <button type="button" className="video-btn-tap" onClick={() => removeScene(i)} disabled={isBusy} title="削除" style={{ ...btnIcon(isBusy), color: '#b91c1c' }}>✕</button>
+                <button type="button" className={`video-btn-tap ${dangerIconClass}`} onClick={() => removeScene(i)} disabled={isBusy} title="削除"><IconTrash /></button>
               </div>
             </div>
           </div>
@@ -4599,7 +4604,7 @@ function PathRecordingPanel({
         onClick={addCurrentAsScene}
         disabled={isBusy}
         style={{
-          width: '100%', marginTop: 6, padding: '8px 10px', fontSize: 12, fontWeight: 600,
+          width: '100%', marginTop: 6, padding: '8px 10px', fontSize: 11.5, fontWeight: tokens.font.weight.strong,
           borderRadius: 8, border: '1px dashed rgba(0,0,0,0.3)', background: '#fff',
           cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.4 : 1,
         }}
@@ -4608,9 +4613,9 @@ function PathRecordingPanel({
       </button>
 
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLOR.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, color: COLOR.textMute }}>合計 <strong style={{ color: COLOR.text }}>{totalSec.toFixed(1)}秒</strong></span>
+        <span style={{ fontSize: 10.5, color: COLOR.textMute }}>合計 <strong style={{ color: COLOR.text }}>{totalSec.toFixed(1)}秒</strong></span>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: COLOR.textMute }}>FPS</span>
+        <span style={{ fontSize: 10.5, color: COLOR.textMute }}>FPS</span>
         {([60, 30] as const).map((f) => (
           <button
             key={f}
@@ -4619,12 +4624,12 @@ function PathRecordingPanel({
             onClick={() => setFps(f)}
             disabled={isBusy}
             style={{
-              padding: '5px 14px', fontSize: 11.5, borderRadius: tokens.radius.pill,
+              padding: '5px 14px', fontSize: 10.5, borderRadius: tokens.radius.pill,
               background: fps === f ? tokens.gradient.accent : tokens.gradient.surface,
               border: `1px solid ${fps === f ? tokens.color.accentBorder : COLOR.border}`,
               boxShadow: fps === f ? tokens.shadow.glassAccent : tokens.shadow.glass,
               color: COLOR.text,
-              cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: 700,
+              cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: tokens.font.weight.strong,
               fontFamily: tokens.font.family, outline: 'none',
               transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
             }}
@@ -4636,9 +4641,9 @@ function PathRecordingPanel({
 
       <div style={{ marginTop: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: tokens.color.textMute }}>プレビュー位置</span>
+          <span style={{ fontSize: 10.5, color: tokens.color.textMute }}>プレビュー位置</span>
           <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 11, color: tokens.color.textMute, fontFamily: 'monospace' }}>
+          <span style={{ fontSize: 10.5, color: tokens.color.textMute, fontFamily: 'monospace' }}>
             {(progress * totalSec).toFixed(1)}s / {totalSec.toFixed(1)}s
           </span>
         </div>
@@ -4676,22 +4681,22 @@ function PathRecordingPanel({
 
       {/* trim controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '6px 8px', background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 6 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#15803d', minWidth: 56 }}>出力範囲</span>
-        <span style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.65)', fontFamily: 'monospace', flex: 1 }}>
+        <span style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: '#15803d', minWidth: 56 }}>出力範囲</span>
+        <span style={{ fontSize: 9.5, color: 'rgba(0,0,0,0.65)', fontFamily: 'monospace', flex: 1 }}>
           {(trimStart * totalSec).toFixed(1)}s 〜 {(trimEnd * totalSec).toFixed(1)}s
           <span style={{ marginLeft: 6, color: 'rgba(0,0,0,0.45)' }}>({((trimEnd - trimStart) * totalSec).toFixed(1)}s)</span>
         </span>
         <button type="button" className="video-btn-tap" onClick={handleSetTrimStart} disabled={isBusy}
           title="現在のスクラブ位置を開始に設定"
-          style={{ padding: '3px 8px', fontSize: 10.5, fontWeight: 600, borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: '#fff', cursor: isBusy ? 'not-allowed' : 'pointer' }}
+          style={{ padding: '3px 8px', fontSize: 9.5, fontWeight: tokens.font.weight.strong, borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: '#fff', cursor: isBusy ? 'not-allowed' : 'pointer' }}
         >⊏ 開始</button>
         <button type="button" className="video-btn-tap" onClick={handleSetTrimEnd} disabled={isBusy}
           title="現在のスクラブ位置を終了に設定"
-          style={{ padding: '3px 8px', fontSize: 10.5, fontWeight: 600, borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: '#fff', cursor: isBusy ? 'not-allowed' : 'pointer' }}
+          style={{ padding: '3px 8px', fontSize: 9.5, fontWeight: tokens.font.weight.strong, borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: '#fff', cursor: isBusy ? 'not-allowed' : 'pointer' }}
         >終了 ⊐</button>
         <button type="button" className="video-btn-tap" onClick={handleResetTrim} disabled={isBusy || (trimStart === 0 && trimEnd === 1)}
           title="全体に戻す"
-          style={{ padding: '3px 8px', fontSize: 10.5, borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: '#fff', cursor: isBusy || (trimStart === 0 && trimEnd === 1) ? 'not-allowed' : 'pointer', opacity: isBusy || (trimStart === 0 && trimEnd === 1) ? 0.4 : 1 }}
+          style={{ padding: '3px 8px', fontSize: 9.5, borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: '#fff', cursor: isBusy || (trimStart === 0 && trimEnd === 1) ? 'not-allowed' : 'pointer', opacity: isBusy || (trimStart === 0 && trimEnd === 1) ? 0.4 : 1 }}
         >↻</button>
       </div>
 
@@ -4701,7 +4706,7 @@ function PathRecordingPanel({
             type="button"
             className="video-btn-cta"
             onClick={handleStopPreview}
-            style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
+            style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 11.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
               borderRadius: tokens.radius.pill,
               border: `1px solid ${tokens.color.border}`,
               background: tokens.gradient.neutral, color: tokens.color.text,
@@ -4716,7 +4721,7 @@ function PathRecordingPanel({
             className="video-btn-cta"
             onClick={handlePreview}
             disabled={!canRun}
-            style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
+            style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 11.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
               borderRadius: tokens.radius.pill,
               border: `1px solid ${tokens.color.border}`,
               background: tokens.gradient.surface, color: tokens.color.text,
@@ -4732,7 +4737,7 @@ function PathRecordingPanel({
           className="video-btn-cta"
           onClick={handleRecord}
           disabled={!canRun}
-          style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
+          style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 11.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
             borderRadius: tokens.radius.pill,
             border: `1px solid ${tokens.color.dangerBorder}`,
             background: tokens.gradient.danger, color: tokens.color.text,
@@ -4747,7 +4752,7 @@ function PathRecordingPanel({
           className="video-btn-tap"
           onClick={handleClear}
           disabled={isBusy || keyframes.length === 0}
-          style={{ padding: '8px 12px', fontSize: 12,
+          style={{ padding: '8px 12px', fontSize: 11.5,
             borderRadius: 8, border: '1px solid rgba(0,0,0,0.2)', background: '#fff',
             cursor: isBusy || keyframes.length === 0 ? 'not-allowed' : 'pointer', opacity: isBusy || keyframes.length === 0 ? 0.4 : 1 }}
         >
@@ -4756,10 +4761,10 @@ function PathRecordingPanel({
       </div>
 
       {isBusy && (
-        <div style={{ marginTop: 10, fontSize: 11.5, color: tokens.color.textMute }}>
+        <div style={{ marginTop: 10, fontSize: 10.5, color: tokens.color.textMute }}>
           {recState === 'recording' ? '録画中…' : 'プレビュー再生中…'}
           <div style={{ marginTop: 4, height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${Math.round(progress * 100)}%`, background: recState === 'recording' ? '#dc2626' : '#3b82f6', transition: 'width 80ms linear' }} />
+            <div style={{ height: '100%', width: `${Math.round(progress * 100)}%`, background: recState === 'recording' ? tokens.color.danger : tokens.color.accent, transition: 'width 80ms linear' }} />
           </div>
         </div>
       )}
@@ -4909,7 +4914,7 @@ function FreeRecordingPanel({
 
   return (
     <>
-      <div style={{ fontSize: 11.5, color: 'rgba(0,0,0,0.65)', lineHeight: 1.5, marginBottom: 10 }}>
+      <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.65)', lineHeight: 1.5, marginBottom: 10 }}>
         「録画開始」を押すと <strong>{FREE_REC_BUFFER_SEC} 秒</strong>後に録画が始まります（操作の準備時間）。
         「録画停止」を押すと <strong>{FREE_REC_BUFFER_SEC} 秒</strong>後に停止します（仕舞いの操作時間）。
         その間にプレビュー画面で自由にカメラを動かしてください。
@@ -4917,7 +4922,7 @@ function FreeRecordingPanel({
 
       {/* fps */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ fontSize: 11, color: COLOR.textMute }}>FPS</span>
+        <span style={{ fontSize: 10.5, color: COLOR.textMute }}>FPS</span>
         {([60, 30] as const).map((f) => (
           <button
             key={f}
@@ -4926,12 +4931,12 @@ function FreeRecordingPanel({
             onClick={() => setFps(f)}
             disabled={isBusy}
             style={{
-              padding: '5px 14px', fontSize: 11.5, borderRadius: tokens.radius.pill,
+              padding: '5px 14px', fontSize: 10.5, borderRadius: tokens.radius.pill,
               background: fps === f ? tokens.gradient.accent : tokens.gradient.surface,
               border: `1px solid ${fps === f ? tokens.color.accentBorder : COLOR.border}`,
               boxShadow: fps === f ? tokens.shadow.glassAccent : tokens.shadow.glass,
               color: COLOR.text,
-              cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: 700,
+              cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: tokens.font.weight.strong,
               fontFamily: tokens.font.family, outline: 'none',
               transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
             }}
@@ -4941,7 +4946,7 @@ function FreeRecordingPanel({
         ))}
         <div style={{ flex: 1 }} />
         {freeRecState === 'recording' && (
-          <span style={{ fontSize: 11.5, color: '#dc2626', fontFamily: 'monospace', fontWeight: 700 }}>
+          <span style={{ fontSize: 10.5, color: tokens.color.danger, fontFamily: 'monospace', fontWeight: tokens.font.weight.strong }}>
             ● {elapsedSec.toFixed(1)}s
           </span>
         )}
@@ -4953,7 +4958,7 @@ function FreeRecordingPanel({
           type="button"
           className="video-btn-cta"
           onClick={handleStart}
-          style={{ width: '100%', padding: '14px', fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3,
+          style={{ width: '100%', padding: '14px', fontSize: 12, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
             borderRadius: tokens.radius.pill,
             border: `1px solid ${tokens.color.dangerBorder}`,
             background: tokens.gradient.danger, color: tokens.color.text,
@@ -4969,7 +4974,7 @@ function FreeRecordingPanel({
           type="button"
           className="video-btn-cta"
           onClick={handleAbort}
-          style={{ width: '100%', padding: '14px', fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3,
+          style={{ width: '100%', padding: '14px', fontSize: 12, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
             borderRadius: tokens.radius.pill,
             border: `1px solid ${tokens.color.warnBorder}`,
             background: tokens.gradient.warn, color: tokens.color.text,
@@ -4985,7 +4990,7 @@ function FreeRecordingPanel({
           type="button"
           className="video-btn-cta"
           onClick={handleStop}
-          style={{ width: '100%', padding: '14px', fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3,
+          style={{ width: '100%', padding: '14px', fontSize: 12, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
             borderRadius: tokens.radius.pill,
             border: `1px solid ${tokens.color.border}`,
             background: tokens.gradient.neutral, color: tokens.color.text,
@@ -5000,7 +5005,7 @@ function FreeRecordingPanel({
         <button
           type="button"
           disabled
-          style={{ width: '100%', padding: '14px', fontSize: 13.5, fontWeight: 700, letterSpacing: 0.3,
+          style={{ width: '100%', padding: '14px', fontSize: 12, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
             borderRadius: tokens.radius.pill,
             border: `1px solid ${tokens.color.warnBorder}`,
             background: tokens.gradient.warn, color: tokens.color.text,
@@ -5033,18 +5038,18 @@ function VideoOverlay({
           <div
             key={freeRecCountdown}
             className="video-countdown-num"
-            style={{ fontSize: 140, fontWeight: 900, color: '#fff', textShadow: '0 6px 24px rgba(0,0,0,0.6)', textAlign: 'center', lineHeight: 1 }}
+            style={{ fontSize: 140, fontWeight: tokens.font.weight.strong, color: '#fff', textShadow: '0 6px 24px rgba(0,0,0,0.6)', textAlign: 'center', lineHeight: 1 }}
           >
             {freeRecCountdown}
           </div>
-          <div style={{ marginTop: 8, textAlign: 'center', fontSize: 14, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+          <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12.5, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
             {freeRecState === 'starting' ? '録画開始まで…' : '録画停止まで…'}
           </div>
         </div>
       )}
       {showRecBadge && !showCountdown && (
-        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 11.5, fontWeight: 700, fontFamily: 'monospace' }}>
-            <span className="video-rec-dot" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#dc2626' }} />
+        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 10.5, fontWeight: tokens.font.weight.strong, fontFamily: 'monospace' }}>
+            <span className="video-rec-dot" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: tokens.color.danger }} />
             REC {freeRecState === 'recording' ? `${(freeRecElapsedMs / 1000).toFixed(1)}s` : ''}
         </div>
       )}
@@ -5053,7 +5058,7 @@ function VideoOverlay({
 }
 
 const btnIcon = (disabled: boolean): React.CSSProperties => ({
-  padding: '2px 6px', fontSize: 11, lineHeight: 1, borderRadius: 4,
+  padding: '2px 6px', fontSize: 10.5, lineHeight: 1, borderRadius: 4,
   border: '1px solid rgba(0,0,0,0.2)', background: '#fff',
   cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.35 : 1,
   minWidth: 22,
@@ -5190,8 +5195,8 @@ function ClipLibrarySection({
   return (
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(0,0,0,0.75)' }}>ライブラリ</span>
-        <span style={{ fontSize: 11, color: tokens.color.textFaint }}>{library.length} 本保存済</span>
+        <span style={{ fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: 'rgba(0,0,0,0.75)' }}>ライブラリ</span>
+        <span style={{ fontSize: 10.5, color: tokens.color.textFaint }}>{library.length} 本保存済</span>
         <div style={{ flex: 1 }} />
         {selectedCount > 0 && (
           <button
@@ -5199,7 +5204,7 @@ function ClipLibrarySection({
             className="video-btn-tap"
             onClick={() => setSelectedClipIds(new Set())}
             disabled={isBusy}
-            style={{ padding: '3px 8px', fontSize: 10.5, borderRadius: 6, border: '1px solid rgba(0,0,0,0.15)', background: '#fff', cursor: isBusy ? 'not-allowed' : 'pointer' }}
+            style={{ padding: '3px 8px', fontSize: 9.5, borderRadius: 6, border: '1px solid rgba(0,0,0,0.15)', background: '#fff', cursor: isBusy ? 'not-allowed' : 'pointer' }}
           >
             選択解除
           </button>
@@ -5207,7 +5212,7 @@ function ClipLibrarySection({
       </div>
 
       {library.length === 0 && (
-        <div style={{ padding: 12, fontSize: 11.5, color: tokens.color.textFaint, textAlign: 'center', border: '1px dashed rgba(0,0,0,0.2)', borderRadius: 6 }}>
+        <div style={{ padding: 12, fontSize: 10.5, color: tokens.color.textFaint, textAlign: 'center', border: '1px dashed rgba(0,0,0,0.2)', borderRadius: 6 }}>
           まだ保存された動画はありません。録画すると自動で保存されます。
         </div>
       )}
@@ -5240,7 +5245,7 @@ function ClipLibrarySection({
               transition: 'border-color 100ms, opacity 100ms',
             }}
           >
-            <span title="ドラッグで並べ替え" style={{ fontSize: 14, color: 'rgba(0,0,0,0.35)', cursor: isBusy ? 'default' : 'grab', userSelect: 'none' }}>⋮⋮</span>
+            <span title="ドラッグで並べ替え" style={{ fontSize: 12.5, color: 'rgba(0,0,0,0.35)', cursor: isBusy ? 'default' : 'grab', userSelect: 'none' }}>⋮⋮</span>
             <input
               type="checkbox"
               checked={checked}
@@ -5256,23 +5261,23 @@ function ClipLibrarySection({
                 style={{ width: 64, height: 40, objectFit: 'cover', borderRadius: 3, flexShrink: 0, pointerEvents: 'none' }}
               />
             ) : (
-              <div style={{ width: 64, height: 40, background: 'rgba(0,0,0,0.08)', borderRadius: 3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: tokens.color.textFaint }}>no img</div>
+              <div style={{ width: 64, height: 40, background: 'rgba(0,0,0,0.08)', borderRadius: 3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, color: tokens.color.textFaint }}>no img</div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(0,0,0,0.8)' }}>
+              <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: 'rgba(0,0,0,0.8)' }}>
                 <span style={{ marginRight: 4, color: tokens.color.textMute }}>{idx + 1}.</span>
                 {clip.origin === 'path' ? '🎞 scene 補間' : '📹 画面操作'}
-                <span style={{ marginLeft: 6, fontWeight: 400, color: tokens.color.textMute }}>
+                <span style={{ marginLeft: 6, fontWeight: tokens.font.weight.medium, color: tokens.color.textMute }}>
                   {formatDuration(clip.durationMs)} / {formatBytes(clip.bytes)} / .{clip.ext}
                 </span>
               </div>
-              <div style={{ fontSize: 10, color: 'rgba(0,0,0,0.45)' }}>
+              <div style={{ fontSize: 9.5, color: 'rgba(0,0,0,0.45)' }}>
                 {new Date(clip.createdAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 {clip.planId && <span style={{ marginLeft: 6 }}>plan: {clip.planId}</span>}
               </div>
             </div>
             <button type="button" className="video-btn-tap" onClick={() => handleRedownload(clip)} disabled={isBusy} title="再ダウンロード" style={btnIcon(isBusy)}>↓</button>
-            <button type="button" className="video-btn-tap" onClick={() => handleDelete(clip.id)} disabled={isBusy} title="削除" style={{ ...btnIcon(isBusy), color: '#b91c1c' }}>✕</button>
+            <button type="button" className={`video-btn-tap ${dangerIconClass}`} onClick={() => handleDelete(clip.id)} disabled={isBusy} title="削除"><IconTrash /></button>
           </div>
         );
       })}
@@ -5284,7 +5289,7 @@ function ClipLibrarySection({
           onClick={handleConcat}
           disabled={isBusy || selectedCount < 2}
           style={{
-            width: '100%', marginTop: 8, padding: '10px', fontSize: 12, fontWeight: 700,
+            width: '100%', marginTop: 8, padding: '10px', fontSize: 11.5, fontWeight: tokens.font.weight.strong,
             borderRadius: 8, border: '1px solid #1d4ed8', background: '#3b82f6', color: '#fff',
             cursor: isBusy || selectedCount < 2 ? 'not-allowed' : 'pointer',
             opacity: isBusy || selectedCount < 2 ? 0.5 : 1,
@@ -5295,7 +5300,7 @@ function ClipLibrarySection({
       )}
 
       {concatRunning && concatProgress && (
-        <div style={{ marginTop: 8, fontSize: 11.5, color: tokens.color.textMute }}>
+        <div style={{ marginTop: 8, fontSize: 10.5, color: tokens.color.textMute }}>
           結合中… clip {concatProgress.clipIndex + 1} / {concatProgress.total}（{Math.round(concatProgress.t01 * 100)}%）
           <div style={{ marginTop: 4, height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden' }}>
             <div
@@ -5326,7 +5331,7 @@ const COLOR: Record<string, string> = {
   panel: tokens.color.surface,
   panel2: tokens.color.surfaceSoft,
   border: tokens.color.border,
-  borderSoft: tokens.color.border,
+  borderSoft: tokens.color.hairline,
   text: tokens.color.text,
   textDim: tokens.color.text,
   textMute: tokens.color.textMute,
@@ -5337,11 +5342,26 @@ const COLOR: Record<string, string> = {
   ok: tokens.color.success,
 };
 
+/** Class list for the shared white pill — see `fileBtn`. */
+const shellClass = `${surfaceClass('plain')} ds-pill ds-fill-surface`;
+
+/* Destructive controls. Every one of these was drawn by hand at its call site
+   — a rose tint here, a `#f87171` glyph there, a 6px-radius outlined box in
+   the floor-plan panel — so the same action looked like three different
+   controls depending on which panel you were in. `ds-v-danger` already carries
+   the rose edge, fill, text colour and glow; the only choice left is icon-only
+   or labelled. No `ds-fill-surface`: it would override the variant's own fill
+   (both are one class deep, and the neutral one is declared later). */
+const dangerIconClass = `${surfaceClass('danger')} ds-pill ds-pill--icon ds-pill--xs`;
+const dangerPillClass = `${surfaceClass('danger')} ds-pill ds-pill--sm`;
+/** Labelled but sitting in a dense row, beside 24px icon buttons. */
+const dangerXsClass = `${surfaceClass('danger')} ds-pill ds-pill--xs`;
+
 const S: Record<string, React.CSSProperties> = {
   root: {
     width: '100vw', height: '100vh', background: COLOR.bg, color: COLOR.text,
     fontFamily: tokens.font.family,
-    fontSize: 13,
+    fontSize: 11.5,
     display: 'grid', gridTemplateRows: '48px 1fr', gridTemplateColumns: '1fr',
     overflow: 'hidden',
   },
@@ -5356,32 +5376,26 @@ const S: Record<string, React.CSSProperties> = {
   },
   logo: { display: 'flex', alignItems: 'center', gap: 10 },
   badge: {
-    background: tokens.gradient.warn, color: COLOR.text,
-    border: `1px solid ${tokens.color.warnBorder}`,
-    padding: '3px 10px', borderRadius: tokens.radius.pill,
-    fontSize: 10, fontWeight: 700, letterSpacing: 1,
+    ...shellSurface('warn'),
+    padding: '3px 10px',
+    fontSize: tokens.font.size.xs, fontWeight: tokens.font.weight.strong,
+    letterSpacing: tokens.font.tracking.label,
     fontFamily: tokens.font.mono,
-    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
   },
-  sceneName: { fontSize: 13, fontWeight: 600, color: COLOR.text },
+  sceneName: { fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: COLOR.text },
   fpsChip: {
     display: 'flex', alignItems: 'center', gap: 6,
-    padding: '5px 12px', background: tokens.gradient.surface,
-    border: `1px solid ${COLOR.border}`,
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glass,
+    padding: '5px 13px',
+    ...shellSurface('plain', { fill: 'surface' }),
   },
   fpsDot: { width: 6, height: 6, borderRadius: '50%' },
-  fpsVal: { fontSize: 13, fontWeight: 700, fontFamily: tokens.font.mono },
-  fpsLabel: { fontSize: 10, color: COLOR.textMute, letterSpacing: 1 },
+  fpsVal: { fontSize: 11.5, fontWeight: tokens.font.weight.strong, fontFamily: tokens.font.mono },
+  fpsLabel: { fontSize: 9.5, color: COLOR.textMute, letterSpacing: 1 },
   viewerBtn: {
-    background: tokens.gradient.accent,
-    border: `1px solid ${tokens.color.accentBorder}`,
-    color: COLOR.text, textDecoration: 'none',
-    padding: '7px 16px', borderRadius: tokens.radius.pill,
-    fontSize: 12, fontWeight: 700, letterSpacing: 0.3,
-    boxShadow: tokens.shadow.glassAccent,
-    fontFamily: tokens.font.family,
+    ...shellSurface('accent'),
+    textDecoration: 'none',
+    padding: '7px 16px',
+    fontSize: tokens.font.size.sm, fontWeight: tokens.font.weight.strong,
   },
   body: {
     minHeight: 0, overflow: 'hidden',
@@ -5395,44 +5409,6 @@ const S: Record<string, React.CSSProperties> = {
     scrollbarWidth: 'thin',
     borderRight: `1px solid ${COLOR.border}`,
   },
-  section: {
-    background: tokens.gradient.surface,
-    border: `1px solid ${COLOR.border}`,
-    borderRadius: tokens.radius.md,
-    overflow: 'hidden',
-    flexShrink: 0,
-    boxShadow: tokens.shadow.glass,
-  },
-  sectionHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    gap: 10,
-    padding: '10px 12px',
-    background: tokens.gradient.neutral,
-    borderBottom: `1px solid ${COLOR.border}`,
-  },
-  sectionToggle: {
-    flex: 1, minWidth: 0,
-    display: 'flex', alignItems: 'center', gap: 10,
-    background: 'transparent', border: 'none', padding: 0,
-    cursor: 'pointer', textAlign: 'left',
-    color: COLOR.text, fontFamily: 'inherit',
-  },
-  chevron: {
-    display: 'inline-block',
-    fontSize: 9, color: COLOR.textMute,
-    transition: 'transform 0.15s',
-    width: 10, textAlign: 'center',
-  },
-  sectionTitle: {
-    fontSize: 14, fontWeight: 700, letterSpacing: 0.3,
-    color: COLOR.text,
-  },
-  sectionSubtitle: {
-    fontSize: 10, fontWeight: 700, letterSpacing: 1.2,
-    color: COLOR.accentText, textTransform: 'uppercase',
-    fontFamily: tokens.font.mono,
-  },
-  sectionBody: { padding: 10 },
 
   kvGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 },
   kvCell: {
@@ -5444,12 +5420,12 @@ const S: Record<string, React.CSSProperties> = {
     minWidth: 0,
   },
   kvLabel: {
-    fontSize: 10, fontWeight: 600, letterSpacing: 0.5,
+    fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.5,
     color: COLOR.textMute, marginBottom: 2, textTransform: 'uppercase',
     whiteSpace: 'nowrap' as const,
   },
   kvVal: {
-    fontSize: 14, fontWeight: 600,
+    fontSize: 12.5, fontWeight: tokens.font.weight.strong,
     fontFamily: tokens.font.mono,
     color: COLOR.text,
     whiteSpace: 'nowrap' as const,
@@ -5457,39 +5433,36 @@ const S: Record<string, React.CSSProperties> = {
 
   btnRow: { display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' },
   btn: {
-    background: tokens.gradient.neutral, border: `1px solid ${COLOR.border}`,
-    color: COLOR.text, fontSize: 12, padding: '7px 14px',
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glass,
-    cursor: 'pointer', fontFamily: tokens.font.family, fontWeight: 600,
+    ...shellSurface('neutral', { fill: 'neutral' }),
+    fontSize: tokens.font.size.sm, padding: '7px 15px',
+    cursor: 'pointer', fontWeight: tokens.font.weight.strong,
     outline: 'none',
   },
   btnPrimary: {
-    background: tokens.gradient.success, border: `1px solid ${tokens.color.successBorder}`,
-    color: COLOR.text, fontSize: 12, padding: '7px 14px',
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glassSuccess,
-    cursor: 'pointer', fontFamily: tokens.font.family, fontWeight: 700,
+    // Plain white, not green. These are ordinary "add a plan / a viewpoint /
+    // a variant" actions inside the 全体 and プラン tabs; green read as a
+    // confirmation that nothing had actually confirmed. The success hue is
+    // kept for states that genuinely report one.
+    ...shellSurface('plain', { fill: 'surface' }),
+    fontSize: tokens.font.size.sm, padding: '7px 15px',
+    cursor: 'pointer', fontWeight: tokens.font.weight.strong,
     outline: 'none',
   },
   btnDanger: {
     width: '100%', marginTop: 8,
-    background: tokens.gradient.danger, border: `1px solid ${tokens.color.dangerBorder}`,
-    color: COLOR.text, fontSize: 12, padding: '8px 14px',
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glass,
-    cursor: 'pointer', fontFamily: tokens.font.family, fontWeight: 600,
+    ...shellSurface('danger'),
+    fontSize: tokens.font.size.sm, padding: '8px 15px',
+    cursor: 'pointer', fontWeight: tokens.font.weight.strong,
     outline: 'none',
   },
+  /* Raised, not sunken. The sunken recipe (shadow on top, no outer drop)
+     belongs to things you type INTO — inputs, tracks. Using it for a button
+     said "this is a slot" while the control was in fact pressable, which is
+     why these read as inert panels. They are ordinary buttons that happen to
+     open a file picker, so they take the ordinary pill. */
   fileBtn: {
-    width: '100%', padding: '11px 14px',
-    background: tokens.gradient.track, border: `1px dashed ${COLOR.border}`,
-    color: COLOR.textMute, fontSize: 12, borderRadius: tokens.radius.pill,
-    cursor: 'pointer', fontFamily: tokens.font.family,
+    width: '100%',
     textAlign: 'center' as const,
-    fontWeight: 600,
-    outline: 'none',
-    boxShadow: tokens.shadow.inset,
   },
 
   inlineCard: {
@@ -5501,40 +5474,46 @@ const S: Record<string, React.CSSProperties> = {
   input: {
     width: '100%', padding: '10px 14px',
     background: tokens.gradient.track,
-    border: `1px solid ${COLOR.border}`,
+    borderWidth: 0,
+    borderStyle: 'solid' as const,
+    borderColor: 'transparent',
     borderRadius: tokens.radius.pill,
-    color: COLOR.text, fontSize: 13,
+    color: COLOR.text, fontSize: 11.5,
     outline: 'none', fontFamily: tokens.font.family,
-    boxShadow: tokens.shadow.inset,
+    boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
     boxSizing: 'border-box' as const,
   },
   inputInline: {
     width: '100%', padding: '4px 10px',
     background: tokens.gradient.track,
-    border: `1px solid ${tokens.color.accentBorder}`,
+    borderWidth: 0,
+    borderStyle: 'solid' as const,
+    borderColor: 'transparent',
     borderRadius: tokens.radius.pill,
-    color: COLOR.text, fontSize: 13, outline: 'none',
+    color: COLOR.text, fontSize: 11.5, outline: 'none',
     fontFamily: tokens.font.family,
-    boxShadow: tokens.shadow.inset,
+    boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
   },
   formLabel: {
-    fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
+    fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.6,
     color: COLOR.textMute, textTransform: 'uppercase' as const,
   },
   formInput: {
     width: '100%', padding: '10px 14px',
     background: tokens.gradient.track,
-    border: `1px solid ${COLOR.border}`,
+    borderWidth: 0,
+    borderStyle: 'solid' as const,
+    borderColor: 'transparent',
     borderRadius: tokens.radius.pill,
-    color: COLOR.text, fontSize: 13,
+    color: COLOR.text, fontSize: 11.5,
     outline: 'none', fontFamily: tokens.font.family,
     boxSizing: 'border-box' as const,
-    boxShadow: tokens.shadow.inset,
+    boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
   },
 
   empty: {
     padding: '20px 10px', textAlign: 'center' as const,
-    color: COLOR.textMute, fontSize: 12,
+    color: COLOR.textMute, fontSize: 11.5,
   },
 
   vpList: { display: 'flex', flexDirection: 'column', gap: 6 },
@@ -5563,7 +5542,7 @@ const S: Record<string, React.CSSProperties> = {
   vpDragHandle: {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: 16, height: 28,
-    color: COLOR.textMute, fontSize: 14,
+    color: COLOR.textMute, fontSize: 12.5,
     cursor: 'grab', userSelect: 'none' as const,
     flexShrink: 0,
   } as React.CSSProperties,
@@ -5594,23 +5573,23 @@ const S: Record<string, React.CSSProperties> = {
   vpThumbEmpty: {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: '100%', height: '100%',
-    color: 'rgba(0,0,0,0.3)', fontSize: 14,
+    color: 'rgba(0,0,0,0.3)', fontSize: 12.5,
   },
   vpThumbBadge: {
     position: 'absolute' as const,
     top: 2, right: 2,
     background: 'rgba(34,197,94,0.85)', color: '#ffffff',
-    fontSize: 9, fontWeight: 700,
+    fontSize: 9.5, fontWeight: tokens.font.weight.strong,
     padding: '1px 4px', borderRadius: 3,
     fontFamily: tokens.font.mono,
     letterSpacing: 0.4,
   },
   vpLabel: {
-    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    fontSize: 11.5, fontWeight: tokens.font.weight.strong, cursor: 'pointer',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   vpMeta: {
-    fontSize: 10, color: COLOR.textMute, marginTop: 2,
+    fontSize: 9.5, color: COLOR.textMute, marginTop: 2,
     fontFamily: tokens.font.mono,
     display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
     wordBreak: 'break-all' as const,
@@ -5619,18 +5598,18 @@ const S: Record<string, React.CSSProperties> = {
   vpActions: { display: 'flex', gap: 2, flexShrink: 0 },
   iconBtn: {
     background: 'transparent', border: 'none', cursor: 'pointer',
-    color: COLOR.textMute, fontSize: 13, width: 24, height: 24,
+    color: COLOR.textMute, fontSize: 11.5, width: 24, height: 24,
     borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
 
   toggle: {
     display: 'flex', alignItems: 'center', gap: 8,
-    cursor: 'pointer', fontSize: 13, userSelect: 'none',
+    cursor: 'pointer', fontSize: 11.5, userSelect: 'none',
     padding: '4px 0',
   },
   subTitle: {
     display: 'flex', alignItems: 'center', gap: 6,
-    fontSize: 10, fontWeight: 700, letterSpacing: 1,
+    fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 1,
     color: COLOR.textDim, marginTop: 12, marginBottom: 6,
   },
   colorDot: { width: 8, height: 8, borderRadius: '50%' },
@@ -5643,13 +5622,13 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: tokens.radius.md,
     boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
   },
-  fpsBigLabel: { fontSize: 11, color: COLOR.textMute, fontWeight: 600, letterSpacing: 1 },
+  fpsBigLabel: { fontSize: 10.5, color: COLOR.textMute, fontWeight: tokens.font.weight.strong, letterSpacing: 1 },
 
   infoRow: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     gap: 8,
     padding: '6px 0', borderBottom: `1px solid ${COLOR.borderSoft}`,
-    fontSize: 12,
+    fontSize: 11.5,
   },
   infoLabel: { color: COLOR.textMute, flexShrink: 0 },
   infoVal: {
@@ -5732,7 +5711,7 @@ const S: Record<string, React.CSSProperties> = {
     gridTemplateColumns: 'minmax(80px, 1fr) 64px 64px 28px',
     gap: 6,
     alignItems: 'center' as const,
-    fontSize: 9, fontWeight: 700 as const, letterSpacing: 1.0,
+    fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 1.0,
     color: COLOR.textMute,
     padding: '0 4px 2px 4px',
     borderBottom: `1px solid ${COLOR.borderSoft}`,
@@ -5753,7 +5732,7 @@ const S: Record<string, React.CSSProperties> = {
     background: 'rgba(251,191,36,0.08)',
   },
   vpPosName: {
-    fontSize: 12, fontWeight: 500 as const,
+    fontSize: 11.5, fontWeight: tokens.font.weight.medium,
     cursor: 'pointer',
     overflow: 'hidden' as const,
     textOverflow: 'ellipsis' as const,
@@ -5766,7 +5745,7 @@ const S: Record<string, React.CSSProperties> = {
     border: `1px solid ${COLOR.border}`,
     borderRadius: 4,
     color: COLOR.text,
-    fontSize: 11,
+    fontSize: 10.5,
     fontFamily: tokens.font.mono,
     outline: 'none',
     boxSizing: 'border-box' as const,
@@ -5781,7 +5760,7 @@ const S: Record<string, React.CSSProperties> = {
     border: `1px solid ${COLOR.border}`,
     borderRadius: 4,
     color: COLOR.textDim,
-    fontSize: 12,
+    fontSize: 11.5,
     cursor: 'pointer',
     fontFamily: 'inherit',
     padding: 0,
@@ -5803,7 +5782,7 @@ const S: Record<string, React.CSSProperties> = {
     border: `1px solid ${COLOR.borderSoft}`,
     borderRadius: 4,
     color: COLOR.textDim,
-    fontSize: 12, fontWeight: 500 as const,
+    fontSize: 11.5, fontWeight: tokens.font.weight.medium,
     cursor: 'pointer',
     fontFamily: 'inherit',
     transition: 'background 0.15s, color 0.15s, border-color 0.15s',
@@ -5812,7 +5791,7 @@ const S: Record<string, React.CSSProperties> = {
     background: 'rgba(251,191,36,0.12)',
     border: '1px solid rgba(251,191,36,0.45)',
     color: '#92400e',
-    fontWeight: 700 as const,
+    fontWeight: tokens.font.weight.strong,
   },
   vpYawControls: {
     display: 'flex' as const,
@@ -5827,7 +5806,7 @@ const S: Record<string, React.CSSProperties> = {
     border: `1px solid ${COLOR.border}`,
     borderRadius: 4,
     color: COLOR.text,
-    fontSize: 11,
+    fontSize: 10.5,
     fontFamily: tokens.font.mono,
     outline: 'none',
     boxSizing: 'border-box' as const,
@@ -5835,7 +5814,7 @@ const S: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   vpYawUnit: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: COLOR.textMute,
     fontFamily: tokens.font.mono,
     flexShrink: 0,
@@ -5852,7 +5831,7 @@ const S: Record<string, React.CSSProperties> = {
     border: `1px solid ${COLOR.borderSoft}`,
     borderRadius: 3,
     fontFamily: tokens.font.mono,
-    fontSize: 11,
+    fontSize: 10.5,
     color: COLOR.text,
   },
   zoomRangeBox: {
@@ -5873,7 +5852,7 @@ const S: Record<string, React.CSSProperties> = {
     background: 'transparent',
     border: 'none',
     color: COLOR.textMute,
-    fontSize: 16,
+    fontSize: 14,
     cursor: 'pointer',
     fontFamily: 'inherit',
     padding: 0,
@@ -5903,14 +5882,14 @@ const S: Record<string, React.CSSProperties> = {
     width: '100%', height: '100%', objectFit: 'cover' as const, display: 'block' as const,
   },
   projThumbEmpty: {
-    fontSize: 10, color: COLOR.textMute, letterSpacing: 0.5,
+    fontSize: 9.5, color: COLOR.textMute, letterSpacing: 0.5,
   },
   projThumbReset: {
     padding: '4px 10px',
     background: 'rgba(248,113,113,0.1)',
     border: '1px solid rgba(248,113,113,0.35)',
     color: COLOR.danger,
-    fontSize: 11, fontWeight: 600,
+    fontSize: 10.5, fontWeight: tokens.font.weight.strong,
     borderRadius: 4,
     cursor: 'pointer',
     fontFamily: 'inherit',
@@ -5965,10 +5944,10 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     color: COLOR.textMute,
-    fontSize: 14,
+    fontSize: 12.5,
   },
   projThumbCellLabel: {
-    fontSize: 10,
+    fontSize: 9.5,
     letterSpacing: 0.2,
     overflow: 'hidden' as const,
     textOverflow: 'ellipsis' as const,
@@ -5978,7 +5957,7 @@ const S: Record<string, React.CSSProperties> = {
   projThumbCheck: {
     position: 'absolute' as const,
     top: 4, right: 6,
-    fontSize: 14, fontWeight: 700 as const,
+    fontSize: 12.5, fontWeight: tokens.font.weight.strong,
     color: '#bfdbfe',
     textShadow: '0 1px 2px rgba(0,0,0,0.6)',
   },
@@ -5989,7 +5968,7 @@ const S: Record<string, React.CSSProperties> = {
     background: 'rgba(248,113,113,0.1)',
     border: '1px solid rgba(248,113,113,0.35)',
     color: COLOR.danger,
-    fontSize: 11, fontWeight: 600,
+    fontSize: 10.5, fontWeight: tokens.font.weight.strong,
     borderRadius: 6,
     cursor: 'pointer',
     fontFamily: 'inherit',
@@ -6036,8 +6015,8 @@ const S: Record<string, React.CSSProperties> = {
     color: COLOR.text,
     boxShadow: tokens.shadow.glassAccent,
   },
-  tabBtnTitle: { fontSize: 14, fontWeight: 700, letterSpacing: 0.4 },
-  tabBtnSub: { fontSize: 10, fontWeight: 700, letterSpacing: 1.2, opacity: 1, fontFamily: tokens.font.mono },
+  tabBtnTitle: { fontSize: 12.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.4 },
+  tabBtnSub: { fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 1.2, opacity: 1, fontFamily: tokens.font.mono },
   planPills: {
     display: 'flex' as const,
     flexWrap: 'wrap' as const,
@@ -6051,8 +6030,8 @@ const S: Record<string, React.CSSProperties> = {
     marginBottom: 6,
   },
   planPillsLabel: {
-    fontSize: 9,
-    fontWeight: 700 as const,
+    fontSize: 9.5,
+    fontWeight: tokens.font.weight.strong,
     letterSpacing: 1.4,
     color: COLOR.textMute,
     fontFamily: tokens.font.mono,
@@ -6069,8 +6048,8 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: tokens.radius.pill,
     cursor: 'pointer',
     color: COLOR.textMute,
-    fontSize: 12,
-    fontWeight: 600 as const,
+    fontSize: 11.5,
+    fontWeight: tokens.font.weight.strong,
     fontFamily: tokens.font.family,
     letterSpacing: 0.3,
     transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
@@ -6081,7 +6060,7 @@ const S: Record<string, React.CSSProperties> = {
     background: tokens.gradient.accent,
     borderColor: tokens.color.accentBorder,
     color: COLOR.text,
-    fontWeight: 700 as const,
+    fontWeight: tokens.font.weight.strong,
     boxShadow: tokens.shadow.glassAccent,
   },
   modeRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
@@ -6104,29 +6083,29 @@ const S: Record<string, React.CSSProperties> = {
     color: COLOR.text,
     boxShadow: tokens.shadow.glassAccent,
   },
-  modeBtnTitle: { fontSize: 13, fontWeight: 700, letterSpacing: 0.4 },
-  modeBtnSub: { fontSize: 10, color: COLOR.textMute, letterSpacing: 0.3 },
+  modeBtnTitle: { fontSize: 11.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.4 },
+  modeBtnSub: { fontSize: 9.5, color: COLOR.textMute, letterSpacing: 0.3 },
   modeHint: {
     marginTop: 8, padding: '10px 14px',
     background: tokens.gradient.accent,
     border: `1px solid ${tokens.color.accentBorder}`,
     borderRadius: tokens.radius.md,
     boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
-    fontSize: 11, color: COLOR.text, lineHeight: 1.55,
+    fontSize: 10.5, color: COLOR.text, lineHeight: 1.55,
   },
   toolbarGroupHead: {
-    fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5,
+    fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.5,
     color: tokens.color.textMute, textTransform: 'uppercase',
     marginTop: 12,
   },
-  toolbarHint: { color: tokens.color.textFaint, marginLeft: 6, fontSize: 10.5 },
+  toolbarHint: { color: tokens.color.textFaint, marginLeft: 6, fontSize: 9.5 },
   sliderHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 },
-  sliderLabel: { fontSize: 11, color: COLOR.textDim },
-  sliderVal: { fontSize: 11, color: COLOR.textDim, fontFamily: tokens.font.mono },
+  sliderLabel: { fontSize: 10.5, color: COLOR.textDim },
+  sliderVal: { fontSize: 10.5, color: COLOR.textDim, fontFamily: tokens.font.mono },
   sliderValInput: {
     width: 64,
     padding: '2px 6px',
-    fontSize: 11,
+    fontSize: 10.5,
     fontFamily: tokens.font.mono,
     color: COLOR.textDim,
     background: COLOR.panel,
@@ -6159,7 +6138,7 @@ const S: Record<string, React.CSSProperties> = {
     position: 'absolute', inset: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     background: 'rgba(96,165,250,0.18)', color: COLOR.accentText,
-    fontWeight: 600, zIndex: 20, pointerEvents: 'none',
+    fontWeight: tokens.font.weight.strong, zIndex: 20, pointerEvents: 'none',
     backdropFilter: 'blur(2px)',
   },
 };

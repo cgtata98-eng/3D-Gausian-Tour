@@ -2,7 +2,7 @@ import { useUIStore } from '../store/ui-store';
 import { useSceneStore } from '../store/scene-store';
 import { RENDER_PRESETS } from '../engine/render-presets';
 import type { RenderMode } from '../engine/gsplat-loader';
-import { tokens } from './design-tokens';
+import { tokens, shellSurface } from './design-tokens';
 
 const MODES: { id: RenderMode; label: string }[] = [
   { id: 'default', label: 'Default' },
@@ -26,13 +26,14 @@ export function RenderModePanel() {
   };
 
   return (
-    <div style={panel}>
+    <div className="glass-edge" style={panel}>
       {MODES.map((m) => {
         const active = renderMode === m.id;
         return (
           <button
             key={m.id}
             onClick={() => apply(m.id)}
+            className={active ? 'glass-edge' : undefined}
             style={{ ...seg, ...(active ? segActive : null) }}
           >
             {m.label}
@@ -53,31 +54,25 @@ const panel: React.CSSProperties = {
   background: tokens.glass.surfaceStrong,
   backdropFilter: tokens.backdrop,
   WebkitBackdropFilter: tokens.backdrop,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.pill,
-  boxShadow: tokens.shadow.glass,
-  fontFamily: tokens.font.family,
+  ...shellSurface('plain'),
   zIndex: 5,
 };
 
 const seg: React.CSSProperties = {
-  padding: '7px 14px',
-  border: '1px solid transparent',
+  padding: '7px 15px',
+  borderWidth: 0,
+  borderStyle: 'solid',
+  borderColor: 'transparent',
   borderRadius: tokens.radius.pill,
-  background: 'transparent',
+  backgroundColor: 'transparent',
+  backgroundImage: 'none',
   color: tokens.color.textMute,
   cursor: 'pointer',
-  fontSize: 11.5,
-  fontWeight: 600,
+  fontSize: tokens.font.size.sm,
+  fontWeight: tokens.font.weight.strong,
   fontFamily: tokens.font.family,
   outline: 'none',
-  transition: `background ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
+  transition: `background ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}`,
 };
 
-const segActive: React.CSSProperties = {
-  background: tokens.gradient.accent,
-  borderColor: tokens.color.accentBorder,
-  color: tokens.color.text,
-  boxShadow: tokens.shadow.glassAccent,
-  fontWeight: 700,
-};
+const segActive: React.CSSProperties = shellSurface('accent');

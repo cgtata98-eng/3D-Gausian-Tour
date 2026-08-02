@@ -4,7 +4,7 @@ import { useUIStore } from '../store/ui-store';
 import { useCameraStore } from '../store/camera-store';
 import type { ScenePin } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
-import { tokens } from './design-tokens';
+import { tokens , shellSurface } from './design-tokens';
 
 /**
  * HTML overlay that renders annotation pins anchored to 3D positions in the
@@ -192,6 +192,7 @@ export function ScenePinsOverlay({
                 if (dragRef.current && !dragRef.current.moved) dragRef.current = null;
               }}
               title={editable ? `${entry.pin.title || 'タグ'} — ドラッグで移動（メッシュ表面に吸着）` : entry.pin.title}
+              className="glass-edge"
               style={{ ...chipStyle, ...(isOpen ? chipStyleActive : null), ...(editable ? { cursor: 'grab', touchAction: 'none' as const } : null) }}
             >
               <span style={chipDot} />
@@ -256,26 +257,16 @@ const chipStyle: React.CSSProperties = {
   background: tokens.glass.surface,
   backdropFilter: tokens.backdrop,
   WebkitBackdropFilter: tokens.backdrop,
-  borderWidth: 1,
-  borderStyle: 'solid' as const,
-  borderColor: tokens.color.border,
-  borderRadius: tokens.radius.pill,
-  boxShadow: tokens.shadow.glass,
-  color: tokens.color.text,
-  fontSize: 12,
-  fontWeight: 600,
-  fontFamily: tokens.font.family,
+  ...shellSurface('plain'),
+  fontSize: tokens.font.size.md,
+  fontWeight: tokens.font.weight.strong,
   cursor: 'pointer',
   outline: 'none',
   whiteSpace: 'nowrap' as const,
   maxWidth: 220,
 };
 
-const chipStyleActive: React.CSSProperties = {
-  background: tokens.gradient.accent,
-  borderColor: tokens.color.accentBorder,
-  boxShadow: tokens.shadow.glassAccent,
-};
+const chipStyleActive: React.CSSProperties = shellSurface('accent');
 
 const chipDot: React.CSSProperties = {
   width: 10,
@@ -314,8 +305,8 @@ const popupStyle: React.CSSProperties = {
 };
 
 const popupTitle: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 700,
+  fontSize: 11.5,
+  fontWeight: tokens.font.weight.strong,
   marginBottom: 8,
   lineHeight: 1.4,
 };
@@ -330,7 +321,7 @@ const popupImage: React.CSSProperties = {
 };
 
 const popupComment: React.CSSProperties = {
-  fontSize: 12,
+  fontSize: 11.5,
   lineHeight: 1.55,
   color: tokens.color.textMute,
   marginBottom: 10,
@@ -348,8 +339,8 @@ const popupLink: React.CSSProperties = {
   borderStyle: 'solid' as const,
   borderColor: tokens.color.accentBorder,
   borderRadius: tokens.radius.pill,
-  fontSize: 12,
-  fontWeight: 700,
+  fontSize: 11.5,
+  fontWeight: tokens.font.weight.strong,
   textDecoration: 'none',
   boxShadow: tokens.shadow.glassAccent,
 };
