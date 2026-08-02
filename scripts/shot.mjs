@@ -74,11 +74,32 @@ async function shot(name, url, waitMs = 2500) {
         }
       }
     }
-    return { rings, stale, samples, title: document.title };
+    // A component that owns its padding, rendered with none, is almost always
+    // an inline `padding` at the call site winning over the class. It is not a
+    // "wrong colour" bug so nothing else here catches it, and it does not look
+    // broken in code — padding reads as layout, which style objects are still
+    // allowed to carry. It looks broken only on screen: the label and the
+    // close button end up sitting on the corner radius with the ring through
+    // them. That is what happened to every block in the viewer sidebar.
+    const crushed = [];
+    for (const sel of ['.ds-block', '.ds-panel', '.ds-section__body', '.ds-well', '.ds-dialog']) {
+      for (const el of document.querySelectorAll(sel)) {
+        const cs = getComputedStyle(el);
+        const pad = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'].map((p) => parseFloat(cs[p]) || 0);
+        if (pad.every((v) => v === 0)) {
+          crushed.push(`${sel} "${(el.textContent || '').trim().slice(0, 14)}"`);
+        }
+      }
+    }
+    return { rings, stale, samples, crushed, title: document.title };
   });
   console.log(`\n== ${name} (${url})`);
   console.log(`   .glass-edge: ${info.rings}   solid-border surfaces left: ${info.stale}`);
   info.samples.forEach((s) => console.log('    -', s));
+  if (info.crushed.length) {
+    console.log(`   !! padding crushed to 0 on ${info.crushed.length} design-system surface(s):`);
+    info.crushed.slice(0, 6).forEach((s) => console.log('    -', s));
+  }
 }
 
 await shot('01-projects-empty', '/');

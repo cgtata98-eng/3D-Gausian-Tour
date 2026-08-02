@@ -1665,8 +1665,13 @@ function collapsedHandleStyle(placement: SidebarPlacement): React.CSSProperties 
   return collapsedHandle;
 }
 
+/* NO `padding` here. These blocks carry `.ds-block`, which owns their padding;
+   an inline `padding: 0` beat the class and every block in the viewer sidebar
+   rendered flush to its own edge — the label and the close button sat on the
+   16px corner radius with the shell ring cutting through them. Padding is
+   layout, so it looks like it belongs in a style object; when the element is a
+   design-system component, its own spacing is part of what the component IS. */
 const sidebarBlock: React.CSSProperties = {
-  padding: 0,
   marginBottom: 10,
   display: 'flex',
   flexDirection: 'column',
@@ -1675,8 +1680,6 @@ const sidebarBlock: React.CSSProperties = {
 };
 
 const sidebarMapBlock: React.CSSProperties = {
-  padding: '10px 16px',
-  borderBottom: `1px solid ${tokens.color.hairline}`,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,

@@ -2665,25 +2665,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 function PlanCameraLinkToggle() {
   const linkPlanCamera = useUIStore((s) => s.linkPlanCamera);
   const setLinkPlanCamera = useUIStore((s) => s.setLinkPlanCamera);
-  const styles: React.CSSProperties = {
-    marginLeft: 'auto',
-    width: 28,
-    height: 24,
-    fontSize: 11.5,
-    lineHeight: 1,
-    background: linkPlanCamera ? 'rgba(59,130,246,0.18)' : '#ffffff',
-    border: `1px solid ${linkPlanCamera ? 'rgba(59,130,246,0.55)' : 'rgba(0,0,0,0.18)'}`,
-    color: linkPlanCamera ? '#1d4ed8' : '#1f2937',
-    borderRadius: 5,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    padding: 0,
-  };
   return (
     <button
       type="button"
       onClick={() => setLinkPlanCamera(!linkPlanCamera)}
-      style={styles}
+      className={`${surfaceClass(linkPlanCamera ? 'accent' : 'plain')} ds-pill ds-pill--icon ds-pill--xs${linkPlanCamera ? '' : ' ds-fill-surface'}`}
+      style={{ marginLeft: 'auto' }}
       title={linkPlanCamera
         ? 'カメラ位置を保持してプラン切替中 (クリックで OFF)'
         : 'プラン切替時にカメラ位置を保持しない (クリックで ON: 同じ場所で昼夜比較に便利)'}
@@ -3027,7 +3014,7 @@ function PinsPlanSection({
               <button
                 type="button"
                 onClick={() => togglePin(pin.id)}
-                className="ds-rowbtn"
+                className="ds-section__toggle"
                 style={pinHeaderRow}
                 title={isExpanded ? '折りたたむ' : '展開して編集'}
               >
@@ -3302,14 +3289,17 @@ const pinThumbStyle: React.CSSProperties = {
 };
 
 /* Layout only from here — appearance comes from the `.ds-*` classes applied at
- * the call sites (`.ds-rowbtn` header, `.ds-well` placement row, `.ds-title` /
- * `.ds-hint` for the type). */
+ * the call sites (`.ds-section__toggle` header, `.ds-well` placement row,
+ * `.ds-title` / `.ds-hint` for the type).
+ *
+ * `.ds-section__toggle` rather than `.ds-rowbtn`: the latter carries a bottom
+ * divider and its own padding, which inside a pin card would draw a line that
+ * belongs to a different component. */
 const pinHeaderRow: React.CSSProperties = {
   width: '100%',
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  padding: 0,
   textAlign: 'left' as const,
 };
 
