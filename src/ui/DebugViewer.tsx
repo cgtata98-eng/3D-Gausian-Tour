@@ -1076,7 +1076,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
       <div style={S.body}>
         {/* LEFT: scrollable settings */}
         <div style={S.left}>
-            {/* ===== Tabs: 全体 / プラン / 動画 ===== */}
+            {/* ===== Tabs: プロジェクト / プラン / 動画 ===== */}
             {/* Three two-line buttons plus an "active" recipe — i.e. the shared
                 segmented control, re-implemented. Switching to the real one
                 also brings back the sliding indicator, which a hand-rolled
@@ -1085,7 +1085,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               value={debugTab}
               onChange={setDebugTab}
               options={[
-                { value: 'global', title: '全体', sub: 'GLOBAL' },
+                { value: 'global', title: 'プロジェクト', sub: 'PROJECT' },
                 { value: 'plan', title: 'プラン', sub: 'PLAN' },
                 { value: 'video', title: '動画', sub: 'VIDEO' },
               ]}
@@ -1275,7 +1275,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 
             {/* (表示モードは Project 画面で選択するためここからは削除) */}
 
-            {/* ===== プロジェクト (全体) ===== */}
+            {/* ===== プロジェクト名・サムネ (プロジェクトタブ) ===== */}
             {debugTab === 'global' && (() => {
               // Subscribe so thumb-pick updates re-render this section.
               const project = projectsList.find((p) => p.id === sceneId);
@@ -1289,7 +1289,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               }))) ?? [];
               const isThumbSelected = (t: string | undefined) => !!t && !!currentThumb && t === currentThumb;
               return (
-                <Section title="プロジェクト" subtitle="PROJECT" defaultOpen={false}>
+                <Section title="プロジェクト名・サムネ" subtitle="NAME & THUMBNAIL" defaultOpen={false}>
                   <LabeledInput label="プロジェクト名" value={manifest?.name ?? ''} onChange={setSceneName} placeholder="例: モダンマンション B 棟" />
 
                   <div style={{ height: 12 }} />
