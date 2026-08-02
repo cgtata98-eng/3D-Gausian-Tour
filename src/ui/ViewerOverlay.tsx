@@ -6,6 +6,7 @@ import { LeftPanel } from './LeftPanel';
 import { calibrateHeadTracker } from '../utils/head-tracker';
 import { navigate } from '../utils/url';
 import { surfaceClass } from './components';
+import { WALKTHROUGH_AUTHORING_ONLY } from '../core/walk-graph';
 
 interface ViewerOverlayProps {
   sceneId: string;
@@ -81,9 +82,12 @@ export function ViewerOverlay({ sceneId, onViewpointClick, showDebugLink = true,
       // ウォークスルー (walk graph) 持ちプランでは W/↑ = 前進として
       // WalkthroughControls が消費する — GS へ自動復帰すると splat の無い
       // walk プランは白背景だけになる。移動キーでの 360 離脱は無効。
+      // ただし編集画面でだけ。ビューアではウォークスルーを走らせないので、
+      // キーを取り置く相手がおらず、押しても何も起きない状態になる。
       const st = useSceneStore.getState();
       const activePlan = st.manifest?.plans?.find((p) => p.id === st.activePlanId);
-      if (activePlan?.walk && activePlan.walk.nodes.length > 0) return;
+      const walkLive = !WALKTHROUGH_AUTHORING_ONLY || useUIStore.getState().authoring;
+      if (walkLive && activePlan?.walk && activePlan.walk.nodes.length > 0) return;
       const ui = useUIStore.getState();
       ui.setViewMode('splat');
       const sm = (window as unknown as { __sceneManager?: { setViewMode?: (v: 'splat' | '360') => void } }).__sceneManager;

@@ -55,6 +55,18 @@ function loadInitialQuality(): QualityMode {
 
 interface UIState {
   isDeveloper: boolean;
+  /**
+   * True while the DebugViewer (authoring shell) is mounted, false in the
+   * customer-facing Viewer.
+   *
+   * Exists because "still being built" features have to be invisible on the
+   * viewer side in BOTH senses — no control on screen AND no behaviour behind
+   * it. Gating only the button leaves the keys, the auto-entry and the
+   * fallbacks running, which is how a half-shipped feature reaches a customer.
+   * Currently gates the dense walkthrough; see `WALKTHROUGH_AUTHORING_ONLY`.
+   */
+  authoring: boolean;
+  setAuthoring: (v: boolean) => void;
   /** Active color variant id (`Plan.colorVariants[*].id`). null = use the plan's default panoramas. */
   activeColor: string | null;
   setActiveColor: (id: string | null) => void;
@@ -169,6 +181,8 @@ interface UIState {
 
 export const useUIStore = create<UIState>((set) => ({
   isDeveloper: new URLSearchParams(window.location.search).get('mode') === 'dev',
+  authoring: false,
+  setAuthoring: (v) => set({ authoring: v }),
   activeColor: null,
   setActiveColor: (activeColor) => set({ activeColor }),
   hiddenSections: [],

@@ -10,6 +10,7 @@ import { useProjectStore } from '../store/project-store';
 import { LoadingScreen } from './LoadingScreen';
 import { ViewerOverlay } from './ViewerOverlay';
 import { WalkthroughControls } from './WalkthroughControls';
+import { WALKTHROUGH_AUTHORING_ONLY } from '../core/walk-graph';
 import { AiScreenOverlay, AiGeneratingOverlay } from './LeftPanel';
 import { AmbientAudio } from './AmbientAudio';
 import { FootstepAudio } from './FootstepAudio';
@@ -208,7 +209,10 @@ export function Viewer({ sceneId }: ViewerProps) {
             showDebugLink={false}
             onPlanSwitch={(planId) => { void sceneManagerRef.current?.setActivePlan(planId); }}
           />
-          <WalkthroughControls getManager={() => sceneManagerRef.current} />
+          {/* Walkthrough is authoring-only for now — see WALKTHROUGH_AUTHORING_ONLY. */}
+          {!WALKTHROUGH_AUTHORING_ONLY && (
+            <WalkthroughControls getManager={() => sceneManagerRef.current} />
+          )}
           {/* 移動が無い product (showroom) ではジョイスティックを出さない。OrbitCameraController が
               キャンバスの touch / pointer をそのまま使うので joystick オーバーレイは邪魔。 */}
           {useUIStore.getState().projectType !== 'product' && (

@@ -14,6 +14,17 @@
  */
 import type { Vec3, WalkGraph, WalkNode } from './types';
 
+/**
+ * The dense walkthrough is authoring-only while it is being built out: the
+ * customer-facing Viewer must neither show its controls nor run any of its
+ * navigation (the W / ↑ stepping, and the "open 360 on a walk node" fallback
+ * that a walk-only plan relies on).
+ *
+ * One constant rather than a check per site, so turning it on is one edit and
+ * grep finds every place that has to agree.
+ */
+export const WALKTHROUGH_AUTHORING_ONLY = true;
+
 /** Normalize an angle in degrees to (-180, 180]. */
 export function angleDiffDeg(a: number, b: number): number {
   let d = (a - b) % 360;

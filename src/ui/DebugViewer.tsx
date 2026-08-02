@@ -136,6 +136,13 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     setVideoTrimStart(0);
     setVideoTrimEnd(1);
   }, [videoKeyframes.length]);
+  /* This shell IS the authoring side. Features that are still being built —
+     currently the dense walkthrough — read this to stay out of the viewer
+     entirely, controls and behaviour both. */
+  useEffect(() => {
+    useUIStore.getState().setAuthoring(true);
+    return () => useUIStore.getState().setAuthoring(false);
+  }, []);
   const viewMode = useUIStore(s => s.viewMode);
   const movementMode = useUIStore(s => s.movementMode);
   // 「その他」(展示 / 屋外 / 任意の空間) では住居系 (基本情報 = 間取り / 専有面積 / 階数 / 所在地) は出さない
@@ -922,11 +929,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     reader.readAsDataURL(file);
   };
 
-  const handlePanoRemove = (viewpointId: string) => {
-    if (!activePlanId) return;
-    setPlanPanoramaStore(activePlanId, viewpointId, undefined);
-    if (viewMode === '360' && activeVp === viewpointId) smRef.current?.setViewMode('splat');
-  };
+  /* `handlePanoRemove` lived here for the 「削除」pill on a viewpoint row. The
+     pill is gone (a 360 image is replaced, not cleared), and the store action
+     `setPlanPanorama(planId, vpId, undefined)` is untouched if it needs to
+     come back. */
 
   // ── Drag-and-drop file upload (plan rows / viewpoint rows) ─────────────
   // Row-level handlers so the user can drop a PLY/SOG onto a plan (3DGS) or
@@ -1973,7 +1979,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             <button
                               title={isStart ? '初期位置に設定済み（シーンを開くとここから開始）' : 'この視点を初期位置にする（開いたらここから開始）'}
                               onClick={() => setStartViewpoint(vp.id)}
-                              className={isStart ? `${surfaceClass('accent')} ds-pill ds-pill--icon ds-pill--xs` : 'ds-iconbtn'}
+                              className={isStart ? `${surfaceClass('accent')} ds-pill ds-pill--icon ds-pill--xs` : roundIconClass}
                             >
                               <IconPin />
                             </button>
@@ -1981,7 +1987,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               <button
                                 title="ドット位置をカメラに反映（カメラ・初期位置・サムネ撮影点をドットの場所へ移動）"
                                 onClick={() => bakeViewpointToCamera(vp.id)}
-                                className="ds-iconbtn ds-warn"
+                                className={`${surfaceClass('warn')} ds-pill ds-pill--icon ds-pill--xs`}
                               >
                                 <IconTarget />
                               </button>
@@ -1989,22 +1995,22 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             <button
                               title={isVRMode ? 'パノラマからサムネを再生成' : '今いる位置・向き・画をこの視点に保存（位置＋サムネを更新／ジャンプ先＝この画になる）'}
                               onClick={() => captureCurrentAsThumb(vp.id)}
-                              className="ds-iconbtn"
+                              className={roundIconClass}
                             >
                               <IconCamera />
                             </button>
+                            {/* Set / replace the 360 image. Removing one is done by
+                                replacing it, so the separate 「削除」pill is gone —
+                                it was the one square label in a row of round icons. */}
                             <button
                               title={activePlan?.panoramas?.[vp.id] ? '360パノラマ: 設定済み（クリックで差し替え）' : '360パノラマを追加'}
                               onClick={() => { setPanoTargetVp(vp.id); panoInputRef.current?.click(); }}
-                              className={`ds-iconbtn${activePlan?.panoramas?.[vp.id] ? ' ds-ok' : ''}`}
+                              className={activePlan?.panoramas?.[vp.id] ? `${surfaceClass('success')} ds-pill ds-pill--icon ds-pill--xs` : roundIconClass}
                               disabled={panoLoading === vp.id}
                             >
                               <IconPhoto />
                             </button>
-                            {activePlan?.panoramas?.[vp.id] && (
-                              <button title="360パノラマを削除" onClick={() => handlePanoRemove(vp.id)} className={dangerXsClass}>削除</button>
-                            )}
-                            <button title="名前を変更" onClick={() => { setEditId(vp.id); setEditLabel(vp.label); }} className="ds-iconbtn"><IconEdit /></button>
+                            <button title="名前を変更" onClick={() => { setEditId(vp.id); setEditLabel(vp.label); }} className={roundIconClass}><IconEdit /></button>
                             <button title="削除" onClick={() => removeViewpoint(vp.id)} className={dangerIconClass}><IconTrash /></button>
                           </div>
                         </div>
@@ -5114,6 +5120,8 @@ const dangerIconClass = `${surfaceClass('danger')} ds-pill ds-pill--icon ds-pill
 const dangerPillClass = `${surfaceClass('danger')} ds-pill ds-pill--sm`;
 /** Labelled but sitting in a dense row, beside 24px icon buttons. */
 const dangerXsClass = `${surfaceClass('danger')} ds-pill ds-pill--xs`;
+/** Round liquid icon button — the action row on a viewpoint / plan entry. */
+const roundIconClass = `${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`;
 
 /** A list row: accent while selected, plain otherwise. Drop / reorder states
  *  ride on `data-drop` / `data-reorder`, not on merged style objects. */

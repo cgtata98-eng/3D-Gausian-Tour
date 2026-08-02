@@ -41,7 +41,7 @@ import { useUIStore } from '../store/ui-store';
 import type { FurnitureMode, LightingMode, ViewMode } from '../store/ui-store';
 import { isIdbRef, resolveBlobRef } from '../utils/idb';
 import { panoramaToThumbnail } from '../utils/panorama-thumbnail';
-import { resolveStartNode } from '../core/walk-graph';
+import { resolveStartNode, WALKTHROUGH_AUTHORING_ONLY } from '../core/walk-graph';
 import type { WalkNode } from '../core/types';
 import { walkPlaceholderPanorama } from '../utils/walk-placeholder';
 
@@ -1059,6 +1059,10 @@ export class SceneManager {
    * reads as the "真っ白画面" bug).
    */
   private resolveWalkFallbackNode(): WalkNode | null {
+    // Authoring-only for now: in the viewer a walk-only plan must not open
+    // into 360 on a walk node, because nothing there can step forward — the
+    // visitor would be parked in a panorama with no way out.
+    if (WALKTHROUGH_AUTHORING_ONLY && !useUIStore.getState().authoring) return null;
     const planId = useSceneStore.getState().activePlanId;
     const plan = this.manifest?.plans?.find((p) => p.id === planId);
     const walk = plan?.walk;

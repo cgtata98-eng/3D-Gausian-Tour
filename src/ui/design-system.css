@@ -1131,6 +1131,66 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
 .ds-tile[data-active='true'] .ds-tile__label { color: var(--ds-fg); }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Scene strip — the row of destinations across the bottom of the viewer
+   ─────────────────────────────────────────────────────────────────────────
+   A `.ds-tile` puts its label UNDER the thumbnail, which is right in a
+   sidebar column: there is width to spare and the label is a caption. Across
+   the bottom of a picture the vertical budget is what is scarce, and the
+   label belongs to the image it names, so it sits ON it — over a scrim heavy
+   enough to survive a bright thumbnail.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-scene {
+  position: relative;
+  flex: 0 0 auto;
+  width: 96px;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ds-r-sm);
+  overflow: hidden;
+  background: var(--ds-surface-soft);
+  box-shadow: var(--ds-inner-sunken);
+  cursor: pointer;
+  outline: none;
+  transition: box-shadow var(--ds-dur) var(--ds-ease), transform var(--ds-dur) var(--ds-ease);
+}
+.ds-scene img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ds-scene:hover { transform: translateY(-2px); }
+/* Selected: a ring in the accent, drawn inside so the strip's rhythm does not
+   shift by a pixel when the selection moves. */
+.ds-scene[data-active='true'] {
+  box-shadow: inset 0 0 0 2.5px rgba(112, 180, 222, 0.95), var(--ds-lift);
+}
+.ds-scene__label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 4px 6px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.62) 55%);
+  color: #fff;
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-sm);
+  font-weight: var(--ds-fw);
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Empty slot — a scene whose thumbnail has not been captured yet. */
+.ds-scene__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--ds-text-faint);
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-sm);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    Tag / badge
    ══════════════════════════════════════════════════════════════════════════ */
 .ds-tag {

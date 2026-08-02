@@ -59,7 +59,8 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // 切り替えたい操作なので、毎回チェックさせると面倒。
   const showType       = tb.type       === true && !isProduct;
   const showOverview   = tb.overview   === true && !isOther && !isProduct;
-  const showViewpoints = tb.viewpoints === true && !isProduct;
+  // `viewpoints` is gated inside `ViewpointBar` — it renders outside the
+  // sidebar and has to survive the sidebar being folded away.
   const showColor      = tb.color      === true && !isOther;
   const showMap        = tb.map        === true && !isProduct;
   // 拡大 (fullscreen) はデスクトップ専用。スマホ (touch) は OS 側の全画面 UI と
@@ -87,11 +88,16 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
     // 左/右上で「>」、右下では「<」のような感じだと意味が逆になるので、向きも合わせて反転。
     const chevronD = placement === 'left' ? 'M9 18l6-6-6-6' : 'M15 18l-6-6 6-6';
     return (
-      <button onClick={() => setSidebarCollapsed(false)} className={COLLAPSED_HANDLE} style={handleStyle} title={`${sceneName} を表示`}>
-        <svg className="ds-icon" viewBox="0 0 24 24">
-          <path d={chevronD} />
-        </svg>
-      </button>
+      <>
+        <button onClick={() => setSidebarCollapsed(false)} className={COLLAPSED_HANDLE} style={handleStyle} title={`${sceneName} を表示`}>
+          <svg className="ds-icon" viewBox="0 0 24 24">
+            <path d={chevronD} />
+          </svg>
+        </button>
+        {/* The scene bar is not part of the sidebar, so folding the sidebar
+            away must not take it with it. */}
+        <ViewpointBar onViewpointClick={onViewpointClick} />
+      </>
     );
   }
 
@@ -144,18 +150,10 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
               <QualityBlock />
             )) : null,
             overview: showOverview ? <OverviewBlock /> : null,
-            viewpoints: showViewpoints ? (hiddenSections.includes('viewpoints') ? (
-              <ClosedSectionHandle label="シーン" onOpen={() => setSectionHidden('viewpoints', false)} />
-            ) : (
-              <div className="ds-sidebar__group" style={sidebarBlock}>
-                <div style={overviewHeaderRow}>
-                  <span className="ds-label">シーン</span>
-                  <div style={{ flex: 1 }} />
-                  <button onClick={() => setSectionHidden('viewpoints', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="シーンを閉じる"><IconClose /></button>
-                </div>
-                <ViewpointsContent onViewpointClick={onViewpointClick} />
-              </div>
-            )) : null,
+            /* シーンはサイドバーではなくビューア中央下のバー (`ViewpointBar`)。
+               行き先を選ぶ操作なので、画の上に横一列で並べたほうが「どこへ行くか」
+               が picture そのものと並んで見える。 */
+            viewpoints: null,
             color: showColor ? <ColorSelectBlock /> : null,
             aiGenerate: showAiGenerate ? (hiddenSections.includes('aiGenerate') ? (
               <ClosedSectionHandle label="AI 画像生成" onOpen={() => setSectionHidden('aiGenerate', false)} />
@@ -196,9 +194,165 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
 
       </div>
 
+      <ViewpointBar onViewpointClick={onViewpointClick} />
     </>
   );
 }
+
+/**
+ * Scene picker — a strip across the bottom-centre of the viewer.
+ *
+ * It used to be a block in the sidebar. Choosing where to go next is a
+ * decision about the picture, so the thumbnails belong beside the picture, in
+ * one row, rather than stacked three-to-a-line in a column of settings.
+ *
+ * It reads its own visibility from the stores rather than taking props: it is
+ * rendered from two places (with the sidebar open and with it folded away),
+ * and folding the sidebar must not take the scene picker with it.
+ */
+function ViewpointBar({ onViewpointClick }: { onViewpointClick: (id: string) => void }) {
+  const tb = useSceneStore((s) => s.manifest?.viewerToolbar);
+  const projectType = useUIStore((s) => s.projectType);
+  const hiddenSections = useUIStore((s) => s.hiddenSections);
+  const setSectionHidden = useUIStore((s) => s.setSectionHidden);
+  const isPortrait = usePortraitOrientation();
+
+  if (tb?.viewpoints !== true || projectType === 'product') return null;
+
+  // Hidden: leave a way back IN PLACE. The old reopen handle lived in the
+  // sidebar, which would now mean hiding from one side of the screen and
+  // restoring from the other.
+  if (hiddenSections.includes('viewpoints')) {
+    return (
+      <button
+        type="button"
+        onClick={() => setSectionHidden('viewpoints', false)}
+        className={`${surfaceClass('plain')} ds-overlay ds-overlay--pill ds-pill ds-pill--sm`}
+        style={{ ...viewpointBarAnchor, bottom: isPortrait ? 12 : 24 }}
+        title="シーンを表示"
+      >
+        シーン
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className={`${surfaceClass('plain')} ds-overlay ds-overlay--lg`}
+      style={{ ...viewpointBarAnchor, ...viewpointBar, bottom: isPortrait ? 12 : 24 }}
+    >
+      <SceneStrip onViewpointClick={onViewpointClick} onHide={() => setSectionHidden('viewpoints', true)} />
+    </div>
+  );
+}
+
+/**
+ * The scenes themselves, plus the two arrows that page through them.
+ *
+ * Arrows rather than a scrollbar: the strip sits over the picture, where a
+ * scrollbar is both ugly and, on a trackpad-less machine, the only way to
+ * discover there is more to the right.
+ */
+function SceneStrip({ onViewpointClick, onHide }: {
+  onViewpointClick: (id: string) => void;
+  onHide: () => void;
+}) {
+  const manifest = useSceneStore((s) => s.manifest);
+  const activePlanId = useSceneStore((s) => s.activePlanId);
+  const thumbs = useSceneStore((s) => s.viewpointThumbnails);
+  const activeVp = useCameraStore((s) => s.activeViewpoint);
+  const railRef = useRef<HTMLDivElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+
+  const activePlan = manifest?.plans?.find((p) => p.id === activePlanId);
+  const viewpoints = activePlan?.viewpoints ?? [];
+  const planThumbs = activePlan?.thumbnails ?? {};
+  const autoThumbs = (activePlanId && thumbs[activePlanId]) || {};
+
+  // Arrows only appear when they would do something. Measured rather than
+  // guessed from the count: how many fit depends on the window.
+  useEffect(() => {
+    const el = railRef.current;
+    if (!el) return;
+    const check = () => setOverflowing(el.scrollWidth > el.clientWidth + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [viewpoints.length]);
+
+  if (viewpoints.length === 0) return null;
+  const page = (dir: 1 | -1) => railRef.current?.scrollBy({ left: dir * 220, behavior: 'smooth' });
+
+  return (
+    <>
+      {overflowing && (
+        <button type="button" className={SCENE_ARROW} onClick={() => page(-1)} title="前へ" aria-label="前へ">
+          <svg className="ds-icon" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg>
+        </button>
+      )}
+      <div ref={railRef} style={sceneRail}>
+        {viewpoints.map((vp) => {
+          const thumb = planThumbs[vp.id] ?? autoThumbs[vp.id];
+          return (
+            <button
+              key={vp.id}
+              type="button"
+              className="ds-scene"
+              data-active={activeVp === vp.id}
+              onClick={() => onViewpointClick(vp.id)}
+              title={vp.label}
+            >
+              {thumb ? <img src={thumb} alt="" /> : <span className="ds-scene__empty">…</span>}
+              <span className="ds-scene__label">{vp.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      {overflowing && (
+        <button type="button" className={SCENE_ARROW} onClick={() => page(1)} title="次へ" aria-label="次へ">
+          <svg className="ds-icon" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onHide}
+        className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`}
+        style={{ alignSelf: 'center', flexShrink: 0 }}
+        title="シーンを閉じる"
+      >
+        <IconClose />
+      </button>
+    </>
+  );
+}
+
+const SCENE_ARROW = `${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--sm ds-fill-surface`;
+/** Layout only — the scrolling rail the scenes sit on. */
+const sceneRail: React.CSSProperties = {
+  display: 'flex',
+  gap: 6,
+  overflowX: 'auto',
+  scrollbarWidth: 'none',
+  minWidth: 0,
+  alignItems: 'center',
+};
+
+/** Layout only. */
+const viewpointBarAnchor: React.CSSProperties = {
+  position: 'absolute',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  zIndex: 5,
+};
+const viewpointBar: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: 8,
+  // Never wider than the viewport, and never over the sidebar on a phone.
+  maxWidth: 'min(860px, calc(100vw - 48px))',
+};
 
 
 // ── Map ───────────────────────────────────────────────────────────
@@ -602,44 +756,10 @@ function formatTsubo(area: string | undefined): string | null {
   return `（約${tsubo}坪）`;
 }
 
-// ── Viewpoints ────────────────────────────────────────────────────
-
-function ViewpointsContent({ onViewpointClick }: { onViewpointClick: (id: string) => void }) {
-  const manifest = useSceneStore((s) => s.manifest);
-  const activePlanId = useSceneStore((s) => s.activePlanId);
-  const thumbs = useSceneStore((s) => s.viewpointThumbnails);
-  const activeVp = useCameraStore((s) => s.activeViewpoint);
-  if (!manifest) return null;
-  const activePlan = manifest.plans?.find((p) => p.id === activePlanId);
-  const planThumbs = activePlan?.thumbnails ?? {};
-  const autoThumbs = (activePlanId && thumbs[activePlanId]) || {};
-  const viewpoints = activePlan?.viewpoints ?? [];
-  if (viewpoints.length === 0) {
-    return (
-      <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 11.5, textAlign: 'center' }}>
-        このプランのシーンはまだ追加されていません
-      </div>
-    );
-  }
-  return (
-    <div style={vpGrid}>
-      {viewpoints.map((vp) => {
-        const isA = activeVp === vp.id;
-        const thumb = planThumbs[vp.id] ?? autoThumbs[vp.id];
-        return (
-          <Tile
-            key={vp.id}
-            active={isA}
-            onClick={() => onViewpointClick(vp.id)}
-            thumb={thumb}
-            placeholder={<span className="ds-sub">…</span>}
-            label={vp.label}
-          />
-        );
-      })}
-    </div>
-  );
-}
+/* `ViewpointsContent` (the three-column sidebar grid of `Tile`s) lived here.
+   Scenes are the bottom strip now — `SceneStrip` above — and keeping a second
+   renderer for the same list around "just in case" is how this file ended up
+   with three copies of the map marker. */
 
 // ── Movement mode (walk / fly) ───────────────────────────────────
 
@@ -1709,6 +1829,7 @@ const vpGrid: React.CSSProperties = {
   gridTemplateColumns: 'repeat(3, 1fr)',
   gap: 6,
 };
+
 
 /* Eight constants for one selectable thumbnail — card, thumb, label, image,
  * placeholder and three "active" overlays — replaced by `<Tile>`. The active
