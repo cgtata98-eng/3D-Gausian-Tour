@@ -182,6 +182,31 @@ export async function applyEquirectSkybox(app: AppBase, url: string): Promise<vo
   installEquirectSky(app, loaded);
 }
 
+/** A decoded, GPU-uploaded panorama that is not on screen yet. */
+export type PreparedEquirect = LoadedTexture;
+
+/**
+ * Decode + upload a panorama WITHOUT touching the visible sky, so the caller can
+ * install it in the same tick as some other change (360 mode installs it
+ * together with the camera pose — see `SceneManager.enterViewpoint360`).
+ * Discard an unused result with {@link discardPreparedEquirect} or the texture
+ * leaks on the GPU.
+ */
+export function prepareEquirectSkybox(app: AppBase, url: string): Promise<PreparedEquirect> {
+  return loadEquirectTextureFromUrl(app, url);
+}
+
+/** Put a {@link prepareEquirectSkybox} result on screen. Synchronous — nothing
+ *  visible changes until this call returns. */
+export function installPreparedEquirect(app: AppBase, prepared: PreparedEquirect): void {
+  installEquirectSky(app, prepared);
+}
+
+/** Free a prepared panorama that will never be installed (superseded request). */
+export function discardPreparedEquirect(prepared: PreparedEquirect): void {
+  prepared.texture.destroy();
+}
+
 /**
  * Skybox variant that takes a raw `Blob` / `File` instead of a URL so the HDR
  * (.hdr Radiance RGBE) decoder can read the original bytes directly. PNG/JPG

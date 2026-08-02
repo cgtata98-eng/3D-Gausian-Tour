@@ -23,7 +23,7 @@ import type { SplatTransform, RenderQualityConfig } from '../core/types';
 import { applyRenderConfig, getRenderPreset } from './render-presets';
 import { extractTrianglesFromEntity, raycastTriangles, type Triangle } from './mesh-raycaster';
 import { loadCollisionGlb, setCollisionOpacity as setColOp, setCollisionVisible as setColVis } from './collision-loader';
-import { applyHdri, applyHdriFromFile, crossfadeHdri, removeHdri } from './hdri-loader';
+import { applyHdri, applyHdriFromFile, crossfadeHdri, discardHdri, installHdri, prepareHdri, removeHdri } from './hdri-loader';
 import { setStudioColor } from './studio';
 import type { CollisionEntity } from './collision-loader';
 import { CameraController } from './camera-controller';
@@ -382,6 +382,19 @@ export class SceneManager {
 
   jumpToViewpoint(viewpoint: Viewpoint) {
     if (!this.cameraController) return;
+    if (this.viewMode === '360') {
+      // In 360 the panorama IS the scene, so the pose must not land before the
+      // image does — see `enterViewpoint360`.
+      void this.enterViewpoint360(viewpoint);
+      return;
+    }
+    this.applyViewpointPose(viewpoint);
+  }
+
+  /** Move the camera to a viewpoint and mirror the pose into the camera store.
+   *  Pure camera work — no panorama side effects. */
+  private applyViewpointPose(viewpoint: Viewpoint) {
+    if (!this.cameraController) return;
     // Camera always lands at the 📷-captured `position` + `target` so the load-time view matches
     // the saved thumbnail exactly. Floor-plan cones are derived from the same `target - position`
     // (or live yaw when active), never from a separate override.
@@ -394,10 +407,59 @@ export class SceneManager {
     camStore.setYaw(this.cameraController.getYaw());
     camStore.setPitch(this.cameraController.getPitch());
     camStore.setFov(this.cameraController.getFov());
-    if (this.viewMode === '360') {
-      void this.applyActiveViewpointPanorama();
+  }
+
+  /**
+   * 360 scene switch. Decodes the target panorama FIRST, then installs it and
+   * moves the camera in the same tick.
+   *
+   * Doing it the other way round (jump, then load) leaves the previous
+   * panorama on screen at the new viewpoint's angle for as long as the decode
+   * takes — ~80ms for a 4K data URL, well over a second for a real 8K panorama
+   * fetched from R2. That intermediate view belongs to neither scene and reads
+   * as a third scene appearing between the two.
+   *
+   * `panoSeq` makes the newest click win: an older request that finishes late
+   * throws its texture away instead of overwriting the newer one.
+   */
+  private async enterViewpoint360(viewpoint: Viewpoint): Promise<void> {
+    const token = ++this.panoSeq;
+    const path = this.resolvePanoramaPathFor(viewpoint.id);
+    if (!path) {
+      // Nothing to preload (walk fallback / no panorama) — keep the old order.
+      this.applyViewpointPose(viewpoint);
+      await this.applyActiveViewpointPanorama(token);
+      return;
+    }
+    if (path === this.installedPanoPath) {
+      // Same image already on screen (re-click, or a plan switch that already
+      // installed it) — just move the camera.
+      this.applyViewpointPose(viewpoint);
+      return;
+    }
+    try {
+      const url = await resolveAssetUrl(path, this.manifest!.id);
+      const prepared = await prepareHdri(this.app, url);
+      if (token !== this.panoSeq) {
+        discardHdri(prepared); // a newer click already owns the screen
+        return;
+      }
+      this.applyViewpointPose(viewpoint);
+      installHdri(this.app, prepared);
+      this.installedPanoPath = path;
+    } catch (err) {
+      // Honour the click even when the image is unusable, rather than leaving
+      // the visitor parked at the old viewpoint with no feedback.
+      if (token !== this.panoSeq) return;
+      this.applyViewpointPose(viewpoint);
+      console.error('panorama load failed:', err);
     }
   }
+
+  /** Monotonic panorama request id — only the newest request may install. */
+  private panoSeq = 0;
+  /** Manifest path of the panorama currently on screen, for dedup. */
+  private installedPanoPath: string | null = null;
 
   /** Snapshot the current camera (position / target / fov) as a `CameraPose`. Used
    *  by the Debug 動画タブ "現在のカメラを保存" button. Returns null if the
@@ -806,6 +868,7 @@ export class SceneManager {
       // skybox state alone leaves our mesh sitting in the SKYBOX layer and the
       // panorama leaks through behind the splat.
       removeHdri(this.app);
+      this.installedPanoPath = null;
       if (this.savedSkybox) {
         this.app.scene.skybox = this.savedSkybox.skybox;
         this.app.scene.envAtlas = this.savedSkybox.envAtlas;
@@ -956,9 +1019,15 @@ export class SceneManager {
    * so they don't participate in panorama path resolution.
    */
   private resolveActivePanoramaPath(): string | null {
-    if (!this.manifest) return null;
     const activeId = useCameraStore.getState().activeViewpoint;
-    if (!activeId) return null;
+    return activeId ? this.resolvePanoramaPathFor(activeId) : null;
+  }
+
+  /** Same resolution as {@link resolveActivePanoramaPath} for an explicit
+   *  viewpoint — used when switching, where the target is known before the
+   *  camera store has been updated. */
+  private resolvePanoramaPathFor(activeId: string): string | null {
+    if (!this.manifest) return null;
     const planId = useSceneStore.getState().activePlanId;
     const plan = this.manifest.plans?.find((p) => p.id === planId);
     const colorId = useUIStore.getState().activeColor;
@@ -1003,6 +1072,9 @@ export class SceneManager {
       } else {
         await applyHdri(this.app, url);
       }
+      // The walk layer bypasses viewpoint resolution, so the viewpoint dedup key
+      // no longer describes what's on screen.
+      this.installedPanoPath = null;
       return true;
     } catch (err) {
       console.error('panorama preview failed:', err);
@@ -1077,9 +1149,18 @@ export class SceneManager {
       ?? null;
   }
 
-  private async applyActiveViewpointPanorama(): Promise<void> {
+  /**
+   * Re-apply the panorama for whatever viewpoint is currently active.
+   *
+   * `token` lets a caller that already claimed a `panoSeq` slot (the 360 switch
+   * path) reuse it; everyone else claims a fresh one. Either way a request that
+   * has been superseded while awaiting stops before it can install, so the last
+   * click always owns the screen.
+   */
+  private async applyActiveViewpointPanorama(token = ++this.panoSeq): Promise<void> {
     if (!this.manifest) return;
     const vpPath = this.resolveActivePanoramaPath();
+    const superseded = () => token !== this.panoSeq;
     if (!vpPath) {
       // No viewpoint panorama — walk plans fall back to a node panorama, and on
       // ANY failure (e.g. dangling idb: ref) to the generated placeholder, which
@@ -1087,27 +1168,35 @@ export class SceneManager {
       const node = this.resolveWalkFallbackNode();
       if (!node) {
         removeHdri(this.app);
+        this.installedPanoPath = null;
         return;
       }
       if (node.panorama) {
         try {
           const url = await resolveAssetUrl(node.panorama, this.manifest.id);
+          if (superseded()) return;
           await applyHdri(this.app, url);
+          this.installedPanoPath = node.panorama;
           return;
         } catch (err) {
           console.error(`walk panorama load failed (${node.id}) — showing placeholder:`, err);
         }
       }
       try {
+        if (superseded()) return;
         await applyHdri(this.app, walkPlaceholderPanorama(node));
+        this.installedPanoPath = null;
       } catch (err) {
         console.error('walk placeholder apply failed:', err);
       }
       return;
     }
+    if (vpPath === this.installedPanoPath) return; // already on screen
     try {
       const url = await resolveAssetUrl(vpPath, this.manifest.id);
+      if (superseded()) return;
       await applyHdri(this.app, url);
+      this.installedPanoPath = vpPath;
     } catch (err) {
       console.error(`panorama load failed:`, err);
     }
@@ -1589,6 +1678,7 @@ export class SceneManager {
   async loadHdri(file: File): Promise<true | string> {
     try {
       await applyHdriFromFile(this.app, file);
+      this.installedPanoPath = null; // manual HDRI replaced the viewpoint image
       return true;
     } catch (e) {
       console.error('Failed to load HDRI:', e);
@@ -1598,6 +1688,7 @@ export class SceneManager {
 
   removeHdri() {
     removeHdri(this.app);
+    this.installedPanoPath = null;
   }
 
   /** Studio = camera background color. Always-on (no mode toggle). HDRI, when

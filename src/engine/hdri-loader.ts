@@ -1,5 +1,14 @@
 import { AppBase, Quat, Vec3 } from 'playcanvas';
-import { applyEquirectSkybox, applyEquirectSkyboxFromBlob, crossfadeEquirectSkybox, removeEquirectSkybox } from './equirect-skybox';
+import {
+  applyEquirectSkybox,
+  applyEquirectSkyboxFromBlob,
+  crossfadeEquirectSkybox,
+  discardPreparedEquirect,
+  installPreparedEquirect,
+  prepareEquirectSkybox,
+  removeEquirectSkybox,
+  type PreparedEquirect,
+} from './equirect-skybox';
 
 /** 180° rotation around +Y, baked once. Aligns equirect u=0.5 with camera yaw=0. */
 const SKYBOX_Y_FLIP = new Quat().setFromAxisAngle(Vec3.UP, 180);
@@ -41,6 +50,37 @@ export async function applyHdri(app: AppBase, url: string): Promise<void> {
   app.scene.skyboxIntensity = 1.0;
   app.scene.skyboxMip = 0;
   app.scene.skyboxRotation = SKYBOX_Y_FLIP;
+}
+
+/**
+ * Two-phase variant of {@link applyHdri}: decode now, install later.
+ *
+ * 360 mode needs this because the panorama *is* the scene. Installing it after
+ * the camera has already moved means the visitor briefly sees the PREVIOUS
+ * panorama from the NEW viewpoint's angle — a view that was never authored, and
+ * which reads as a third scene flashing past between the two real ones. Preparing
+ * first lets the caller swap image and pose in a single tick.
+ */
+export function prepareHdri(app: AppBase, url: string): Promise<PreparedEquirect> {
+  return prepareEquirectSkybox(app, url);
+}
+
+/** Install a {@link prepareHdri} result. Synchronous, so it can be paired with a
+ *  camera jump in the same tick. */
+export function installHdri(app: AppBase, prepared: PreparedEquirect): void {
+  app.scene.envAtlas = null;
+  app.scene.skybox = null;
+
+  installPreparedEquirect(app, prepared);
+
+  app.scene.skyboxIntensity = 1.0;
+  app.scene.skyboxMip = 0;
+  app.scene.skyboxRotation = SKYBOX_Y_FLIP;
+}
+
+/** Free a prepared panorama that a newer request has superseded. */
+export function discardHdri(prepared: PreparedEquirect): void {
+  discardPreparedEquirect(prepared);
 }
 
 /**
