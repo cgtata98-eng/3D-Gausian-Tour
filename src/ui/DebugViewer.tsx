@@ -41,7 +41,7 @@ import { targetFromYaw } from '../core/viewpoint';
 import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
 import { tokens , shellSurface } from './design-tokens';
-import { surfaceClass, Chip, IconClose, IconTrash } from './components';
+import { surfaceClass, Chip, Tag, IconClose, IconTrash } from './components';
 import * as idb from '../utils/idb';
 import { unzipSync } from 'fflate';
 
@@ -1050,23 +1050,18 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   };
 
   return (
-    <div style={S.root}>
+    <div className="ds-screen" style={S.root}>
       {/* Header */}
-      <div style={S.header}>
+      <div className="ds-blur" style={S.header}>
         <a
           href="/"
           onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate('/'); }}
-          className="glass-edge" style={{
-            ...S.viewerBtn,
-            background: tokens.gradient.surface,
-            color: COLOR.text,
-            border: `1px solid ${COLOR.border}`,
-            boxShadow: tokens.shadow.glass,
-          }}
+          className={`${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`}
+          style={S.viewerBtn}
         >← Project</a>
         <div style={S.logo}>
-          <span className="glass-edge" style={S.badge}>DEV</span>
-          <span style={S.sceneName}>{manifest?.name || sceneId}</span>
+          <Tag variant="warn">DEV</Tag>
+          <span className="ds-title">{manifest?.name || sceneId}</span>
         </div>
         <div style={{ flex: 1 }} />
         <SaveIndicator state={saveState} lastSavedAt={lastSavedAt} onClick={saveNow} />
@@ -1074,7 +1069,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         <a
           href={`/viewer/${sceneId}`}
           onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(`/viewer/${sceneId}`); }}
-          className="glass-edge" style={S.viewerBtn}
+          className={`${surfaceClass('accent')} ds-pill ds-pill--sm`} style={S.viewerBtn}
         >Viewer →</a>
       </div>
 
@@ -1151,7 +1146,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 <Section
                   title={`基本情報${activePlan ? ` — ${activePlan.label}` : ''}`}
                   subtitle="PLAN INFO"
-                  action={<button onClick={exportInfoJson} className="glass-edge" style={S.btn}>{infoJsonCopied ? '✓ コピー済' : 'JSONエクスポート'}</button>}
+                  action={<button onClick={exportInfoJson} className={BTN}>{infoJsonCopied ? '✓ コピー済' : 'JSONエクスポート'}</button>}
                   defaultOpen={false}
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1233,7 +1228,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     <div style={{ fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.5 }}>
                       同じ視点で素材色違いに切り替えるバリエーション。各バリアントに視点ごとの 360° パノラマを登録します (未登録の視点は標準パノラマを利用)。
                     </div>
-                    <button onClick={addVariant} className="glass-edge" style={S.btnPrimary}>+ バリアント追加</button>
+                    <button onClick={addVariant} className={BTN_PRIMARY}>+ バリアント追加</button>
                     {variants.map((v) => (
                       <div key={v.id} style={{ border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1263,7 +1258,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                                 <span style={{ fontSize: 9.5, color: has ? '#16a34a' : tokens.color.textFaint }}>
                                   {has ? '登録済' : '未登録'}
                                 </span>
-                                <label className="glass-edge" style={{ ...S.btn, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <label className={BTN} style={{ cursor: 'pointer' }}>
                                   パノラマ
                                   <input
                                     type="file"
@@ -1277,7 +1272,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                                   />
                                 </label>
                                 {has && (
-                                  <button onClick={() => setVariantPano(v.id, vp.id, undefined)} className="glass-edge" style={{ ...S.btn, color: tokens.color.danger }}>×</button>
+                                  <button onClick={() => setVariantPano(v.id, vp.id, undefined)} className={dangerIconClass} title="360 を外す"><IconClose /></button>
                                 )}
                               </div>
                             );
@@ -1316,7 +1311,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   <LabeledInput label="プロジェクト名" value={manifest?.name ?? ''} onChange={setSceneName} placeholder="例: モダンマンション B 棟" />
 
                   <div style={{ height: 12 }} />
-                  <div style={S.subTitle}>メインサムネ</div>
+                  <div className="ds-label" style={S.subTitle}>メインサムネ</div>
                   <div style={S.projThumbHead}>
                     <div style={S.projThumbPreview}>
                       {currentThumb ? (
@@ -1366,7 +1361,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       })}
                     </div>
                   ) : (
-                    <div style={S.empty}>視点がまだありません。プランタブで視点を追加してください。</div>
+                    <div className="ds-empty">視点がまだありません。プランタブで視点を追加してください。</div>
                   )}
                 </Section>
               );
@@ -1394,7 +1389,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             <Section
               title={`プラン (${manifest?.plans?.length ?? 0})`}
               subtitle="PLANS"
-              action={<button onClick={() => { setShowAddPlan(true); setNewPlanName(''); }} className="glass-edge" style={S.btnPrimary}>+ プランを追加</button>}
+              action={<button onClick={() => { setShowAddPlan(true); setNewPlanName(''); }} className={BTN_PRIMARY}>+ プランを追加</button>}
               defaultOpen={false}
             >
               {manifest?.plans && manifest.plans.length > 0 ? (
@@ -1420,18 +1415,16 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     return (
                       <div
                         key={p.id}
-                        style={{
-                          ...S.vpRow,
-                          ...(isActive ? S.vpRowActive : null),
-                          ...(isPlanDragOver ? S.vpRowDropTarget : null),
-                        }}
+                        className={rowClass(isActive)}
+                        data-drop={isPlanDragOver || undefined}
                         onDragOver={(e) => handlePlanRowDragOver(e, p.id)}
                         onDragLeave={handlePlanRowDragLeave}
                         onDrop={(e) => handlePlanRowDrop(e, p.id)}
                       >
                         <button
                           onClick={() => switchPlan(p.id)}
-                          style={{ ...S.vpDot, background: isActive ? '#fbbf24' : 'rgba(0,0,0,0.2)' }}
+                          className="ds-swatch"
+                          style={{ ...S.vpDot, background: isActive ? '#e0a83a' : 'rgba(0,0,0,0.2)' }}
                           aria-label="activate"
                           title={isActive ? '使用中' : 'このプランに切替'}
                           disabled={isBusy}
@@ -1446,7 +1439,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               autoFocus style={S.inputInline}
                             />
                           ) : (
-                            <div onClick={() => switchPlan(p.id)} style={{ ...S.vpLabel, color: isActive ? '#92400e' : '#1f2937'}}>
+                            <div onClick={() => switchPlan(p.id)} className="ds-title" style={S.vpLabel}>
                               {p.label}
                             </div>
                           )}
@@ -1474,7 +1467,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               <button
                                 title="Splat ファイルをアップロード（PLY / SPLAT 単体、または SOG なら meta.json + .webp 全て選択）"
                                 onClick={() => { setPlanSplatTargetId(p.id); planSplatInputRef.current?.click(); }}
-                                style={S.iconBtn}
+                                className="ds-iconbtn"
                                 disabled={isBusy}
                               >
                                 {isBusy ? '⏳' : '⇪'}
@@ -1489,7 +1482,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               )}
                             </>
                           )}
-                          <button title="名前を変更" onClick={() => { setEditPlanId(p.id); setEditPlanLabel(p.label); }} style={S.iconBtn}>✎</button>
+                          <button title="名前を変更" onClick={() => { setEditPlanId(p.id); setEditPlanLabel(p.label); }} className="ds-iconbtn">✎</button>
                           <button
                             title="プランを削除"
                             onClick={() => { if (manifest.plans!.length > 1) removePlanStore(p.id); }}
@@ -1502,7 +1495,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   })}
                 </div>
               ) : (
-                <div style={S.empty}>プランがまだありません</div>
+                <div className="ds-empty">プランがまだありません</div>
               )}
               {showAddPlan && (
                 <div style={S.inlineCard}>
@@ -1516,8 +1509,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       : '新規プランは完全に空（splat / 視点 / 図面 / info すべて未設定）で作成されます。'}
                   </div>
                   <div style={S.btnRow}>
-                    <button onClick={addPlan} className="glass-edge" style={S.btnPrimary}>追加</button>
-                    <button onClick={() => setShowAddPlan(false)} className="glass-edge" style={S.btn}>キャンセル</button>
+                    <button onClick={addPlan} className={BTN_PRIMARY}>追加</button>
+                    <button onClick={() => setShowAddPlan(false)} className={BTN}>キャンセル</button>
                   </div>
                 </div>
               )}
@@ -1543,13 +1536,13 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               return (
                 <Section title="環境音" subtitle="AUDIO" defaultOpen={false}>
                   {/* BGM (ループ環境音) */}
-                  <div style={S.subTitle}>BGM (ループ環境音)</div>
+                  <div className="ds-label" style={S.subTitle}>BGM (ループ環境音)</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
                     <span style={{ fontSize: 10.5, color: manifest?.audio ? '#16a34a' : tokens.color.textFaint }}>
                       {manifest?.audio ? '設定済' : '未設定'}
                     </span>
                     <div style={{ flex: 1 }} />
-                    <label className="glass-edge" style={{ ...S.btn, cursor: 'pointer' }}>
+                    <label className={BTN} style={{ cursor: 'pointer' }}>
                       {manifest?.audio ? '差し替え' : '+ 音声ファイル'}
                       <input
                         type="file"
@@ -1589,7 +1582,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       VR / パノラマモードや splat データ無しでは歩かないので非表示。 */}
                   {!isVRMode && hasSplatData && (
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-                    <div style={S.subTitle}>足音</div>
+                    <div className="ds-label" style={S.subTitle}>足音</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
                       <span style={{ fontSize: 10.5, color: tokens.color.textMute }}>
                         WASD で歩行、Shift で走行
@@ -1732,7 +1725,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 <KV label="FOV" value={`${fov.toFixed(0)}°`} />
               </div>
 
-              <label style={{ ...S.toggle, marginTop: 6 }} title="床面 (Y=0) のグリッドを表示。位置・スケール確認用">
+              <label className="ds-check" style={{ ...S.toggle, marginTop: 6 }} title="床面 (Y=0) のグリッドを表示。位置・スケール確認用">
                 <input type="checkbox" checked={showGrid} onChange={toggleGrid} />
                 <span>グリッドを表示 <span style={S.toolbarHint}>(XZ 平面 / 1 m メッシュ)</span></span>
               </label>
@@ -1797,10 +1790,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     return (
                       <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <span style={S.subTitle}>PLY 軸 / 位置</span>
+                          <span className="ds-label" style={S.subTitle}>PLY 軸 / 位置</span>
                           <div style={{ flex: 1 }} />
                           {isModified && (
-                            <button type="button" onClick={reset} className="glass-edge" style={{ ...S.btn, fontSize: 10.5, color: tokens.color.danger }} title="既定 (rot=[180,0,0], pos=[0,0,0]) に戻す">
+                            <button type="button" onClick={reset} className={`${surfaceClass('danger')} ds-pill ds-pill--xs`} title="既定 (rot=[180,0,0], pos=[0,0,0]) に戻す">
                               リセット
                             </button>
                           )}
@@ -1821,8 +1814,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   })()}
 
                   <div style={S.btnRow}>
-                    <button onClick={copyCamera} className="glass-edge" style={S.btn}>{copied ? '✓ コピー済' : 'JSONコピー'}</button>
-                    <button onClick={() => { setShowAddVp(true); setNewVpName(''); }} className="glass-edge" style={S.btnPrimary}>+ 視点として保存</button>
+                    <button onClick={copyCamera} className={BTN}>{copied ? '✓ コピー済' : 'JSONコピー'}</button>
+                    <button onClick={() => { setShowAddVp(true); setNewVpName(''); }} className={BTN_PRIMARY}>+ 視点として保存</button>
                   </div>
                   {showAddVp && (
                     <div style={S.inlineCard}>
@@ -1831,8 +1824,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         onKeyDown={e => { if (e.key === 'Enter') addVp(); if (e.key === 'Escape') setShowAddVp(false); }}
                         autoFocus style={S.input} />
                       <div style={S.btnRow}>
-                        <button onClick={addVp} className="glass-edge" style={S.btnPrimary}>保存</button>
-                        <button onClick={() => setShowAddVp(false)} className="glass-edge" style={S.btn}>キャンセル</button>
+                        <button onClick={addVp} className={BTN_PRIMARY}>保存</button>
+                        <button onClick={() => setShowAddVp(false)} className={BTN}>キャンセル</button>
                       </div>
                     </div>
                   )}
@@ -1847,7 +1840,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     <button
                       type="button"
                       onClick={() => setShowZoomRange(true)}
-                      className="glass-edge" style={{ ...S.btn, fontSize: 10.5, padding: '4px 10px' }}
+                      className={`${surfaceClass('neutral')} ds-pill ds-pill--xs ds-fill-neutral`}
                       title="ロック範囲を変更（通常は変更不要）"
                     >
                       ズーム範囲を変更…
@@ -1855,7 +1848,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   ) : (
                     <div style={S.zoomRangeBox}>
                       <div style={S.zoomRangeHead}>
-                        <span style={S.subTitle}>拡大縮小範囲 (FOV)</span>
+                        <span className="ds-label" style={S.subTitle}>拡大縮小範囲 (FOV)</span>
                         <button type="button" onClick={() => setShowZoomRange(false)} style={S.zoomRangeClose} title="折りたたむ">×</button>
                       </div>
                       <Slider
@@ -1893,7 +1886,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     onChange={onFovChange}
                   />
                   <div style={{ height: 8 }} />
-                  <div style={S.subTitle}>視線ロック</div>
+                  <div className="ds-label" style={S.subTitle}>視線ロック</div>
                   <Slider
                     label="上向きの上限 (°)"
                     min={0} max={89} step={1}
@@ -1918,8 +1911,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               defaultOpen={false}
               action={
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => { setShowAddVp(true); setNewVpName(''); setAddVpPanoFile(null); setAddVpPanoName(null); }} className="glass-edge" style={S.btnPrimary}>+ {isVRMode ? 'VR視点' : '視点'}を追加</button>
-                  <button onClick={exportVps} className="glass-edge" style={S.btn}>{exportedVp ? '✓ コピー済' : 'JSONエクスポート'}</button>
+                  <button onClick={() => { setShowAddVp(true); setNewVpName(''); setAddVpPanoFile(null); setAddVpPanoName(null); }} className={BTN_PRIMARY}>+ {isVRMode ? 'VR視点' : '視点'}を追加</button>
+                  <button onClick={exportVps} className={BTN}>{exportedVp ? '✓ コピー済' : 'JSONエクスポート'}</button>
                 </div>
               }
             >
@@ -1927,7 +1920,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 const activePlan = manifest.plans?.find(p => p.id === activePlanId);
                 const activeViewpoints = activePlan?.viewpoints ?? [];
                 if (activeViewpoints.length === 0) {
-                  return <div style={S.empty}>このプランの{isVRMode ? 'VR視点' : '視点'}がまだ追加されていません</div>;
+                  return <div className="ds-empty">このプランの{isVRMode ? 'VR視点' : '視点'}がまだ追加されていません</div>;
                 }
                 const planThumbs = activePlan?.thumbnails ?? {};
                 const autoThumbs = (activePlanId && thumbs[activePlanId]) || {};
@@ -1950,13 +1943,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         <div key={vp.id}>
                         <div
                           ref={(el) => { vpRowRefs.current[vp.id] = el; }}
-                          style={{
-                            ...S.vpRow,
-                            ...(isA ? S.vpRowActive : null),
-                            ...(isVpDragOver ? S.vpRowDropTarget : null),
-                            ...(isReorderTarget ? S.vpRowReorderTarget : null),
-                            ...(isDragSrc ? { opacity: 0.4 } : null),
-                          }}
+                          className={rowClass(isA)}
+                          data-drop={isVpDragOver || undefined}
+                          data-reorder={isReorderTarget || undefined}
+                          style={isDragSrc ? { opacity: 0.4 } : undefined}
                           onDragOver={(e) => handleVpRowDragOver(e, vp.id)}
                           onDragLeave={handleVpRowDragLeave}
                           onDrop={(e) => handleVpRowDrop(e, vp.id)}
@@ -1965,6 +1955,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             draggable
                             onDragStart={(e) => handleVpHandleDragStart(e, vp.id)}
                             onDragEnd={handleVpHandleDragEnd}
+                            className="ds-sub"
                             style={S.vpDragHandle}
                             title="ドラッグで並び替え"
                             aria-label="reorder"
@@ -1973,12 +1964,13 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           </span>
                           <button
                             onClick={() => handleVpClick(vp.id)}
+                            className="ds-tile__thumb"
                             style={S.vpThumb}
                             aria-label="jump"
                             title={isManual ? '手動サムネ（クリックでジャンプ）' : '自動サムネ（クリックでジャンプ）'}
                           >
-                            {thumb ? <img src={thumb} alt="" style={S.vpThumbImg} /> : <span style={S.vpThumbEmpty}>—</span>}
-                            {isManual && <span style={S.vpThumbBadge}>M</span>}
+                            {thumb ? <img src={thumb} alt="" style={S.vpThumbImg} /> : <span className="ds-faint" style={S.vpThumbEmpty}>—</span>}
+                            {isManual && <Tag variant="success" style={S.vpThumbBadge}>M</Tag>}
                           </button>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             {isE ? (
@@ -1990,12 +1982,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                                 autoFocus style={S.inputInline}
                               />
                             ) : (
-                              <div onClick={() => handleVpClick(vp.id)} style={{ ...S.vpLabel, color: isA ? '#92400e' : '#1f2937' }}>
+                              <div onClick={() => handleVpClick(vp.id)} className="ds-title" style={S.vpLabel}>
                                 {vp.label}
-                                {isStart && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: tokens.font.weight.strong, color: tokens.color.accent }}>🏁 初期位置</span>}
+                                {isStart && <span className="ds-hint ds-accent" style={{ marginLeft: 6 }}>🏁 初期位置</span>}
                               </div>
                             )}
-                            <div style={S.vpMeta}>
+                            <div className="ds-mono ds-hint" style={S.vpMeta}>
                               <span>pos [{vp.position.map(v => v.toFixed(1)).join(', ')}]</span>
                               <span style={S.vpMetaSep}>·</span>
                               <span>fov {vp.fov}°</span>
@@ -2005,7 +1997,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             <button
                               title={isStart ? '初期位置に設定済み（シーンを開くとここから開始）' : 'この視点を初期位置にする（開いたらここから開始）'}
                               onClick={() => setStartViewpoint(vp.id)}
-                              style={{ ...S.iconBtn, ...(isStart ? { color: tokens.color.accent, background: tokens.gradient.accent } : {}) }}
+                              className={isStart ? `${surfaceClass('accent')} ds-pill ds-pill--icon ds-pill--xs` : 'ds-iconbtn'}
                             >
                               🏁
                             </button>
@@ -2013,7 +2005,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               <button
                                 title="ドット位置をカメラに反映（カメラ・初期位置・サムネ撮影点をドットの場所へ移動）"
                                 onClick={() => bakeViewpointToCamera(vp.id)}
-                                style={{ ...S.iconBtn, color: tokens.color.warn }}
+                                className="ds-iconbtn ds-warn"
                               >
                                 📍
                               </button>
@@ -2021,14 +2013,14 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             <button
                               title={isVRMode ? 'パノラマからサムネを再生成' : '今いる位置・向き・画をこの視点に保存（位置＋サムネを更新／ジャンプ先＝この画になる）'}
                               onClick={() => captureCurrentAsThumb(vp.id)}
-                              style={S.iconBtn}
+                              className="ds-iconbtn"
                             >
                               📷
                             </button>
                             <button
                               title={isThumbBusy ? '読み込み中…' : '画像ファイルからサムネを設定'}
                               onClick={() => { setThumbTargetVp(vp.id); thumbInputRef.current?.click(); }}
-                              style={S.iconBtn}
+                              className="ds-iconbtn"
                               disabled={isThumbBusy}
                             >
                               {isThumbBusy ? '⏳' : '🖼'}
@@ -2036,7 +2028,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             <button
                               title={activePlan?.panoramas?.[vp.id] ? '360パノラマ: 設定済み（クリックで差し替え）' : '360パノラマを追加'}
                               onClick={() => { setPanoTargetVp(vp.id); panoInputRef.current?.click(); }}
-                              style={{ ...S.iconBtn, color: activePlan?.panoramas?.[vp.id] ? '#22c55e' : tokens.color.textMute }}
+                              className={`ds-iconbtn${activePlan?.panoramas?.[vp.id] ? ' ds-ok' : ''}`}
                               disabled={panoLoading === vp.id}
                             >
                               {panoLoading === vp.id ? '⏳' : '🌐'}
@@ -2044,7 +2036,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             {activePlan?.panoramas?.[vp.id] && (
                               <button title="360パノラマを削除" onClick={() => handlePanoRemove(vp.id)} className={dangerXsClass}>360 を削除</button>
                             )}
-                            <button title="名前を変更" onClick={() => { setEditId(vp.id); setEditLabel(vp.label); }} style={S.iconBtn}>✎</button>
+                            <button title="名前を変更" onClick={() => { setEditId(vp.id); setEditLabel(vp.label); }} className="ds-iconbtn">✎</button>
                             <button title="削除" onClick={() => removeViewpoint(vp.id)} className={dangerIconClass}><IconTrash /></button>
                           </div>
                         </div>
@@ -2057,7 +2049,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   </div>
                 );
               })() : (
-                <div style={S.empty}>読み込み中…</div>
+                <div className="ds-empty">読み込み中…</div>
               )}
               {showAddVp && (
                 <div style={S.inlineCard}>
@@ -2082,8 +2074,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     </>
                   )}
                   <div style={S.btnRow}>
-                    <button onClick={addVp} className="glass-edge" style={S.btnPrimary}>保存</button>
-                    <button onClick={cancelAddVp} className="glass-edge" style={S.btn}>キャンセル</button>
+                    <button onClick={addVp} className={BTN_PRIMARY}>保存</button>
+                    <button onClick={cancelAddVp} className={BTN}>キャンセル</button>
                   </div>
                 </div>
               )}
@@ -2098,15 +2090,15 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               const busy = colLoading !== null;
               return (
             <Section title="コリジョン" subtitle="COLLISION" defaultOpen={false}>
-              <label style={S.toggle}>
+              <label className="ds-check" style={S.toggle}>
                 <input type="checkbox" checked={useCollisionWalkable} onChange={toggleUseCollisionWalkable} />
                 <span>walkable を使用 <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>（床スナップ／重力）</span></span>
               </label>
-              <label style={S.toggle}>
+              <label className="ds-check" style={S.toggle}>
                 <input type="checkbox" checked={useCollisionBlock} onChange={toggleUseCollisionBlock} />
                 <span>block を使用 <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>（壁衝突）</span></span>
               </label>
-              <label style={S.toggle}>
+              <label className="ds-check" style={S.toggle}>
                 <input type="checkbox" checked={showCollision} onChange={toggleCollision} />
                 <span>コリジョンを表示 <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>（デバッグメッシュ）</span></span>
               </label>
@@ -2140,7 +2132,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 };
                 return (
                   <>
-                    <div style={{ ...S.subTitle, marginTop: 14 }}>全体調整（図面⇄GS 合わせ込み）</div>
+                    <div className="ds-label" style={{ ...S.subTitle, marginTop: 14 }}>全体調整（図面⇄GS 合わせ込み）</div>
                     {!hasAny ? (
                       <div style={{ fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.55 }}>
                         コリジョンを生成/アップロードすると、ここで全体のオフセット・スケール・回転を調整できます。
@@ -2168,7 +2160,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         {tf && (
                           <button
                             type="button"
-                            className="glass-edge" style={{ ...S.btn, marginTop: 4 }}
+                            className={BTN} style={{ marginTop: 4 }}
                             onClick={() => {
                               if (!activePlanId) return;
                               setPlanCollisionTransformStore(activePlanId, undefined);
@@ -2185,7 +2177,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               })()}
 
               {/* ── 俯瞰で描く (GS を断面表示して直接なぞる — 主経路) ── */}
-              <div style={{ ...S.subTitle, marginTop: 14 }}>俯瞰で描く（GS 直接）</div>
+              <div className="ds-label" style={{ ...S.subTitle, marginTop: 14 }}>俯瞰で描く（GS 直接）</div>
               <button
                 type="button"
                 className={`${shellClass}`} style={{ ...S.fileBtn, opacity: topDownColOpen ? 0.6 : 1 }}
@@ -2207,14 +2199,14 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               </div>
 
               {/* ── GLB アップロード (外部ツールで作った場合) ── */}
-              <div style={{ ...S.subTitle, marginTop: 14 }}>GLB アップロード</div>
-              <div style={{ ...S.subTitle, marginTop: 6 }}><span style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
+              <div className="ds-label" style={{ ...S.subTitle, marginTop: 14 }}>GLB アップロード</div>
+              <div className="ds-label" style={{ ...S.subTitle, marginTop: 6 }}><span style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
               <button onClick={() => walkableRef.current?.click()} className={`${shellClass}`} style={S.fileBtn} disabled={busy}>
                 {colLoading === 'walkable' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>
               <input ref={walkableRef} type="file" accept=".glb" style={{ display: 'none' }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'walkable', 'manual'); e.target.value = ''; }} />
-              <div style={{ ...S.subTitle, marginTop: 10 }}><span style={{ ...S.colorDot, background: '#ef4444' }} />BLOCK</div>
+              <div className="ds-label" style={{ ...S.subTitle, marginTop: 10 }}><span style={{ ...S.colorDot, background: '#ef4444' }} />BLOCK</div>
               <button onClick={() => blockRef.current?.click()} className={`${shellClass}`} style={S.fileBtn} disabled={busy}>
                 {colLoading === 'block' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>
@@ -2349,7 +2341,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       <button
                         type="button"
                         onClick={syncMapPositionsToCameraAnchors}
-                        className="glass-edge" style={S.btn}
+                        className={BTN}
                         title="MAP 上の dot 位置を、各視点の camera 位置 (position) に焼き込みます。古い視点 (= MAP ドラッグだけで配置してジャンプ先が同じ場所になってしまった視点) の一括移行に使用。target も同じ delta だけ平行移動して向きを保ちます。"
                       >
                         📍 MAP 位置で position を焼き直し
@@ -2369,7 +2361,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       to be printed here. They are derived values the panel already lets you
                       set by direct manipulation, so on screen they were six rows of noise
                       under the thing they describe. */}
-                  {!fp && <div style={S.empty}>このプランの図面はまだ設定されていません</div>}
+                  {!fp && <div className="ds-empty">このプランの図面はまだ設定されていません</div>}
                 </Section>
               );
             })()}
@@ -2983,7 +2975,7 @@ function PinsPlanSection({
   if (!activePlanId) {
     return (
       <Section title="タグ" subtitle="PINS" defaultOpen={true}>
-        <div style={S.empty}>プランが選択されていません</div>
+        <div className="ds-empty">プランが選択されていません</div>
       </Section>
     );
   }
@@ -3002,7 +2994,7 @@ function PinsPlanSection({
             const newId = `pin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
             addPin({ id: newId, title: '新しいタグ' });
           }}
-          className="glass-edge" style={S.btnPrimary}
+          className={BTN_PRIMARY}
           title="タグをリストに追加 (配置はあとからドラッグ or 📍 で)"
         >
           + タグを追加
@@ -3022,7 +3014,7 @@ function PinsPlanSection({
       </label>
 
       {pins.length === 0 ? (
-        <div style={S.empty}>まだタグが追加されていません</div>
+        <div className="ds-empty">まだタグが追加されていません</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {pins.map((pin, idx) => {
@@ -3082,7 +3074,7 @@ function PinsPlanSection({
                       image: pin.image,
                     });
                   }}
-                  style={S.iconBtn}
+                  className="ds-iconbtn"
                 >📄</button>
                 <button
                   type="button"
@@ -3120,7 +3112,7 @@ function PinsPlanSection({
                   <button
                     type="button"
                     onClick={() => { fileTargetRef.current = pin.id; fileInputRef.current?.click(); }}
-                    className="glass-edge" style={{ ...S.btn, fontSize: 10.5 }}
+                    className={`${surfaceClass('neutral')} ds-pill ds-pill--xs ds-fill-neutral`}
                   >
                     {pin.image ? '画像を差し替え' : '+ 画像を追加'}
                   </button>
@@ -3191,7 +3183,7 @@ function PinsPlanSection({
                             type="button"
                             title={isMoving ? 'クリックして位置変更モードを解除' : 'プレビューをクリックでこの配置の位置を変更'}
                             onClick={() => isMoving ? onCancelMove() : onStartMove(pin.id, pl.id)}
-                            style={{ ...S.iconBtn, ...(isMoving ? { background: tokens.gradient.surface, borderColor: 'transparent' } : null) }}
+                            className={isMoving ? `${surfaceClass('accent')} ds-pill ds-pill--icon ds-pill--xs` : 'ds-iconbtn'}
                           >📍</button>
                           <button
                             type="button"
@@ -3204,7 +3196,7 @@ function PinsPlanSection({
                                 fov: 60,
                               });
                             }}
-                            style={S.iconBtn}
+                            className="ds-iconbtn"
                           >🎯</button>
                           <button
                             type="button"
@@ -3533,20 +3525,22 @@ function Section({ title, subtitle, action, children, defaultOpen = true }: { ti
   );
 }
 
+/** `accent` is an AXIS colour (X/Y/Z red-green-blue), i.e. data — it stays at
+ *  the call site rather than becoming a variant. */
 function KV({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
-    <div style={S.kvCell}>
-      <div style={{ ...S.kvLabel, ...(accent ? { color: accent } : null) }}>{label}</div>
-      <div style={S.kvVal}>{value}</div>
+    <div className={`${surfaceClass('neutral')} ds-panel ds-fill-neutral`} style={S.kvCell}>
+      <div className="ds-label" style={{ marginBottom: 2, ...(accent ? { color: accent } : null) }}>{label}</div>
+      <div className="ds-mono" style={S.kvVal}>{value}</div>
     </div>
   );
 }
 
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div style={S.infoRow}>
+    <div className="ds-sub" style={S.infoRow}>
       <div style={S.infoLabel}>{label}</div>
-      <div style={{ ...S.infoVal, ...(mono ? { fontFamily: tokens.font.mono } : null) }}>{value}</div>
+      <div className={mono ? 'ds-mono' : undefined} style={S.infoVal}>{value}</div>
     </div>
   );
 }
@@ -3554,7 +3548,7 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
 function LabeledInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={S.formLabel}>{label}</span>
+      <span className="ds-label">{label}</span>
       <input type="text" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} style={S.formInput} />
     </label>
   );
@@ -3609,7 +3603,7 @@ function ViewerToolbarSection({
       title="ツールバー表示"
       subtitle="VIEWER TOOLBAR"
       defaultOpen={false}
-      action={<button onClick={onReset} className="glass-edge" style={S.btn} title="すべて表示 (既定) に戻す">既定に戻す</button>}
+      action={<button onClick={onReset} className={BTN} title="すべて表示 (既定) に戻す">既定に戻す</button>}
     >
       <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 8, lineHeight: 1.55 }}>
         ビューアに出す項目を選びます。チェックを外すと閲覧者にも非表示になります。<br />
@@ -3701,7 +3695,7 @@ function ViewerToolbarSection({
       {!isOtherProject && (
         <>
           <div style={S.toolbarGroupHead}>カラー内のサブ操作 (mansion)</div>
-          <label style={S.toggle}>
+          <label className="ds-check" style={S.toggle}>
             <input
               type="checkbox"
               checked={!!variants?.furniture}
@@ -3709,7 +3703,7 @@ function ViewerToolbarSection({
             />
             <span>家具切替を表示 <span style={S.toolbarHint}>(家具あり / なし)</span></span>
           </label>
-          <label style={S.toggle}>
+          <label className="ds-check" style={S.toggle}>
             <input
               type="checkbox"
               checked={!!variants?.lighting}
@@ -3855,7 +3849,7 @@ function SidebarOrderEditor({ tb, isVRMode, onChange }: { tb: ToolbarPatch; isVR
           })}
         </div>
       )}
-      <button onClick={reset} className="glass-edge" style={{ ...S.btn, marginTop: 8, fontSize: 10.5 }} title="並び順を既定に戻す">並び順を既定に戻す</button>
+      <button onClick={reset} className={`${surfaceClass('neutral')} ds-pill ds-pill--xs ds-fill-neutral`} style={{ marginTop: 8 }} title="並び順を既定に戻す">並び順を既定に戻す</button>
     </div>
   );
 }
@@ -3933,6 +3927,7 @@ function ToolbarRow({
   const checked = defaultOff ? tb[keyName] === true : tb[keyName] !== false;
   return (
     <label
+      className="ds-check"
       style={{ ...S.toggle, opacity: disabled ? 0.45 : 1 }}
       title={disabled ? '現在のプロジェクト種別 / モードでは無効' : undefined}
     >
@@ -3997,7 +3992,7 @@ function RenderQualitySection({
       title="描画品質"
       subtitle="RENDER QUALITY"
       defaultOpen={false}
-      action={<button onClick={onReset} className="glass-edge" style={S.btn} title="manifest.settings.render を未設定に戻す">既定に戻す</button>}
+      action={<button onClick={onReset} className={BTN} title="manifest.settings.render を未設定に戻す">既定に戻す</button>}
     >
       <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 8, lineHeight: 1.55 }}>
         露出 / 背景色は両エンジン反映。彩度・コントラスト・明るさ・トーンマップは PlayCanvas のみ反映。
@@ -4038,7 +4033,7 @@ function RenderQualitySection({
       {!isVRMode && (cfg.engine ?? 'playcanvas') === 'playcanvas' && (
         <>
           <div style={S.toolbarGroupHead}>カラーパイプライン</div>
-          <label style={{ ...S.toggle, marginTop: 4 }} title="チェックを入れると露出 / トーン / カラー補正が描画に反映されます。外すと学習時の色味のまま表示します。">
+          <label className="ds-check" style={{ ...S.toggle, marginTop: 4 }} title="チェックを入れると露出 / トーン / カラー補正が描画に反映されます。外すと学習時の色味のまま表示します。">
             <input
               type="checkbox"
               checked={cfg.bypassColorPipeline !== true}
@@ -5345,6 +5340,13 @@ const COLOR: Record<string, string> = {
 /** Class list for the shared white pill — see `fileBtn`. */
 const shellClass = `${surfaceClass('plain')} ds-pill ds-fill-surface`;
 
+/* Panel buttons. `btn` is the ordinary grey action; `btnPrimary` is white —
+   deliberately not green, because these are "add a plan / a viewpoint / a
+   variant" actions and the success hue read as a confirmation that nothing had
+   actually confirmed. */
+const BTN = `${surfaceClass('neutral')} ds-pill ds-pill--sm ds-fill-neutral`;
+const BTN_PRIMARY = `${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`;
+
 /* Destructive controls. Every one of these was drawn by hand at its call site
    — a rose tint here, a `#f87171` glyph there, a 6px-radius outlined box in
    the floor-plan panel — so the same action looked like three different
@@ -5357,46 +5359,29 @@ const dangerPillClass = `${surfaceClass('danger')} ds-pill ds-pill--sm`;
 /** Labelled but sitting in a dense row, beside 24px icon buttons. */
 const dangerXsClass = `${surfaceClass('danger')} ds-pill ds-pill--xs`;
 
+/** A list row: accent while selected, plain otherwise. Drop / reorder states
+ *  ride on `data-drop` / `data-reorder`, not on merged style objects. */
+const rowClass = (active: boolean) =>
+  `${surfaceClass(active ? 'accent' : 'plain')} ds-row${active ? '' : ' ds-fill-surface'}`;
+
 const S: Record<string, React.CSSProperties> = {
   root: {
-    width: '100vw', height: '100vh', background: COLOR.bg, color: COLOR.text,
-    fontFamily: tokens.font.family,
-    fontSize: 11.5,
+    width: '100vw', height: '100vh',
     display: 'grid', gridTemplateRows: '48px 1fr', gridTemplateColumns: '1fr',
     overflow: 'hidden',
   },
   header: {
     display: 'flex', alignItems: 'center', gap: 12,
     padding: '0 16px',
-    background: tokens.glass.surfaceStrong,
-    backdropFilter: tokens.backdrop,
-    WebkitBackdropFilter: tokens.backdrop,
-    borderBottom: `1px solid ${COLOR.border}`,
-    boxShadow: '0 1px 2px rgba(40,48,80,0.04)',
+    borderBottom: `1px solid var(--ds-hairline)`,
   },
   logo: { display: 'flex', alignItems: 'center', gap: 10 },
-  badge: {
-    ...shellSurface('warn'),
-    padding: '3px 10px',
-    fontSize: tokens.font.size.xs, fontWeight: tokens.font.weight.strong,
-    letterSpacing: tokens.font.tracking.label,
-    fontFamily: tokens.font.mono,
-  },
-  sceneName: { fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: COLOR.text },
   fpsChip: {
     display: 'flex', alignItems: 'center', gap: 6,
     padding: '5px 13px',
-    ...shellSurface('plain', { fill: 'surface' }),
   },
   fpsDot: { width: 6, height: 6, borderRadius: '50%' },
-  fpsVal: { fontSize: 11.5, fontWeight: tokens.font.weight.strong, fontFamily: tokens.font.mono },
-  fpsLabel: { fontSize: 9.5, color: COLOR.textMute, letterSpacing: 1 },
-  viewerBtn: {
-    ...shellSurface('accent'),
-    textDecoration: 'none',
-    padding: '7px 16px',
-    fontSize: tokens.font.size.sm, fontWeight: tokens.font.weight.strong,
-  },
+  viewerBtn: { textDecoration: 'none' },
   body: {
     minHeight: 0, overflow: 'hidden',
     display: 'grid', gridTemplateColumns: 'minmax(440px, 560px) 1fr',
@@ -5411,50 +5396,10 @@ const S: Record<string, React.CSSProperties> = {
   },
 
   kvGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 },
-  kvCell: {
-    background: tokens.gradient.neutral,
-    borderRadius: tokens.radius.sm,
-    padding: '8px 12px',
-    border: `1px solid ${COLOR.border}`,
-    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
-    minWidth: 0,
-  },
-  kvLabel: {
-    fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.5,
-    color: COLOR.textMute, marginBottom: 2, textTransform: 'uppercase',
-    whiteSpace: 'nowrap' as const,
-  },
-  kvVal: {
-    fontSize: 12.5, fontWeight: tokens.font.weight.strong,
-    fontFamily: tokens.font.mono,
-    color: COLOR.text,
-    whiteSpace: 'nowrap' as const,
-  },
+  kvCell: { padding: '8px 12px', minWidth: 0 },
+  kvVal: { whiteSpace: 'nowrap' as const },
 
   btnRow: { display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' },
-  btn: {
-    ...shellSurface('neutral', { fill: 'neutral' }),
-    fontSize: tokens.font.size.sm, padding: '7px 15px',
-    cursor: 'pointer', fontWeight: tokens.font.weight.strong,
-    outline: 'none',
-  },
-  btnPrimary: {
-    // Plain white, not green. These are ordinary "add a plan / a viewpoint /
-    // a variant" actions inside the 全体 and プラン tabs; green read as a
-    // confirmation that nothing had actually confirmed. The success hue is
-    // kept for states that genuinely report one.
-    ...shellSurface('plain', { fill: 'surface' }),
-    fontSize: tokens.font.size.sm, padding: '7px 15px',
-    cursor: 'pointer', fontWeight: tokens.font.weight.strong,
-    outline: 'none',
-  },
-  btnDanger: {
-    width: '100%', marginTop: 8,
-    ...shellSurface('danger'),
-    fontSize: tokens.font.size.sm, padding: '8px 15px',
-    cursor: 'pointer', fontWeight: tokens.font.weight.strong,
-    outline: 'none',
-  },
   /* Raised, not sunken. The sunken recipe (shadow on top, no outer drop)
      belongs to things you type INTO — inputs, tracks. Using it for a button
      said "this is a slot" while the control was in fact pressable, which is
@@ -5465,104 +5410,30 @@ const S: Record<string, React.CSSProperties> = {
     textAlign: 'center' as const,
   },
 
-  inlineCard: {
-    marginTop: 10, padding: 10,
-    background: 'rgba(34,197,94,0.08)',
-    border: '1px solid rgba(34,197,94,0.25)',
-    borderRadius: 8,
-  },
-  input: {
-    width: '100%', padding: '10px 14px',
-    background: tokens.gradient.track,
-    borderWidth: 0,
-    borderStyle: 'solid' as const,
-    borderColor: 'transparent',
-    borderRadius: tokens.radius.pill,
-    color: COLOR.text, fontSize: 11.5,
-    outline: 'none', fontFamily: tokens.font.family,
-    boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
-    boxSizing: 'border-box' as const,
-  },
-  inputInline: {
-    width: '100%', padding: '4px 10px',
-    background: tokens.gradient.track,
-    borderWidth: 0,
-    borderStyle: 'solid' as const,
-    borderColor: 'transparent',
-    borderRadius: tokens.radius.pill,
-    color: COLOR.text, fontSize: 11.5, outline: 'none',
-    fontFamily: tokens.font.family,
-    boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
-  },
-  formLabel: {
-    fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.6,
-    color: COLOR.textMute, textTransform: 'uppercase' as const,
-  },
-  formInput: {
-    width: '100%', padding: '10px 14px',
-    background: tokens.gradient.track,
-    borderWidth: 0,
-    borderStyle: 'solid' as const,
-    borderColor: 'transparent',
-    borderRadius: tokens.radius.pill,
-    color: COLOR.text, fontSize: 11.5,
-    outline: 'none', fontFamily: tokens.font.family,
-    boxSizing: 'border-box' as const,
-    boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
-  },
-
-  empty: {
-    padding: '20px 10px', textAlign: 'center' as const,
-    color: COLOR.textMute, fontSize: 11.5,
-  },
+  inlineCard: { marginTop: 10, padding: 10 },
+  /* `input` / `inputInline` / `formInput` were three copies of the sunken
+     recipe. `design-system.css` styles `<input>` at ELEMENT level, so a bare
+     input is already correct and only its size belongs here. */
+  input: {},
+  inputInline: { padding: '4px 10px' },
+  formInput: {},
 
   vpList: { display: 'flex', flexDirection: 'column', gap: 6 },
-  vpRow: {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '10px 12px',
-    background: tokens.gradient.surface,
-    borderWidth: 1,
-    borderStyle: 'solid' as const,
-    borderColor: COLOR.border,
-    borderRadius: tokens.radius.md,
-    transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
-    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
-  },
-  vpRowDropTarget: {
-    // Highlight while a file is dragged over this row. Same accent family
-    // as the active state so the row clearly says "I'll receive this drop."
-    background: tokens.gradient.success,
-    borderColor: tokens.color.successBorder,
-    boxShadow: `inset 0 0 0 2px ${tokens.color.successBorder}, ${tokens.shadow.glassSuccess}`,
-  } as React.CSSProperties,
-  vpRowReorderTarget: {
-    borderColor: tokens.color.accentBorder,
-    boxShadow: `inset 0 2px 0 0 ${tokens.color.accentBorder}`,
-  } as React.CSSProperties,
   vpDragHandle: {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: 16, height: 28,
-    color: COLOR.textMute, fontSize: 12.5,
     cursor: 'grab', userSelect: 'none' as const,
     flexShrink: 0,
   } as React.CSSProperties,
-  vpRowActive: {
-    background: tokens.gradient.accent,
-    borderColor: tokens.color.accentBorder,
-    boxShadow: tokens.shadow.glassAccent,
-  },
   vpDot: {
     width: 10, height: 10, borderRadius: '50%', padding: 0,
-    border: '2px solid rgba(0,0,0,0.15)', cursor: 'pointer',
+    cursor: 'pointer',
     flexShrink: 0,
   },
   vpThumb: {
     position: 'relative' as const,
     width: 56, height: 42,
     padding: 0,
-    border: '1px solid rgba(0,0,0,0.12)',
-    borderRadius: 6,
-    background: '#ffffff',
     overflow: 'hidden',
     cursor: 'pointer',
     flexShrink: 0,
@@ -5573,44 +5444,24 @@ const S: Record<string, React.CSSProperties> = {
   vpThumbEmpty: {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: '100%', height: '100%',
-    color: 'rgba(0,0,0,0.3)', fontSize: 12.5,
   },
-  vpThumbBadge: {
-    position: 'absolute' as const,
-    top: 2, right: 2,
-    background: 'rgba(34,197,94,0.85)', color: '#ffffff',
-    fontSize: 9.5, fontWeight: tokens.font.weight.strong,
-    padding: '1px 4px', borderRadius: 3,
-    fontFamily: tokens.font.mono,
-    letterSpacing: 0.4,
-  },
+  vpThumbBadge: { position: 'absolute' as const, top: 2, right: 2 },
   vpLabel: {
-    fontSize: 11.5, fontWeight: tokens.font.weight.strong, cursor: 'pointer',
+    cursor: 'pointer',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   vpMeta: {
-    fontSize: 9.5, color: COLOR.textMute, marginTop: 2,
-    fontFamily: tokens.font.mono,
+    marginTop: 2,
     display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
     wordBreak: 'break-all' as const,
   },
   vpMetaSep: { opacity: 0.4 },
   vpActions: { display: 'flex', gap: 2, flexShrink: 0 },
-  iconBtn: {
-    background: 'transparent', border: 'none', cursor: 'pointer',
-    color: COLOR.textMute, fontSize: 11.5, width: 24, height: 24,
-    borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
 
-  toggle: {
-    display: 'flex', alignItems: 'center', gap: 8,
-    cursor: 'pointer', fontSize: 11.5, userSelect: 'none',
-    padding: '4px 0',
-  },
+  toggle: { userSelect: 'none', padding: '4px 0' },
   subTitle: {
     display: 'flex', alignItems: 'center', gap: 6,
-    fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 1,
-    color: COLOR.textDim, marginTop: 12, marginBottom: 6,
+    marginTop: 12, marginBottom: 6,
   },
   colorDot: { width: 8, height: 8, borderRadius: '50%' },
 

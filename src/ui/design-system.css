@@ -710,6 +710,30 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
 }
 .ds-navitem:hover { background-color: rgba(112, 180, 222, 0.10); }
 .ds-navitem[data-active='true'] { background-color: rgba(112, 180, 222, 0.16); color: #357fb2; }
+/* Bare icon button — a glyph you can press, with no surface of its own. For
+   dense rows (a list entry's five actions) where one shell per button would
+   read as a wall of pills rather than a row of affordances. */
+.ds-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ds-r-sm);
+  background: none;
+  box-shadow: none;
+  color: var(--ds-text-mute);
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-md);
+  cursor: pointer;
+  outline: none;
+  transition: background-color var(--ds-dur) var(--ds-ease), color var(--ds-dur) var(--ds-ease);
+}
+.ds-iconbtn:hover:not(:disabled) { background-color: rgba(112, 180, 222, 0.12); color: var(--ds-text); }
+.ds-iconbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
 /* Stacked variant — glyph over label, used where the toolbar is a strip. */
 .ds-navitem--stacked { flex-direction: column; gap: 3px; width: 56px; padding: 8px 4px; text-align: center; }
 
@@ -782,6 +806,32 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
      nothing to declare inline. Colour pickers still pass their own. */
   background: #7cc0e8;
   box-shadow: var(--ds-inner);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Row — a selectable entry in a list (a plan, a viewpoint)
+   ─────────────────────────────────────────────────────────────────────────
+   Its states are DATA ATTRIBUTES, not style objects merged at render. Three
+   spreads in a row (`...base, ...(active), ...(dropTarget)`) can silently
+   half-apply — the second wins on `boxShadow` while the third still owns
+   `borderColor` — which is how a row being dragged onto ended up green-edged
+   but flat.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--ds-r-md);
+}
+/* Receiving a file. Same family as the active state so the row says "I'll
+   take this" without pretending to be selected. */
+.ds-row[data-drop='true'] {
+  box-shadow: var(--ds-inner), 0 0 0 2px rgba(150, 192, 112, 0.80), var(--ds-lift);
+}
+/* Insertion point during a reorder drag — a line, not a fill. */
+.ds-row[data-reorder='true'] {
+  box-shadow: var(--ds-inner), inset 0 2px 0 0 rgba(112, 180, 222, 0.90);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
