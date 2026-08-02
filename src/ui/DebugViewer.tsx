@@ -3505,7 +3505,7 @@ function SaveIndicator({ state, lastSavedAt, onClick }: {
 function Section({ title, subtitle, action, children, defaultOpen = true }: { title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className={`${surfaceClass('plain')} ds-section ds-fill-surface`}>
+    <section className={`${surfaceClass('plain')} ds-section ds-fill-surface`} data-open={open || undefined}>
       <header className="ds-section__head">
         <button
           type="button"

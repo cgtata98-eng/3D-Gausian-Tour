@@ -582,6 +582,7 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
 }
 /* Collapsed handle — the block reduced to a bar you can reopen. */
 .ds-block--closed { padding: 8px 12px; cursor: pointer; }
+.ds-block--closed:hover { transform: translateY(-1px); filter: brightness(1.02); }
 
 /* ══════════════════════════════════════════════════════════════════════════
    Collapsible section — the editor panel's unit of grouping
@@ -596,15 +597,38 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
    back the clearance the corner geometry eats.
    ══════════════════════════════════════════════════════════════════════════ */
 .ds-section { border-radius: var(--ds-r-md); overflow: hidden; flex-shrink: 0; }
+/* The head used to paint its own opaque grey gradient across the full width.
+   On a CLOSED section that gradient IS the whole card, so every group in the
+   panel read as a flat grey slab with a hairline under it — the one surface in
+   the app that had opted out of the shell. It is transparent now: the section's
+   own fill shows through, the ring runs unbroken around it, and the separator
+   appears only when there is something below it to separate. */
 .ds-section__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   padding: 10px var(--ds-space-4);
-  background-image: linear-gradient(180deg, #fcfcfc 0%, #f1f1f1 100%);
-  border-bottom: 1px solid var(--ds-hairline);
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--ds-dur) var(--ds-ease),
+    background-color var(--ds-dur) var(--ds-ease);
 }
+.ds-section[data-open='true'] .ds-section__head { border-bottom-color: var(--ds-hairline); }
+
+/* A closed section is a button the full width of the panel, and it had no
+   response at all: no lift under the pointer, no give on press. Everything
+   else in the app answers the pointer, so a dead group header read as a
+   disabled one.
+
+   Only while CLOSED. An open section is a container holding a canvas or a
+   live minimap; lifting all of that because the pointer crossed its header
+   would be a large object moving for a small reason. */
+.ds-section:not([data-open]):hover { transform: translateY(-1px); filter: brightness(1.02); }
+.ds-section:not([data-open]):active { transform: scale(0.99); filter: brightness(0.99); }
+/* Open: the header alone answers, and only faintly. */
+.ds-section[data-open] .ds-section__head:hover { background-color: rgba(112, 180, 222, 0.06); }
+
 .ds-section__toggle {
   flex: 1;
   min-width: 0;
@@ -627,8 +651,11 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   text-align: center;
   font-size: var(--ds-fs-xs);
   color: var(--ds-text-mute);
-  transition: transform 0.15s var(--ds-ease);
+  /* Matches the body's opening, so the mark and the content move together
+     rather than the arrow finishing while the panel is still arriving. */
+  transition: transform 0.26s var(--ds-ease), color var(--ds-dur) var(--ds-ease);
 }
+.ds-section[data-open='true'] .ds-section__chevron { color: #357fb2; }
 .ds-section__title {
   font-size: var(--ds-fs-md);
   font-weight: var(--ds-fw);
@@ -643,7 +670,19 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   text-transform: uppercase;
   color: #357fb2;
 }
-.ds-section__body { padding: var(--ds-space-4); }
+/* Opening is animated on the BODY, not on a wrapper height, because the body
+   is mounted only while open — several of these hold a canvas or a live
+   minimap, and keeping them mounted just to animate a height would cost more
+   than the animation is worth. Fading and rising into place reads as the
+   panel arriving; a hard cut read as a layout jump. */
+.ds-section__body {
+  padding: var(--ds-space-4);
+  animation: ds-section-open 0.26s var(--ds-ease) both;
+}
+@keyframes ds-section-open {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    Sidebar — flush against an edge of the window
@@ -1254,7 +1293,9 @@ input[type='range']::-moz-range-thumb {
   text-align: left;
   cursor: pointer;
   outline: none;
+  transition: background-color var(--ds-dur) var(--ds-ease);
 }
+.ds-rowbtn:hover { background-color: rgba(112, 180, 222, 0.08); }
 .ds-sub { font-size: var(--ds-fs-sm); font-weight: var(--ds-fw); color: var(--ds-text-mute); }
 .ds-label {
   font-size: var(--ds-fs-xs);
@@ -1410,4 +1451,15 @@ input[type='range']::-moz-range-thumb {
    enough to stay legible. */
 @media (prefers-reduced-motion: reduce) {
   .ds-surface, .ds-seg__ind, .ds-seg__btn { transition-duration: 90ms; }
+  /* The section still arrives rather than cutting in — just faster, and
+     without the travel, which is the part the setting is actually about.
+     A separate keyframe rather than redefining `ds-section-open` inside the
+     query: same-name redefinition works but depends on cascade order between
+     two @keyframes blocks, which is exactly the kind of thing that silently
+     stops working. */
+  .ds-section__body { animation: ds-section-open-reduced 90ms var(--ds-ease) both; }
+}
+@keyframes ds-section-open-reduced {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
