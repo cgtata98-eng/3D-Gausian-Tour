@@ -41,7 +41,7 @@ import { targetFromYaw } from '../core/viewpoint';
 import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
 import { tokens , shellSurface } from './design-tokens';
-import { surfaceClass, Chip, Tag, PillToggle, IconClose, IconTrash, IconCheck } from './components';
+import { surfaceClass, Chip, Tag, PillToggle, SegmentedControl, IconClose, IconTrash, IconCheck } from './components';
 import * as idb from '../utils/idb';
 import { unzipSync } from 'fflate';
 
@@ -4156,64 +4156,36 @@ function VideoTabPanel(props: {
 
   return (
     <Section title="動画" subtitle="VIDEO" defaultOpen={true}>
-      {/* movement mode (walk / fly) — locked while a path recording / countdown is mid-flow */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 10, padding: 5, background: tokens.glass.surfaceStrong, backdropFilter: tokens.backdrop, WebkitBackdropFilter: tokens.backdrop, border: `1px solid ${COLOR.border}`, borderRadius: tokens.radius.pill, boxShadow: tokens.shadow.glass }}>
-        <span style={{ fontSize: 10.5, color: COLOR.textMute, minWidth: 64, paddingLeft: 8, fontWeight: tokens.font.weight.strong }}>移動モード</span>
-        {([['walk', '歩く'], ['fly', 'フライ']] as const).map(([k, label]) => (
-          <button
-            key={k}
-            type="button"
-            className="video-btn-tap"
-            onClick={() => setMovementMode(k)}
-            disabled={movementLocked}
-            style={{
-              flex: 1, padding: '7px 12px', fontSize: 11.5, fontWeight: tokens.font.weight.strong,
-              borderRadius: tokens.radius.pill, cursor: movementLocked ? 'not-allowed' : 'pointer',
-              background: movementMode === k ? tokens.gradient.accent : 'transparent',
-              border: `1px solid ${movementMode === k ? tokens.color.accentBorder : 'transparent'}`,
-              boxShadow: movementMode === k ? tokens.shadow.glassAccent : 'none',
-              color: COLOR.text,
-              opacity: movementLocked ? 0.45 : 1,
-              fontFamily: tokens.font.family, outline: 'none',
-              transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
-            }}
-          >
-            {label}
-          </button>
-        ))}
+      {/* movement mode (walk / fly) — locked while a path recording / countdown is mid-flow.
+          Both of these rows were segmented controls rebuilt by hand: a glass tray,
+          transparent segments and an accent recipe on the active one. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span className="ds-label">移動モード</span>
+        <SegmentedControl
+          value={movementMode}
+          onChange={setMovementMode}
+          options={[
+            { id: 'walk', label: '歩く', disabled: movementLocked },
+            { id: 'fly', label: 'フライ', disabled: movementLocked },
+          ]}
+        />
       </div>
 
       {/* mode tabs */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 10, padding: 5, background: tokens.glass.surfaceStrong, backdropFilter: tokens.backdrop, WebkitBackdropFilter: tokens.backdrop, border: `1px solid ${COLOR.border}`, borderRadius: tokens.radius.pill, boxShadow: tokens.shadow.glass }}>
-        {([['path', 'scene 補間', 'カメラ位置を補間して動画化'], ['free', '画面操作', '操作画面をそのまま録画']] as const).map(([k, label, sub]) => (
-          <button
-            key={k}
-            type="button"
-            className="video-btn-tap"
-            onClick={() => props.setMode(k)}
-            disabled={props.recState !== 'idle' || props.freeRecState !== 'idle'}
-            style={{
-              padding: '8px 8px', fontSize: 11.5, lineHeight: 1.3,
-              borderRadius: tokens.radius.pill, cursor: 'pointer', textAlign: 'center',
-              background: props.mode === k ? tokens.gradient.accent : 'transparent',
-              border: `1px solid ${props.mode === k ? tokens.color.accentBorder : 'transparent'}`,
-              boxShadow: props.mode === k ? tokens.shadow.glassAccent : 'none',
-              color: COLOR.text,
-              fontWeight: tokens.font.weight.strong,
-              fontFamily: tokens.font.family, outline: 'none',
-              transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
-            }}
-          >
-            <div>{label}</div>
-            <div style={{ fontSize: 9.5, fontWeight: tokens.font.weight.medium, color: COLOR.textMute, marginTop: 1 }}>{sub}</div>
-          </button>
-        ))}
-      </div>
+      <PillToggle
+        value={props.mode}
+        onChange={props.setMode}
+        options={[
+          { value: 'path', title: 'scene 補間', sub: 'カメラ位置を補間して動画化', disabled: props.recState !== 'idle' || props.freeRecState !== 'idle' },
+          { value: 'free', title: '画面操作', sub: '操作画面をそのまま録画', disabled: props.recState !== 'idle' || props.freeRecState !== 'idle' },
+        ]}
+        style={{ marginBottom: 10 }}
+      />
 
       {props.mode === 'path' ? <PathRecordingPanel {...props} /> : <FreeRecordingPanel {...props} />}
 
       {props.error && (
-        <div style={{ marginTop: 8, padding: '6px 8px', fontSize: 10.5, color: '#991b1b', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 6 }}>
+        <div className={`${surfaceClass('danger')} ds-panel`} style={{ marginTop: 8 }}>
           {props.error}
         </div>
       )}
@@ -4392,13 +4364,13 @@ function PathRecordingPanel({
 
   return (
     <>
-      <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.65)', lineHeight: 1.5, marginBottom: 8 }}>
+      <div className="ds-hint" style={{ marginBottom: 8 }}>
         カメラを動かし「+ 現在のカメラを scene として追加」を繰り返すと、その順にカメラが動く動画になります。
         scene 行の右の数値は「次の scene までの秒数」。
       </div>
 
       {keyframes.length === 0 && (
-        <div style={{ padding: '12px', fontSize: 10.5, color: tokens.color.textFaint, textAlign: 'center', border: '1px dashed rgba(0,0,0,0.2)', borderRadius: 6 }}>
+        <div className="ds-dropzone">
           まだ scene がありません。下の「+ scene を追加」を押してください。
         </div>
       )}
@@ -4415,50 +4387,41 @@ function PathRecordingPanel({
             onDragLeave={handleSceneDragLeave}
             onDrop={handleSceneDrop(i)}
             onDragEnd={handleSceneDragEnd}
+            className="ds-well"
+            data-reorder={isDropTarget || undefined}
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
               margin: '6px 0', padding: '6px',
-              background: 'rgba(0,0,0,0.025)',
-              border: `1px solid ${isDropTarget ? '#3b82f6' : 'transparent'}`,
-              borderRadius: 6,
               opacity: isDragging ? 0.4 : 1,
               cursor: isBusy ? 'default' : 'grab',
-              transition: 'border-color 100ms, opacity 100ms',
             }}
           >
-            <span title="ドラッグで並べ替え" style={{ fontSize: 12.5, color: 'rgba(0,0,0,0.35)', userSelect: 'none', cursor: isBusy ? 'default' : 'grab', flexShrink: 0 }}>⋮⋮</span>
+            <span title="ドラッグで並べ替え" className="ds-faint" style={{ userSelect: 'none', cursor: isBusy ? 'default' : 'grab', flexShrink: 0 }}>⋮⋮</span>
             {/* thumbnail */}
             {kf.thumbnail ? (
               <img
                 src={kf.thumbnail}
                 alt={`scene ${i + 1}`}
-                className="video-thumb"
+                className="video-thumb ds-thumb"
                 draggable={false}
                 onClick={() => !isBusy && jumpToIndex(i)}
-                style={{ width: 84, height: 56, objectFit: 'cover', borderRadius: 4, cursor: isBusy ? 'default' : 'pointer', flexShrink: 0 }}
+                style={{ width: 84, height: 56, cursor: isBusy ? 'default' : 'pointer' }}
               />
             ) : (
-              <div style={{ width: 84, height: 56, background: 'rgba(0,0,0,0.08)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, color: tokens.color.textFaint, flexShrink: 0 }}>no img</div>
+              <div className="ds-thumb" style={{ width: 84, height: 56 }}>no img</div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong }}>scene{i + 1}</span>
+                <span className="ds-title">scene{i + 1}</span>
                 {/* 通過 / 停止 toggle — only meaningful on middle waypoints. First / last
                     always stop because the path starts and ends at rest. */}
                 {i > 0 && !isLast && (
                   <button
                     type="button"
-                    className="video-btn-tap"
                     onClick={() => togglePassThrough(i)}
                     disabled={isBusy}
                     title={kf.passThrough ? '通過 (止まらない) — クリックで停止に切替' : '停止 (waypoint で減速) — クリックで通過に切替'}
-                    style={{
-                      padding: '1px 6px', fontSize: 9.5, fontWeight: tokens.font.weight.strong, borderRadius: 999,
-                      background: kf.passThrough ? 'rgba(168,85,247,0.14)' : 'rgba(0,0,0,0.04)',
-                      border: `1px solid ${kf.passThrough ? 'rgba(168,85,247,0.5)' : 'rgba(0,0,0,0.15)'}`,
-                      color: kf.passThrough ? '#7e22ce' : tokens.color.textMute,
-                      cursor: isBusy ? 'not-allowed' : 'pointer',
-                    }}
+                    className={`video-btn-tap ${surfaceClass(kf.passThrough ? 'processing' : 'neutral')} ds-pill ds-pill--xs${kf.passThrough ? '' : ' ds-fill-neutral'}`}
                   >
                     {kf.passThrough ? '⤳ 通過' : '■ 停止'}
                   </button>
@@ -4510,19 +4473,15 @@ function PathRecordingPanel({
 
       <button
         type="button"
-        className="video-btn-tap"
+        className="video-btn-tap ds-dropzone"
         onClick={addCurrentAsScene}
         disabled={isBusy}
-        style={{
-          width: '100%', marginTop: 6, padding: '8px 10px', fontSize: 11.5, fontWeight: tokens.font.weight.strong,
-          borderRadius: 8, border: '1px dashed rgba(0,0,0,0.3)', background: '#fff',
-          cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.4 : 1,
-        }}
+        style={{ marginTop: 6 }}
       >
         + 現在のカメラを scene{keyframes.length + 1} として追加
       </button>
 
-      <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLOR.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--ds-hairline)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <span className="ds-sub">合計 <strong className="ds-title">{totalSec.toFixed(1)}秒</strong></span>
         <div style={{ flex: 1 }} />
         <span className="ds-sub">FPS</span>
@@ -4530,19 +4489,9 @@ function PathRecordingPanel({
           <button
             key={f}
             type="button"
-            className="video-btn-tap"
+            className={`video-btn-tap ${surfaceClass(fps === f ? 'accent' : 'plain')} ds-pill ds-pill--xs${fps === f ? '' : ' ds-fill-surface'}`}
             onClick={() => setFps(f)}
             disabled={isBusy}
-            style={{
-              padding: '5px 14px', fontSize: 10.5, borderRadius: tokens.radius.pill,
-              background: fps === f ? tokens.gradient.accent : tokens.gradient.surface,
-              border: `1px solid ${fps === f ? tokens.color.accentBorder : COLOR.border}`,
-              boxShadow: fps === f ? tokens.shadow.glassAccent : tokens.shadow.glass,
-              color: COLOR.text,
-              cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: tokens.font.weight.strong,
-              fontFamily: tokens.font.family, outline: 'none',
-              transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
-            }}
           >
             {f}
           </button>
@@ -4553,7 +4502,7 @@ function PathRecordingPanel({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <span className="ds-sub">プレビュー位置</span>
           <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 10.5, color: tokens.color.textMute, fontFamily: 'monospace' }}>
+          <span className="ds-mono ds-sub">
             {(progress * totalSec).toFixed(1)}s / {totalSec.toFixed(1)}s
           </span>
         </div>
@@ -4570,15 +4519,12 @@ function PathRecordingPanel({
             style={{ width: '100%', accentColor: isBusy ? tokens.color.danger : tokens.color.accent, display: 'block' }}
           />
           {/* trim range bar — green strip showing what will be exported */}
-          <div style={{ position: 'relative', height: 6, marginTop: 2, background: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+          <div className="ds-progress" style={{ position: 'relative', width: '100%', height: 6, marginTop: 2 }}>
             <div
+              className="ds-trimband"
               style={{
-                position: 'absolute', top: 0, bottom: 0,
                 left: `${trimStart * 100}%`,
                 width: `${(trimEnd - trimStart) * 100}%`,
-                background: 'rgba(34,197,94,0.5)',
-                borderLeft: '2px solid #15803d',
-                borderRight: '2px solid #15803d',
               }}
             />
           </div>
@@ -4590,23 +4536,20 @@ function PathRecordingPanel({
       </div>
 
       {/* trim controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '6px 8px', background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 6 }}>
-        <span style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: '#15803d', minWidth: 56 }}>出力範囲</span>
-        <span style={{ fontSize: 9.5, color: 'rgba(0,0,0,0.65)', fontFamily: 'monospace', flex: 1 }}>
+      <div className={`${surfaceClass('success')} ds-panel`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '6px 8px' }}>
+        <span className="ds-title" style={{ minWidth: 56 }}>出力範囲</span>
+        <span className="ds-mono ds-hint" style={{ flex: 1 }}>
           {(trimStart * totalSec).toFixed(1)}s 〜 {(trimEnd * totalSec).toFixed(1)}s
-          <span style={{ marginLeft: 6, color: 'rgba(0,0,0,0.45)' }}>({((trimEnd - trimStart) * totalSec).toFixed(1)}s)</span>
+          <span className="ds-faint" style={{ marginLeft: 6 }}>({((trimEnd - trimStart) * totalSec).toFixed(1)}s)</span>
         </span>
-        <button type="button" className="video-btn-tap" onClick={handleSetTrimStart} disabled={isBusy}
+        <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={handleSetTrimStart} disabled={isBusy}
           title="現在のスクラブ位置を開始に設定"
-          style={{ padding: '3px 8px', fontSize: 9.5, fontWeight: tokens.font.weight.strong, borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: '#fff', cursor: isBusy ? 'not-allowed' : 'pointer' }}
         >⊏ 開始</button>
-        <button type="button" className="video-btn-tap" onClick={handleSetTrimEnd} disabled={isBusy}
+        <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={handleSetTrimEnd} disabled={isBusy}
           title="現在のスクラブ位置を終了に設定"
-          style={{ padding: '3px 8px', fontSize: 9.5, fontWeight: tokens.font.weight.strong, borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: '#fff', cursor: isBusy ? 'not-allowed' : 'pointer' }}
         >終了 ⊐</button>
-        <button type="button" className="video-btn-tap" onClick={handleResetTrim} disabled={isBusy || (trimStart === 0 && trimEnd === 1)}
+        <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={handleResetTrim} disabled={isBusy || (trimStart === 0 && trimEnd === 1)}
           title="全体に戻す"
-          style={{ padding: '3px 8px', fontSize: 9.5, borderRadius: 4, border: '1px solid rgba(0,0,0,0.2)', background: '#fff', cursor: isBusy || (trimStart === 0 && trimEnd === 1) ? 'not-allowed' : 'pointer', opacity: isBusy || (trimStart === 0 && trimEnd === 1) ? 0.4 : 1 }}
         >↻</button>
       </div>
 
@@ -4614,67 +4557,51 @@ function PathRecordingPanel({
         {recState === 'previewing' ? (
           <button
             type="button"
-            className="video-btn-cta"
+            className={`video-btn-cta ${surfaceClass('neutral')} ds-pill ds-fill-neutral`}
             onClick={handleStopPreview}
-            style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 11.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
-              borderRadius: tokens.radius.pill,
-              border: `1px solid ${tokens.color.border}`,
-              background: tokens.gradient.neutral, color: tokens.color.text,
-              boxShadow: tokens.shadow.glass,
-              cursor: 'pointer', fontFamily: tokens.font.family, outline: 'none' }}
+            style={{ flex: '1 1 auto' }}
           >
             ■ プレビュー停止
           </button>
         ) : (
           <button
             type="button"
-            className="video-btn-cta"
+            className={`video-btn-cta ${surfaceClass('plain')} ds-pill ds-fill-surface`}
             onClick={handlePreview}
             disabled={!canRun}
-            style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 11.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
-              borderRadius: tokens.radius.pill,
-              border: `1px solid ${tokens.color.border}`,
-              background: tokens.gradient.surface, color: tokens.color.text,
-              boxShadow: tokens.shadow.glass,
-              cursor: canRun ? 'pointer' : 'not-allowed', opacity: canRun ? 1 : 0.45,
-              fontFamily: tokens.font.family, outline: 'none' }}
+            style={{ flex: '1 1 auto' }}
           >
             ▶ プレビュー再生
           </button>
         )}
         <button
           type="button"
-          className="video-btn-cta"
+          className={`video-btn-cta ${surfaceClass('danger')} ds-pill`}
           onClick={handleRecord}
           disabled={!canRun}
-          style={{ flex: '1 1 auto', padding: '10px 16px', fontSize: 11.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
-            borderRadius: tokens.radius.pill,
-            border: `1px solid ${tokens.color.dangerBorder}`,
-            background: tokens.gradient.danger, color: tokens.color.text,
-            boxShadow: tokens.shadow.glass,
-            cursor: canRun ? 'pointer' : 'not-allowed', opacity: canRun ? 1 : 0.45,
-            fontFamily: tokens.font.family, outline: 'none' }}
+          style={{ flex: '1 1 auto' }}
         >
           ● 録画 → MP4 ダウンロード
         </button>
         <button
           type="button"
-          className="video-btn-tap"
+          className={`video-btn-tap ${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`}
           onClick={handleClear}
           disabled={isBusy || keyframes.length === 0}
-          style={{ padding: '8px 12px', fontSize: 11.5,
-            borderRadius: 8, border: '1px solid rgba(0,0,0,0.2)', background: '#fff',
-            cursor: isBusy || keyframes.length === 0 ? 'not-allowed' : 'pointer', opacity: isBusy || keyframes.length === 0 ? 0.4 : 1 }}
         >
-          ✕ 全クリア
+          <IconClose />全クリア
         </button>
       </div>
 
       {isBusy && (
-        <div style={{ marginTop: 10, fontSize: 10.5, color: tokens.color.textMute }}>
+        <div className="ds-sub" style={{ marginTop: 10 }}>
           {recState === 'recording' ? '録画中…' : 'プレビュー再生中…'}
-          <div style={{ marginTop: 4, height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${Math.round(progress * 100)}%`, background: recState === 'recording' ? tokens.color.danger : tokens.color.accent, transition: 'width 80ms linear' }} />
+          <div className="ds-progress" style={{ width: '100%', height: 4, marginTop: 4 }}>
+            <div
+              className="ds-progress__fill"
+              data-tone={recState === 'recording' ? 'danger' : undefined}
+              style={{ width: `${Math.round(progress * 100)}%` }}
+            />
           </div>
         </div>
       )}
@@ -4824,7 +4751,7 @@ function FreeRecordingPanel({
 
   return (
     <>
-      <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.65)', lineHeight: 1.5, marginBottom: 10 }}>
+      <div className="ds-hint" style={{ marginBottom: 10 }}>
         「録画開始」を押すと <strong>{FREE_REC_BUFFER_SEC} 秒</strong>後に録画が始まります（操作の準備時間）。
         「録画停止」を押すと <strong>{FREE_REC_BUFFER_SEC} 秒</strong>後に停止します（仕舞いの操作時間）。
         その間にプレビュー画面で自由にカメラを動かしてください。
@@ -4837,26 +4764,16 @@ function FreeRecordingPanel({
           <button
             key={f}
             type="button"
-            className="video-btn-tap"
+            className={`video-btn-tap ${surfaceClass(fps === f ? 'accent' : 'plain')} ds-pill ds-pill--xs${fps === f ? '' : ' ds-fill-surface'}`}
             onClick={() => setFps(f)}
             disabled={isBusy}
-            style={{
-              padding: '5px 14px', fontSize: 10.5, borderRadius: tokens.radius.pill,
-              background: fps === f ? tokens.gradient.accent : tokens.gradient.surface,
-              border: `1px solid ${fps === f ? tokens.color.accentBorder : COLOR.border}`,
-              boxShadow: fps === f ? tokens.shadow.glassAccent : tokens.shadow.glass,
-              color: COLOR.text,
-              cursor: isBusy ? 'not-allowed' : 'pointer', fontWeight: tokens.font.weight.strong,
-              fontFamily: tokens.font.family, outline: 'none',
-              transition: `background ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
-            }}
           >
             {f}
           </button>
         ))}
         <div style={{ flex: 1 }} />
         {freeRecState === 'recording' && (
-          <span style={{ fontSize: 10.5, color: tokens.color.danger, fontFamily: 'monospace', fontWeight: tokens.font.weight.strong }}>
+          <span className="ds-mono" style={{ color: '#a94b4b' }}>
             ● {elapsedSec.toFixed(1)}s
           </span>
         )}
@@ -4866,15 +4783,9 @@ function FreeRecordingPanel({
       {freeRecState === 'idle' && (
         <button
           type="button"
-          className="video-btn-cta"
+          className={`video-btn-cta ${surfaceClass('danger')} ds-pill ds-pill--lg`}
           onClick={handleStart}
-          style={{ width: '100%', padding: '14px', fontSize: 12, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
-            borderRadius: tokens.radius.pill,
-            border: `1px solid ${tokens.color.dangerBorder}`,
-            background: tokens.gradient.danger, color: tokens.color.text,
-            boxShadow: tokens.shadow.glass,
-            fontFamily: tokens.font.family, outline: 'none',
-            cursor: 'pointer' }}
+          style={{ width: '100%' }}
         >
           ● 録画開始
         </button>
@@ -4882,15 +4793,9 @@ function FreeRecordingPanel({
       {freeRecState === 'starting' && (
         <button
           type="button"
-          className="video-btn-cta"
+          className={`video-btn-cta ${surfaceClass('warn')} ds-pill ds-pill--lg`}
           onClick={handleAbort}
-          style={{ width: '100%', padding: '14px', fontSize: 12, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
-            borderRadius: tokens.radius.pill,
-            border: `1px solid ${tokens.color.warnBorder}`,
-            background: tokens.gradient.warn, color: tokens.color.text,
-            boxShadow: tokens.shadow.glass,
-            fontFamily: tokens.font.family, outline: 'none',
-            cursor: 'pointer' }}
+          style={{ width: '100%' }}
         >
           開始まで {freeRecCountdown}s … キャンセル
         </button>
@@ -4898,15 +4803,9 @@ function FreeRecordingPanel({
       {freeRecState === 'recording' && (
         <button
           type="button"
-          className="video-btn-cta"
+          className={`video-btn-cta ${surfaceClass('neutral')} ds-pill ds-pill--lg ds-fill-neutral`}
           onClick={handleStop}
-          style={{ width: '100%', padding: '14px', fontSize: 12, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
-            borderRadius: tokens.radius.pill,
-            border: `1px solid ${tokens.color.border}`,
-            background: tokens.gradient.neutral, color: tokens.color.text,
-            boxShadow: tokens.shadow.glass,
-            fontFamily: tokens.font.family, outline: 'none',
-            cursor: 'pointer' }}
+          style={{ width: '100%' }}
         >
           ■ 録画停止 → {FREE_REC_BUFFER_SEC} 秒バッファ後に書き出し
         </button>
@@ -4915,13 +4814,8 @@ function FreeRecordingPanel({
         <button
           type="button"
           disabled
-          style={{ width: '100%', padding: '14px', fontSize: 12, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3,
-            borderRadius: tokens.radius.pill,
-            border: `1px solid ${tokens.color.warnBorder}`,
-            background: tokens.gradient.warn, color: tokens.color.text,
-            boxShadow: tokens.shadow.glass, opacity: 0.7,
-            fontFamily: tokens.font.family, outline: 'none',
-            cursor: 'default' }}
+          className={`${surfaceClass('warn')} ds-pill ds-pill--lg`}
+          style={{ width: '100%' }}
         >
           停止まで {freeRecCountdown}s …
         </button>
@@ -4947,19 +4841,18 @@ function VideoOverlay({
         <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
           <div
             key={freeRecCountdown}
-            className="video-countdown-num"
-            style={{ fontSize: 140, fontWeight: tokens.font.weight.strong, color: '#fff', textShadow: '0 6px 24px rgba(0,0,0,0.6)', textAlign: 'center', lineHeight: 1 }}
+            className="video-countdown-num ds-countdown"
           >
             {freeRecCountdown}
           </div>
-          <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12.5, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+          <div className="ds-countdown__label">
             {freeRecState === 'starting' ? '録画開始まで…' : '録画停止まで…'}
           </div>
         </div>
       )}
       {showRecBadge && !showCountdown && (
-        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 10.5, fontWeight: tokens.font.weight.strong, fontFamily: 'monospace' }}>
-            <span className="video-rec-dot" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: tokens.color.danger }} />
+        <div className="ds-hud" style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="video-rec-dot ds-rec-dot" />
             REC {freeRecState === 'recording' ? `${(freeRecElapsedMs / 1000).toFixed(1)}s` : ''}
         </div>
       )}
@@ -5103,18 +4996,17 @@ function ClipLibrarySection({
   const selectedCount = selectedClipIds.size;
 
   return (
-    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--ds-hairline)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: 'rgba(0,0,0,0.75)' }}>ライブラリ</span>
-        <span style={{ fontSize: 10.5, color: tokens.color.textFaint }}>{library.length} 本保存済</span>
+        <span className="ds-title">ライブラリ</span>
+        <span className="ds-hint">{library.length} 本保存済</span>
         <div style={{ flex: 1 }} />
         {selectedCount > 0 && (
           <button
             type="button"
-            className="video-btn-tap"
+            className={`video-btn-tap ${VIDEO_BTN}`}
             onClick={() => setSelectedClipIds(new Set())}
             disabled={isBusy}
-            style={{ padding: '3px 8px', fontSize: 9.5, borderRadius: 6, border: '1px solid rgba(0,0,0,0.15)', background: '#fff', cursor: isBusy ? 'not-allowed' : 'pointer' }}
           >
             選択解除
           </button>
@@ -5122,7 +5014,7 @@ function ClipLibrarySection({
       </div>
 
       {library.length === 0 && (
-        <div style={{ padding: 12, fontSize: 10.5, color: tokens.color.textFaint, textAlign: 'center', border: '1px dashed rgba(0,0,0,0.2)', borderRadius: 6 }}>
+        <div className="ds-dropzone">
           まだ保存された動画はありません。録画すると自動で保存されます。
         </div>
       )}
@@ -5140,22 +5032,16 @@ function ClipLibrarySection({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop(idx)}
             onDragEnd={handleDragEnd}
+            className={checked ? `${surfaceClass('accent')} ds-row` : 'ds-well'}
+            data-reorder={isDropTarget || undefined}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               margin: '4px 0', padding: '6px',
-              background: checked ? 'rgba(59,130,246,0.10)' : 'rgba(0,0,0,0.025)',
-              border: `1px solid ${
-                isDropTarget ? '#3b82f6'
-                  : checked ? 'rgba(59,130,246,0.4)'
-                  : 'transparent'
-              }`,
-              borderRadius: 6,
               opacity: isDragging ? 0.4 : 1,
               cursor: isBusy ? 'default' : 'grab',
-              transition: 'border-color 100ms, opacity 100ms',
             }}
           >
-            <span title="ドラッグで並べ替え" style={{ fontSize: 12.5, color: 'rgba(0,0,0,0.35)', cursor: isBusy ? 'default' : 'grab', userSelect: 'none' }}>⋮⋮</span>
+            <span title="ドラッグで並べ替え" className="ds-faint" style={{ cursor: isBusy ? 'default' : 'grab', userSelect: 'none' }}>⋮⋮</span>
             <input
               type="checkbox"
               checked={checked}
@@ -5168,20 +5054,21 @@ function ClipLibrarySection({
                 src={clip.thumbnail}
                 alt=""
                 draggable={false}
-                style={{ width: 64, height: 40, objectFit: 'cover', borderRadius: 3, flexShrink: 0, pointerEvents: 'none' }}
+                className="ds-thumb"
+                style={{ width: 64, height: 40, pointerEvents: 'none' }}
               />
             ) : (
-              <div style={{ width: 64, height: 40, background: 'rgba(0,0,0,0.08)', borderRadius: 3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, color: tokens.color.textFaint }}>no img</div>
+              <div className="ds-thumb" style={{ width: 64, height: 40 }}>no img</div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: 'rgba(0,0,0,0.8)' }}>
-                <span style={{ marginRight: 4, color: tokens.color.textMute }}>{idx + 1}.</span>
+              <div className="ds-title">
+                <span className="ds-sub" style={{ marginRight: 4 }}>{idx + 1}.</span>
                 {clip.origin === 'path' ? '🎞 scene 補間' : '📹 画面操作'}
-                <span style={{ marginLeft: 6, fontWeight: tokens.font.weight.medium, color: tokens.color.textMute }}>
+                <span className="ds-sub" style={{ marginLeft: 6 }}>
                   {formatDuration(clip.durationMs)} / {formatBytes(clip.bytes)} / .{clip.ext}
                 </span>
               </div>
-              <div style={{ fontSize: 9.5, color: 'rgba(0,0,0,0.45)' }}>
+              <div className="ds-hint">
                 {new Date(clip.createdAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 {clip.planId && <span style={{ marginLeft: 6 }}>plan: {clip.planId}</span>}
               </div>
@@ -5195,31 +5082,22 @@ function ClipLibrarySection({
       {library.length >= 2 && (
         <button
           type="button"
-          className="video-btn-cta"
+          className={`video-btn-cta ${surfaceClass('accent')} ds-pill`}
           onClick={handleConcat}
           disabled={isBusy || selectedCount < 2}
-          style={{
-            width: '100%', marginTop: 8, padding: '10px', fontSize: 11.5, fontWeight: tokens.font.weight.strong,
-            borderRadius: 8, border: '1px solid #1d4ed8', background: '#3b82f6', color: '#fff',
-            cursor: isBusy || selectedCount < 2 ? 'not-allowed' : 'pointer',
-            opacity: isBusy || selectedCount < 2 ? 0.5 : 1,
-          }}
+          style={{ width: '100%', marginTop: 8 }}
         >
           🔗 選択した {selectedCount} 本を結合 → MP4
         </button>
       )}
 
       {concatRunning && concatProgress && (
-        <div style={{ marginTop: 8, fontSize: 10.5, color: tokens.color.textMute }}>
+        <div className="ds-sub" style={{ marginTop: 8 }}>
           結合中… clip {concatProgress.clipIndex + 1} / {concatProgress.total}（{Math.round(concatProgress.t01 * 100)}%）
-          <div style={{ marginTop: 4, height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+          <div className="ds-progress" style={{ width: '100%', height: 4, marginTop: 4 }}>
             <div
-              style={{
-                height: '100%',
-                width: `${Math.round(((concatProgress.clipIndex + concatProgress.t01) / concatProgress.total) * 100)}%`,
-                background: '#3b82f6',
-                transition: 'width 80ms linear',
-              }}
+              className="ds-progress__fill"
+              style={{ width: `${Math.round(((concatProgress.clipIndex + concatProgress.t01) / concatProgress.total) * 100)}%` }}
             />
           </div>
         </div>

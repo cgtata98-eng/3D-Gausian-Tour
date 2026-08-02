@@ -507,6 +507,28 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
    aspect comes from the drawing), so only the frame lives here. */
 .ds-mapframe { position: relative; border-radius: var(--ds-r-sm); overflow: hidden; user-select: none; }
 
+/* Counting the user in, drawn over the picture. Big enough to read at a glance
+   from across a desk, and shadowed rather than boxed so it does not obscure
+   the frame it is counting down over. */
+.ds-countdown {
+  font-family: var(--ds-font);
+  font-size: 140px;
+  line-height: 1;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+}
+.ds-countdown__label {
+  margin-top: 8px;
+  text-align: center;
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-lg);
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+/* The dot beside a REC readout. */
+.ds-rec-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d47c7c; }
+
 /* A rendered image judged on its own — an equirect panorama preview, a video
    frame. It gets a neutral dark ground rather than a shell, because a shell
    would put the app's light source next to the picture's. */
@@ -551,6 +573,21 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   border-radius: var(--ds-r-pill);
   background-image: linear-gradient(180deg, rgba(220, 240, 252, 0.98) 0%, rgba(150, 205, 238, 0.98) 100%);
   transition: width 120ms ease-out;
+}
+/* Recording, not loading — the bar reports something irreversible in progress. */
+.ds-progress__fill[data-tone='danger'] {
+  background-image: linear-gradient(180deg, rgba(245, 228, 228, 0.98) 0%, rgba(212, 124, 124, 0.98) 100%);
+}
+
+/* The exported slice of a timeline, drawn inside a `.ds-progress` track. Green
+   because it reports what WILL be produced — a success, not a position. */
+.ds-trimband {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(150, 192, 112, 0.55);
+  border-left: 2px solid #5c8c3e;
+  border-right: 2px solid #5c8c3e;
 }
 
 /* Reduced motion: the spinner is the one place a loop is the message, so it
@@ -861,6 +898,12 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   padding: var(--ds-space-2);
   background-image: linear-gradient(180deg, #efefef 0%, #f5f5f5 100%);
   box-shadow: var(--ds-inner-sunken);
+  transition: box-shadow var(--ds-dur) var(--ds-ease);
+}
+/* A well can also be a reorder target (the video panel's scene rows). Same
+   signal as `.ds-row[data-reorder]` so the two lists say it the same way. */
+.ds-well[data-reorder='true'] {
+  box-shadow: var(--ds-inner-sunken), 0 0 0 2px rgba(112, 180, 222, 0.85);
 }
 
 /* A dense numeric field: a 64px grid column cannot take the full-size input's
@@ -873,6 +916,47 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   font-size: var(--ds-fs-sm);
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* An outline waiting to be filled: "add a scene here", "drop a file here".
+   Dashed, because a solid frame around nothing reads as a broken element. */
+.ds-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px;
+  border: 1px dashed rgba(0, 0, 0, 0.22);
+  border-radius: var(--ds-r-md);
+  background: none;
+  box-shadow: none;
+  color: var(--ds-text-mute);
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-sm);
+  font-weight: var(--ds-fw);
+  text-align: center;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--ds-dur) var(--ds-ease), background-color var(--ds-dur) var(--ds-ease);
+}
+.ds-dropzone:hover:not(:disabled) { border-color: rgba(112, 180, 222, 0.75); background-color: rgba(112, 180, 222, 0.06); }
+.ds-dropzone:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* A fixed-size still: a keyframe's poster, a clip's cover. Sized by the caller
+   because those sizes come from the media, not from the design system. */
+.ds-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: var(--ds-r-sm);
+  background: var(--ds-surface-soft);
+  box-shadow: var(--ds-inner-sunken);
+  color: var(--ds-text-faint);
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-xs);
+  object-fit: cover;
 }
 
 /* Inline literal in running text — a path, a key name. */
