@@ -41,7 +41,7 @@ import { targetFromYaw } from '../core/viewpoint';
 import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
 import { tokens , shellSurface } from './design-tokens';
-import { surfaceClass, Chip, Tag, IconClose, IconTrash } from './components';
+import { surfaceClass, Chip, Tag, PillToggle, IconClose, IconTrash, IconCheck } from './components';
 import * as idb from '../utils/idb';
 import { unzipSync } from 'fflate';
 
@@ -1077,43 +1077,25 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         {/* LEFT: scrollable settings */}
         <div style={S.left}>
             {/* ===== Tabs: 全体 / プラン / 動画 ===== */}
-            <div style={S.tabBar} role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={debugTab === 'global'}
-                onClick={() => setDebugTab('global')}
-                style={{ ...S.tabBtn, ...(debugTab === 'global' ? S.tabBtnActive : null) }}
-              >
-                <span style={S.tabBtnTitle}>全体</span>
-                <span style={S.tabBtnSub}>GLOBAL</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={debugTab === 'plan'}
-                onClick={() => setDebugTab('plan')}
-                style={{ ...S.tabBtn, ...(debugTab === 'plan' ? S.tabBtnActive : null) }}
-              >
-                <span style={S.tabBtnTitle}>プラン</span>
-                <span style={S.tabBtnSub}>PLAN</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={debugTab === 'video'}
-                onClick={() => setDebugTab('video')}
-                style={{ ...S.tabBtn, ...(debugTab === 'video' ? S.tabBtnActive : null) }}
-              >
-                <span style={S.tabBtnTitle}>動画</span>
-                <span style={S.tabBtnSub}>VIDEO</span>
-              </button>
-            </div>
+            {/* Three two-line buttons plus an "active" recipe — i.e. the shared
+                segmented control, re-implemented. Switching to the real one
+                also brings back the sliding indicator, which a hand-rolled
+                version always loses. */}
+            <PillToggle
+              value={debugTab}
+              onChange={setDebugTab}
+              options={[
+                { value: 'global', title: '全体', sub: 'GLOBAL' },
+                { value: 'plan', title: 'プラン', sub: 'PLAN' },
+                { value: 'video', title: '動画', sub: 'VIDEO' },
+              ]}
+              style={S.tabBar}
+            />
 
             {/* ===== プラン切替タブ (プランタブの最上部, アクティブプランを切替えるピル) ===== */}
             {debugTab === 'plan' && manifest?.plans && manifest.plans.length > 0 && (
-              <div style={S.planPills} role="tablist" aria-label="プラン切替">
-                <span style={S.planPillsLabel}>PLAN</span>
+              <div className={`${surfaceClass('plain')} ds-pill ds-fill-surface`} style={S.planPills} role="tablist" aria-label="プラン切替">
+                <span className="ds-label" style={S.planPillsLabel}>PLAN</span>
                 {manifest.plans.map((p) => {
                   const isActive = p.id === activePlanId;
                   return (
@@ -1123,7 +1105,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       role="tab"
                       aria-selected={isActive}
                       onClick={() => switchPlan(p.id)}
-                      style={{ ...S.planPill, ...(isActive ? S.planPillActive : null) }}
+                      className={`${surfaceClass(isActive ? 'accent' : 'plain')} ds-pill ds-pill--sm${isActive ? '' : ' ds-fill-surface'}`}
                       title={isActive ? `編集中: ${p.label}` : `${p.label} に切替`}
                     >
                       {p.label}
@@ -1313,21 +1295,21 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   <div style={{ height: 12 }} />
                   <div className="ds-label" style={S.subTitle}>メインサムネ</div>
                   <div style={S.projThumbHead}>
-                    <div style={S.projThumbPreview}>
+                    <div className="ds-tile__thumb" style={S.projThumbPreview}>
                       {currentThumb ? (
                         <img src={currentThumb} alt="" style={S.projThumbPreviewImg} />
                       ) : (
-                        <span style={S.projThumbEmpty}>未設定</span>
+                        <span className="ds-hint">未設定</span>
                       )}
                     </div>
-                    <div style={{ flex: 1, fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.5 }}>
+                    <div className="ds-hint" style={{ flex: 1 }}>
                       プロジェクト一覧カードに表示されるサムネ。下から好きな視点を選択してください。
                     </div>
                     {currentThumb && (
                       <button
                         type="button"
                         onClick={() => setProjectThumbnail(undefined)}
-                        style={S.projThumbReset}
+                        className={dangerXsClass}
                         title="メインサムネをリセット"
                       >
                         リセット
@@ -1335,7 +1317,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     )}
                   </div>
                   {allVpThumbs.length > 0 ? (
-                    <div style={S.projThumbGrid}>
+                    <div className="ds-well" style={S.projThumbGrid}>
                       {allVpThumbs.map(({ planId, planLabel, vp, thumb }) => {
                         const selected = isThumbSelected(thumb);
                         return (
@@ -1344,18 +1326,20 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             type="button"
                             disabled={!thumb}
                             onClick={() => thumb && setProjectThumbnail(thumb)}
-                            style={{ ...S.projThumbCell, ...(selected ? S.projThumbCellActive : null), opacity: thumb ? 1 : 0.4, cursor: thumb ? 'pointer' : 'not-allowed' }}
+                            className={`${surfaceClass(selected ? 'accent' : 'plain')} ds-tile${selected ? '' : ' ds-fill-surface'}`}
+                            data-active={selected}
+                            style={{ position: 'relative' }}
                             title={thumb ? `${planLabel} / ${vp.label} に設定` : 'まだサムネが撮影されていません'}
                           >
-                            {thumb ? (
-                              <img src={thumb} alt="" style={S.projThumbCellImg} />
-                            ) : (
-                              <span style={S.projThumbCellPh}>—</span>
-                            )}
-                            <span style={S.projThumbCellLabel}>
+                            <span className="ds-tile__thumb">
+                              {thumb
+                                ? <img src={thumb} alt="" style={S.projThumbCellImg} />
+                                : <span className="ds-faint" style={S.projThumbCellPh}>—</span>}
+                            </span>
+                            <span className="ds-tile__label">
                               {(manifest?.plans?.length ?? 0) > 1 ? `${planLabel} / ` : ''}{vp.label}
                             </span>
-                            {selected && <span style={S.projThumbCheck}>✓</span>}
+                            {selected && <span className="ds-accent" style={S.projThumbCheck}><IconCheck /></span>}
                           </button>
                         );
                       })}
@@ -1498,7 +1482,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 <div className="ds-empty">プランがまだありません</div>
               )}
               {showAddPlan && (
-                <div style={S.inlineCard}>
+                <div className={`${surfaceClass('success')} ds-panel`} style={S.inlineCard}>
                   <input type="text" placeholder="プラン名を入力（例: モダン / 北欧）" value={newPlanName}
                     onChange={e => setNewPlanName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addPlan(); if (e.key === 'Escape') setShowAddPlan(false); }}
@@ -1574,7 +1558,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       );
                     })}
                   </div>
-                  <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginTop: 4, lineHeight: 1.5 }}>
+                  <div className="ds-hint" style={{ marginTop: 4 }}>
                     プリセットから選ぶか、独自の音声ファイルをアップロード。ビューア側のスピーカーアイコンから再生切替。
                   </div>
 
@@ -1727,7 +1711,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 
               <label className="ds-check" style={{ ...S.toggle, marginTop: 6 }} title="床面 (Y=0) のグリッドを表示。位置・スケール確認用">
                 <input type="checkbox" checked={showGrid} onChange={toggleGrid} />
-                <span>グリッドを表示 <span style={S.toolbarHint}>(XZ 平面 / 1 m メッシュ)</span></span>
+                <span>グリッドを表示 <span className="ds-hint" style={S.toolbarHint}>(XZ 平面 / 1 m メッシュ)</span></span>
               </label>
 
               {viewMode === 'splat' ? (
@@ -1798,7 +1782,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             </button>
                           )}
                         </div>
-                        <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginBottom: 6, lineHeight: 1.5 }}>
+                        <div className="ds-hint" style={{ marginBottom: 6 }}>
                           PLY が上下逆さま / 床にめり込む場合に調整。プランごとに保存されます。
                         </div>
                         <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginTop: 4 }}>回転 (°)</div>
@@ -1818,7 +1802,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     <button onClick={() => { setShowAddVp(true); setNewVpName(''); }} className={BTN_PRIMARY}>+ 視点として保存</button>
                   </div>
                   {showAddVp && (
-                    <div style={S.inlineCard}>
+                    <div className={`${surfaceClass('success')} ds-panel`} style={S.inlineCard}>
                       <input type="text" placeholder="視点名を入力（例: リビング）" value={newVpName}
                         onChange={e => setNewVpName(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') addVp(); if (e.key === 'Escape') setShowAddVp(false); }}
@@ -1834,7 +1818,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 <>
                   <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 6, lineHeight: 1.5 }}>
                     プレビュー上で <strong>マウスホイール</strong> でズーム可能。<br />
-                    範囲は <code style={S.codeInline}>{manifest?.settings.zoomFovMin ?? 25}°〜{manifest?.settings.zoomFovMax ?? 100}°</code> で固定。
+                    範囲は <code className="ds-code">{manifest?.settings.zoomFovMin ?? 25}°〜{manifest?.settings.zoomFovMax ?? 100}°</code> で固定。
                   </div>
                   {!showZoomRange ? (
                     <button
@@ -1846,10 +1830,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       ズーム範囲を変更…
                     </button>
                   ) : (
-                    <div style={S.zoomRangeBox}>
+                    <div className="ds-well" style={S.zoomRangeBox}>
                       <div style={S.zoomRangeHead}>
                         <span className="ds-label" style={S.subTitle}>拡大縮小範囲 (FOV)</span>
-                        <button type="button" onClick={() => setShowZoomRange(false)} style={S.zoomRangeClose} title="折りたたむ">×</button>
+                        <button type="button" onClick={() => setShowZoomRange(false)} className="ds-iconbtn" title="折りたたむ"><IconClose /></button>
                       </div>
                       <Slider
                         label="最小 (ズームイン上限)"
@@ -2052,7 +2036,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 <div className="ds-empty">読み込み中…</div>
               )}
               {showAddVp && (
-                <div style={S.inlineCard}>
+                <div className={`${surfaceClass('success')} ds-panel`} style={S.inlineCard}>
                   <input
                     type="text"
                     placeholder={isVRMode ? 'VR視点名を入力（例: 玄関 / リビング）' : '視点名を入力（例: リビング）'}
@@ -2256,9 +2240,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     対応形式: JPG / PNG / GIF / WebP / BMP / SVG / AVIF / HEIC / TIFF
                   </div>
                   {fp?.image && (
-                    <div style={S.floorPlanThumbWrap}>
+                    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={S.floorPlanThumbWrap}>
                       <div style={S.floorPlanSticky}>
-                      <div style={S.floorPlanEditorWrap}>
+                      <div className="ds-well" style={S.floorPlanEditorWrap}>
                         <FloorPlanMiniMap
                           onViewpointClick={handleVpClick}
                           editable={true}
@@ -2283,16 +2267,17 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         const vpsForEdit = activePlan?.viewpoints ?? [];
                         if (vpsForEdit.length === 0) return null;
                         return (
-                          <div style={S.vpPosList}>
+                          <div className="ds-well" style={S.vpPosList}>
                             {vpsForEdit.map((vp) => {
                               const isA = activeVp === vp.id;
                               const yawNow = Math.round(getViewpointYaw(vp));
                               return (
-                                <div key={vp.id} style={{ ...S.vpYawRow, ...(isA ? S.vpPosRowActive : null) }}>
+                                <div key={vp.id} style={S.vpYawRow}>
                                   <button
                                     type="button"
                                     onClick={() => handleVpClick(vp.id)}
-                                    style={{ ...S.vpYawSelectBtn, ...(isA ? S.vpYawSelectBtnActive : null) }}
+                                    className={`${surfaceClass(isA ? 'accent' : 'plain')} ds-pill ds-pill--xs${isA ? '' : ' ds-fill-surface'}`}
+                                    style={{ justifyContent: 'flex-start' }}
                                     title={isA ? '選択中（クリックでマップ配置可）' : 'クリックでこの視点を選択'}
                                   >
                                     {isA ? '◉' : '○'} {vp.label}
@@ -2308,10 +2293,11 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                                         const v = parseFloat(e.target.value);
                                         if (Number.isFinite(v)) setViewpointYaw(vp.id, ((v % 360) + 360) % 360);
                                       }}
+                                      className="ds-input--compact"
                                       style={S.vpYawInput}
                                       title="向き (0–360°)"
                                     />
-                                    <span style={S.vpYawUnit}>°</span>
+                                    <span className="ds-mono ds-sub" style={S.vpYawUnit}>°</span>
                                     <input
                                       type="range"
                                       min={0}
@@ -2326,6 +2312,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                                       type="button"
                                       onClick={() => setViewpointYaw(vp.id, 0)}
                                       title="向きを 0° にリセット"
+                                      className="ds-iconbtn"
                                       style={S.vpPosActionBtn}
                                     >
                                       ↺
@@ -2382,7 +2369,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 
               <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
                 <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginBottom: 4 }}>背景色</div>
-                <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginBottom: 8, lineHeight: 1.5 }}>
+                <div className="ds-hint" style={{ marginBottom: 8 }}>
                   HDRI 未設定時に見える背景の色。HDRI を読み込むとその裏側になります。
                 </div>
                 <StudioColorRow label="背景色" value={studioBgColor} onChange={setStudioBgColor} />
@@ -2517,7 +2504,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             useSceneStore.getState().updatePinPlacement(pinMoveTargetId.pinId, pinMoveTargetId.placementId, { position: pos, viewpointId: activeVpId });
             setPinMoveTargetId(null);
           }}
-          style={{ ...S.preview, ...(isDragOver ? S.previewDrag : null), ...(pinMoveTargetId ? { cursor: 'crosshair' } : null) }}
+          className="ds-preview"
+          data-drag={isDragOver || undefined}
+          style={pinMoveTargetId ? { cursor: 'crosshair' } : undefined}
         >
           <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
           <ApiKeySettings />
@@ -2558,9 +2547,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
           )}
           {isLoading && <LoadingScreen />}
           {error && (
-            <div style={S.errorBox}>
-              <div style={{ fontWeight: tokens.font.weight.strong, marginBottom: 6 }}>読み込みエラー</div>
-              <div style={{ fontSize: 11.5, opacity: 0.75 }}>{error}</div>
+            <div className={`${surfaceClass('danger')} ds-overlay ds-overlay--card`} style={S.errorBox}>
+              <div className="ds-title" style={{ marginBottom: 6 }}>読み込みエラー</div>
+              <div className="ds-sub">{error}</div>
             </div>
           )}
           {ready && !isLoading && !error && (
@@ -2579,7 +2568,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             </>
           )}
           {isDragOver && (
-            <div style={S.dragOverlay}><span>画像をドロップして図面を設定</span></div>
+            <div className="ds-dropveil"><span>画像をドロップして図面を設定</span></div>
           )}
           <input
             ref={fileInputRef}
@@ -3002,12 +2991,12 @@ function PinsPlanSection({
       )}
     >
       {moveTargetId && (
-        <div style={pinPlacementBanner}>
+        <div className={`${surfaceClass('success')} ds-panel`} style={pinPlacementBanner}>
           ✏️ 位置変更モード中 — プレビューをクリックでピンを移動 (Esc で解除)
         </div>
       )}
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: tokens.color.textMute, marginBottom: 8, cursor: 'pointer' }}
+      <label className="ds-check" style={{ marginBottom: 8 }}
         title="配置一覧を、今表示中の視点に束縛された配置だけに絞ります">
         <input type="checkbox" checked={onlyCurrentVp} onChange={(e) => setOnlyCurrentVp(e.target.checked)} />
         この視点の配置のみ表示
@@ -3038,14 +3027,15 @@ function PinsPlanSection({
               <button
                 type="button"
                 onClick={() => togglePin(pin.id)}
+                className="ds-rowbtn"
                 style={pinHeaderRow}
                 title={isExpanded ? '折りたたむ' : '展開して編集'}
               >
-                <span style={pinHeaderChevron}>{isExpanded ? '▼' : '▶'}</span>
-                <span style={pinHeaderTitle}>
+                <span className="ds-section__chevron" style={pinHeaderChevron}>{isExpanded ? '▼' : '▶'}</span>
+                <span className="ds-title" style={pinHeaderTitle}>
                   タグ{idx + 1}：{pin.title || '(無題)'}
                 </span>
-                <span style={pinHeaderHint}>
+                <span className="ds-hint" style={pinHeaderHint}>
                   {placementCount > 0 ? `配置：${placementCount}箇所` : '未配置 — ドラッグで配置'}
                 </span>
               </button>
@@ -3177,8 +3167,8 @@ function PinsPlanSection({
                       };
                       return (
                         <div key={pl.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={placementRowStyle}>
-                          <span style={placementVpLabel}>{vpLabel}</span>
+                        <div className="ds-well" style={placementRowStyle}>
+                          <span className="ds-title" style={placementVpLabel}>{vpLabel}</span>
                           <button
                             type="button"
                             title={isMoving ? 'クリックして位置変更モードを解除' : 'プレビューをクリックでこの配置の位置を変更'}
@@ -3209,11 +3199,12 @@ function PinsPlanSection({
                         <div style={placementNudgeRow}>
                           {(['X', 'Y', 'Z'] as const).map((label, axis) => (
                             <div key={label} style={nudgeAxisGroup}>
-                              <span style={nudgeAxisLabel}>{label}</span>
+                              <span className="ds-label" style={nudgeAxisLabel}>{label}</span>
                               <button
                                 type="button"
                                 title={`${label} を -${NUDGE_STEP}m`}
                                 onClick={() => nudge(axis as 0 | 1 | 2, -NUDGE_STEP)}
+                                className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-fill-surface`}
                                 style={nudgeBtn}
                               >−</button>
                               <input
@@ -3224,6 +3215,7 @@ function PinsPlanSection({
                                   const v = parseFloat(e.target.value);
                                   if (Number.isFinite(v)) setAxis(axis as 0 | 1 | 2, v);
                                 }}
+                                className="ds-input--compact"
                                 style={nudgeInput}
                                 title={`${label} 座標 (m)`}
                               />
@@ -3231,6 +3223,7 @@ function PinsPlanSection({
                                 type="button"
                                 title={`${label} を +${NUDGE_STEP}m`}
                                 onClick={() => nudge(axis as 0 | 1 | 2, NUDGE_STEP)}
+                                className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-fill-surface`}
                                 style={nudgeBtn}
                               >＋</button>
                             </div>
@@ -3238,7 +3231,7 @@ function PinsPlanSection({
                         </div>
                         {/* 視点ローカル微調整 (B1): カメラの向き基準で 左右/上下/前後 */}
                         <div style={placementNudgeRow}>
-                          <span style={{ ...nudgeAxisLabel, minWidth: 46 }} title="今の視点の向きを基準に動かします">視点基準</span>
+                          <span className="ds-label" style={{ ...nudgeAxisLabel, minWidth: 46 }} title="今の視点の向きを基準に動かします">視点基準</span>
                           {([
                             ['lr', '←', -1, '左へ'], ['lr', '→', 1, '右へ'],
                             ['ud', '↓', -1, '下へ'], ['ud', '↑', 1, '上へ'],
@@ -3249,6 +3242,7 @@ function PinsPlanSection({
                               type="button"
                               title={`${tip} ${NUDGE_STEP}m`}
                               onClick={() => nudgeLocal(kind, sign)}
+                              className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-fill-surface`}
                               style={nudgeBtn}
                             >{glyph}</button>
                           ))}
@@ -3307,58 +3301,38 @@ const pinThumbStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
+/* Layout only from here — appearance comes from the `.ds-*` classes applied at
+ * the call sites (`.ds-rowbtn` header, `.ds-well` placement row, `.ds-title` /
+ * `.ds-hint` for the type). */
 const pinHeaderRow: React.CSSProperties = {
   width: '100%',
   display: 'flex',
   alignItems: 'center',
   gap: 8,
   padding: 0,
-  background: 'transparent',
-  border: 'none',
-  outline: 'none',
-  cursor: 'pointer',
   textAlign: 'left' as const,
-  fontFamily: tokens.font.family,
-  color: tokens.color.text,
 };
 
-const pinHeaderChevron: React.CSSProperties = {
-  fontSize: 9.5,
-  color: tokens.color.textMute,
-  width: 12,
-  flexShrink: 0,
-};
+const pinHeaderChevron: React.CSSProperties = { width: 12, flexShrink: 0 };
 
 const pinHeaderTitle: React.CSSProperties = {
   flex: 1,
-  fontSize: 11.5,
-  fontWeight: tokens.font.weight.strong,
   whiteSpace: 'nowrap' as const,
   overflow: 'hidden' as const,
   textOverflow: 'ellipsis' as const,
 };
 
-const pinHeaderHint: React.CSSProperties = {
-  fontSize: 9.5,
-  fontWeight: tokens.font.weight.medium,
-  color: tokens.color.textFaint,
-  flexShrink: 0,
-};
+const pinHeaderHint: React.CSSProperties = { flexShrink: 0 };
 
 const placementRowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 6,
   padding: '4px 6px',
-  background: 'rgba(0,0,0,0.03)',
-  borderRadius: tokens.radius.md,
 };
 
 const placementVpLabel: React.CSSProperties = {
   flex: 1,
-  fontSize: 10.5,
-  fontWeight: tokens.font.weight.strong,
-  color: tokens.color.text,
   whiteSpace: 'nowrap' as const,
   overflow: 'hidden' as const,
   textOverflow: 'ellipsis' as const,
@@ -3377,61 +3351,13 @@ const nudgeAxisGroup: React.CSSProperties = {
   flex: 1,
 };
 
-const nudgeAxisLabel: React.CSSProperties = {
-  fontSize: 9.5,
-  fontWeight: tokens.font.weight.strong,
-  color: tokens.color.textMute,
-  width: 10,
-  flexShrink: 0,
-};
+const nudgeAxisLabel: React.CSSProperties = { width: 10, flexShrink: 0 };
 
-const nudgeBtn: React.CSSProperties = {
-  width: 18,
-  height: 18,
-  padding: 0,
-  fontSize: 11.5,
-  lineHeight: 1,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: tokens.glass.surface,
-  borderWidth: 1,
-  borderStyle: 'solid' as const,
-  borderColor: tokens.color.border,
-  borderRadius: tokens.radius.sm,
-  color: tokens.color.text,
-  cursor: 'pointer',
-  flexShrink: 0,
-};
+const nudgeBtn: React.CSSProperties = { width: 18, height: 18, flexShrink: 0 };
 
-const nudgeInput: React.CSSProperties = {
-  width: '100%',
-  minWidth: 0,
-  padding: '2px 3px',
-  fontSize: 9.5,
-  fontFamily: tokens.font.mono,
-  textAlign: 'center' as const,
-  background: 'rgba(255,255,255,0.6)',
-  borderWidth: 1,
-  borderStyle: 'solid' as const,
-  borderColor: tokens.color.border,
-  borderRadius: tokens.radius.sm,
-  color: tokens.color.text,
-};
+const nudgeInput: React.CSSProperties = { width: '100%', minWidth: 0, textAlign: 'center' as const };
 
-const pinPlacementBanner: React.CSSProperties = {
-  padding: '8px 10px',
-  marginBottom: 10,
-  background: tokens.gradient.surface,
-  borderWidth: 0,
-  borderStyle: 'solid' as const,
-  borderColor: 'transparent',
-  borderRadius: tokens.radius.md,
-  fontSize: 10.5,
-  fontWeight: tokens.font.weight.strong,
-  color: tokens.color.text,
-  boxShadow: tokens.shadow.glassSuccess,
-};
+const pinPlacementBanner: React.CSSProperties = { padding: '8px 10px', marginBottom: 10 };
 
 /**
  * FPS overlay shown only inside the Debug preview pane (not in the public Viewer).
@@ -3442,20 +3368,12 @@ const pinPlacementBanner: React.CSSProperties = {
 function FpsOverlay() {
   const fps = useUIStore((s) => s.fps);
   if (fps <= 0) return null;
-  return <div style={fpsOverlayStyle}>FPS {fps}</div>;
+  return <div className="ds-hud" style={fpsOverlayStyle}>FPS {fps}</div>;
 }
 const fpsOverlayStyle: React.CSSProperties = {
   position: 'absolute',
   top: 12,
   right: 12,
-  padding: '6px 10px',
-  background: 'rgba(15, 23, 42, 0.7)',
-  color: '#fff',
-  borderRadius: 6,
-  fontFamily: tokens.font.mono,
-  fontSize: 11.5,
-  fontWeight: tokens.font.weight.strong,
-  letterSpacing: 0.4,
   zIndex: 50,
   pointerEvents: 'none',
 };
@@ -3610,7 +3528,7 @@ function ViewerToolbarSection({
         薄く表示されている項目は、現在のプロジェクト種別 / モードでは元から出ない項目です。
       </div>
 
-      <div style={S.toolbarGroupHead}>サイドバーサイズ</div>
+      <div className="ds-label" style={S.toolbarGroupHead}>サイドバーサイズ</div>
       <div style={{
         display: 'flex', gap: 4, marginTop: 4, padding: 5,
         background: tokens.glass.surfaceStrong,
@@ -3660,11 +3578,11 @@ function ViewerToolbarSection({
           );
         })}
       </div>
-      <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginTop: 6, lineHeight: 1.5 }}>
+      <div className="ds-hint" style={{ marginTop: 6 }}>
         どちらも幅は 320px。「小」は表示中のセクション分だけ縦に伸びます。
       </div>
 
-      <div style={S.toolbarGroupHead}>サイドバー</div>
+      <div className="ds-label" style={S.toolbarGroupHead}>サイドバー</div>
       <ToolbarRow tb={tb} keyName="type"       label={isOtherProject && !isVRMode ? '場所 (プラン切替)' : 'タイプ (プラン切替)'} hint="— 既定 OFF" defaultOff onChange={onChange} />
       {/* 間取り / カラーは「その他」プロジェクトでは概念的に存在しないので
           DOM ごと出さない (grayed out で残しておくと UI のノイズ)。 */}
@@ -3679,7 +3597,7 @@ function ViewerToolbarSection({
       <ToolbarRow tb={tb} keyName="map"        label={isOtherProject ? 'MAP' : 'FLOOR MAP'} hint="— 既定 OFF" defaultOff onChange={onChange} />
       <ToolbarRow tb={tb} keyName="pins"       label="タグ (3D ピン / リンク付き)" hint="— 既定 OFF" defaultOff onChange={onChange} />
 
-      <div style={S.toolbarGroupHead}>オーバーレイ / アイコン</div>
+      <div className="ds-label" style={S.toolbarGroupHead}>オーバーレイ / アイコン</div>
       {/* 環境音 (BGM) と ヘッドトラッキングはパノラマでも使える ─ enable 状態のままにする。
           移動モード切替・画質プリセットは 3DGS 専用なので VR モードでは行ごと非表示。 */}
       <ToolbarRow tb={tb} keyName="audio"      label="環境音アイコン (タイトル右)" hint="— 既定 OFF" defaultOff onChange={onChange} />
@@ -3694,14 +3612,14 @@ function ViewerToolbarSection({
 
       {!isOtherProject && (
         <>
-          <div style={S.toolbarGroupHead}>カラー内のサブ操作 (mansion)</div>
+          <div className="ds-label" style={S.toolbarGroupHead}>カラー内のサブ操作 (mansion)</div>
           <label className="ds-check" style={S.toggle}>
             <input
               type="checkbox"
               checked={!!variants?.furniture}
               onChange={() => onToggleVariant('furniture')}
             />
-            <span>家具切替を表示 <span style={S.toolbarHint}>(家具あり / なし)</span></span>
+            <span>家具切替を表示 <span className="ds-hint" style={S.toolbarHint}>(家具あり / なし)</span></span>
           </label>
           <label className="ds-check" style={S.toggle}>
             <input
@@ -3709,12 +3627,12 @@ function ViewerToolbarSection({
               checked={!!variants?.lighting}
               onChange={() => onToggleVariant('lighting')}
             />
-            <span>情景切替を表示 <span style={S.toolbarHint}>(昼 / 夜)</span></span>
+            <span>情景切替を表示 <span className="ds-hint" style={S.toolbarHint}>(昼 / 夜)</span></span>
           </label>
         </>
       )}
 
-      <div style={S.toolbarGroupHead}>並び替え</div>
+      <div className="ds-label" style={S.toolbarGroupHead}>並び替え</div>
       <SidebarOrderEditor tb={tb} isVRMode={isVRMode} onChange={onChange} />
     </Section>
   );
@@ -3808,7 +3726,7 @@ function SidebarOrderEditor({ tb, isVRMode, onChange }: { tb: ToolbarPatch; isVR
 
   return (
     <div>
-      <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginBottom: 6, lineHeight: 1.5 }}>
+      <div className="ds-hint" style={{ marginBottom: 6 }}>
         サイドバーに表示される項目だけが並びます。ドラッグで順序を入替。表示／非表示は上のチェックボックスで切替。
       </div>
       {visibleOrdered.length === 0 ? (
@@ -3842,7 +3760,7 @@ function SidebarOrderEditor({ tb, isVRMode, onChange }: { tb: ToolbarPatch; isVR
                 }}
               >
                 <span style={{ fontSize: 11.5, color: 'rgba(0,0,0,0.35)', minWidth: 14, lineHeight: 1, cursor: 'grab' }} title="ドラッグして並び替え">⋮⋮</span>
-                <span style={{ fontSize: 9.5, color: tokens.color.textFaint, fontFamily: tokens.font.mono, minWidth: 18 }}>{idx + 1}</span>
+                <span className="ds-mono ds-hint" style={{ minWidth: 18 }}>{idx + 1}</span>
                 <span style={{ fontSize: 10.5, color: '#1f2937', flex: 1 }}>{ORDER_LABELS[id]}</span>
               </div>
             );
@@ -3939,7 +3857,7 @@ function ToolbarRow({
       />
       <span>
         {label}
-        {hint && <span style={S.toolbarHint}>{hint}</span>}
+        {hint && <span className="ds-hint" style={S.toolbarHint}>{hint}</span>}
       </span>
     </label>
   );
@@ -4002,7 +3920,7 @@ function RenderQualitySection({
           パノラマモードでは splat エンジン選択は意味が無いので非表示。 */}
       {!isVRMode && (
         <>
-          <div style={S.toolbarGroupHead}>ビューアエンジン</div>
+          <div className="ds-label" style={S.toolbarGroupHead}>ビューアエンジン</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4 }}>
             <EngineSwitchButton
               label="PlayCanvas"
@@ -4017,7 +3935,7 @@ function RenderQualitySection({
               onClick={() => onSwitchEngine('spark')}
             />
           </div>
-          <div style={{ fontSize: 9.5, color: tokens.color.textFaint, marginTop: 6, lineHeight: 1.4 }}>
+          <div className="ds-hint" style={{ marginTop: 6 }}>
             ボタンを押すと自動でリロードしてエンジンが切り替わります。
           </div>
         </>
@@ -4032,7 +3950,7 @@ function RenderQualitySection({
           PlayCanvas エンジンのときだけ意味があるので Spark 中は隠す。 */}
       {!isVRMode && (cfg.engine ?? 'playcanvas') === 'playcanvas' && (
         <>
-          <div style={S.toolbarGroupHead}>カラーパイプライン</div>
+          <div className="ds-label" style={S.toolbarGroupHead}>カラーパイプライン</div>
           <label className="ds-check" style={{ ...S.toggle, marginTop: 4 }} title="チェックを入れると露出 / トーン / カラー補正が描画に反映されます。外すと学習時の色味のまま表示します。">
             <input
               type="checkbox"
@@ -4065,7 +3983,7 @@ function RenderQualitySection({
 
       {/* カラー調整 — PlayCanvas (CameraFrame) でのみ反映。Spark / mkkellogg では無視される。
           bypass ON 中は CameraFrame が無いので、これらのスライダーは保存はされるが描画には反映されない。 */}
-      <div style={S.toolbarGroupHead}>カラー調整 (PlayCanvas)</div>
+      <div className="ds-label" style={S.toolbarGroupHead}>カラー調整 (PlayCanvas)</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
         <span style={{ fontSize: 10.5, color: tokens.color.textMute, width: 80 }}>トーン</span>
         <select
@@ -4112,7 +4030,7 @@ function Slider({ label, min, max, step, value, onChange }: { label: string; min
   return (
     <div style={{ margin: '8px 0' }}>
       <div style={S.sliderHeader}>
-        <span style={S.sliderLabel}>{label}</span>
+        <span className="ds-sub">{label}</span>
         <input
           type="number"
           inputMode="decimal"
@@ -4126,6 +4044,7 @@ function Slider({ label, min, max, step, value, onChange }: { label: string; min
             if (e.key === 'Enter') { commit((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).blur(); }
             else if (e.key === 'Escape') { setDraft(null); (e.target as HTMLInputElement).blur(); }
           }}
+          className="ds-input--compact"
           style={S.sliderValInput}
         />
       </div>
@@ -4545,47 +4464,43 @@ function PathRecordingPanel({
                   </button>
                 )}
               </div>
-              <div style={{ fontSize: 9.5, color: tokens.color.textFaint, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div className="ds-mono ds-hint" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 ({kf.pose.position[0].toFixed(1)}, {kf.pose.position[1].toFixed(1)}, {kf.pose.position[2].toFixed(1)})
               </div>
               {!isLast && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                  <span style={{ fontSize: 9.5, color: tokens.color.textFaint }}>次の scene へ</span>
+                  <span className="ds-hint">次の scene へ</span>
                   <button
                     type="button"
-                    className="video-btn-tap"
+                    className={`video-btn-tap ${VIDEO_BTN}`}
                     onClick={() => adjustSegmentDuration(i, -1)}
                     disabled={isBusy || kf.durationSec <= 1}
                     title="−1 秒"
-                    style={{ ...btnIcon(isBusy || kf.durationSec <= 1), padding: '2px 8px', fontSize: 11.5, lineHeight: 1, fontWeight: tokens.font.weight.strong }}
+                    style={btnIcon()}
                   >−</button>
-                  <span style={{
-                    minWidth: 28, textAlign: 'center', fontSize: 11.5, fontWeight: tokens.font.weight.strong,
-                    fontFamily: 'monospace', color: 'rgba(0,0,0,0.8)',
-                    padding: '2px 4px', background: '#fff', border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4,
-                  }}>
+                  <span className="ds-mono" style={{ minWidth: 28, textAlign: 'center' }}>
                     {Math.round(kf.durationSec)}
                   </span>
                   <button
                     type="button"
-                    className="video-btn-tap"
+                    className={`video-btn-tap ${VIDEO_BTN}`}
                     onClick={() => adjustSegmentDuration(i, +1)}
                     disabled={isBusy || kf.durationSec >= 60}
                     title="+1 秒"
-                    style={{ ...btnIcon(isBusy || kf.durationSec >= 60), padding: '2px 8px', fontSize: 11.5, lineHeight: 1, fontWeight: tokens.font.weight.strong }}
+                    style={btnIcon()}
                   >+</button>
-                  <span style={{ fontSize: 9.5, color: tokens.color.textFaint }}>秒</span>
+                  <span className="ds-hint">秒</span>
                 </div>
               )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div style={{ display: 'flex', gap: 2 }}>
-                <button type="button" className="video-btn-tap" onClick={() => jumpToIndex(i)} disabled={isBusy} title="この位置にジャンプ" style={btnIcon(isBusy)}>↑</button>
-                <button type="button" className="video-btn-tap" onClick={() => overwriteScene(i)} disabled={isBusy} title="現在のカメラで上書き" style={btnIcon(isBusy)}>⟳</button>
+                <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={() => jumpToIndex(i)} disabled={isBusy} title="この位置にジャンプ" style={btnIcon()}>↑</button>
+                <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={() => overwriteScene(i)} disabled={isBusy} title="現在のカメラで上書き" style={btnIcon()}>⟳</button>
               </div>
               <div style={{ display: 'flex', gap: 2 }}>
-                <button type="button" className="video-btn-tap" onClick={() => moveScene(i, -1)} disabled={isBusy || i === 0} title="上へ" style={btnIcon(isBusy || i === 0)}>▲</button>
-                <button type="button" className="video-btn-tap" onClick={() => moveScene(i, 1)} disabled={isBusy || isLast} title="下へ" style={btnIcon(isBusy || isLast)}>▼</button>
+                <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={() => moveScene(i, -1)} disabled={isBusy || i === 0} title="上へ" style={btnIcon()}>▲</button>
+                <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={() => moveScene(i, 1)} disabled={isBusy || isLast} title="下へ" style={btnIcon()}>▼</button>
                 <button type="button" className={`video-btn-tap ${dangerIconClass}`} onClick={() => removeScene(i)} disabled={isBusy} title="削除"><IconTrash /></button>
               </div>
             </div>
@@ -4608,9 +4523,9 @@ function PathRecordingPanel({
       </button>
 
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLOR.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 10.5, color: COLOR.textMute }}>合計 <strong style={{ color: COLOR.text }}>{totalSec.toFixed(1)}秒</strong></span>
+        <span className="ds-sub">合計 <strong className="ds-title">{totalSec.toFixed(1)}秒</strong></span>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 10.5, color: COLOR.textMute }}>FPS</span>
+        <span className="ds-sub">FPS</span>
         {([60, 30] as const).map((f) => (
           <button
             key={f}
@@ -4636,7 +4551,7 @@ function PathRecordingPanel({
 
       <div style={{ marginTop: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: 10.5, color: tokens.color.textMute }}>プレビュー位置</span>
+          <span className="ds-sub">プレビュー位置</span>
           <span style={{ flex: 1 }} />
           <span style={{ fontSize: 10.5, color: tokens.color.textMute, fontFamily: 'monospace' }}>
             {(progress * totalSec).toFixed(1)}s / {totalSec.toFixed(1)}s
@@ -4667,7 +4582,7 @@ function PathRecordingPanel({
               }}
             />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, fontSize: 9.5, color: tokens.color.textFaint, fontFamily: 'monospace' }}>
+          <div className="ds-mono ds-hint" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
             <span>0s</span>
             <span>{totalSec.toFixed(1)}s</span>
           </div>
@@ -4917,7 +4832,7 @@ function FreeRecordingPanel({
 
       {/* fps */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ fontSize: 10.5, color: COLOR.textMute }}>FPS</span>
+        <span className="ds-sub">FPS</span>
         {([60, 30] as const).map((f) => (
           <button
             key={f}
@@ -5052,12 +4967,12 @@ function VideoOverlay({
   );
 }
 
-const btnIcon = (disabled: boolean): React.CSSProperties => ({
-  padding: '2px 6px', fontSize: 10.5, lineHeight: 1, borderRadius: 4,
-  border: '1px solid rgba(0,0,0,0.2)', background: '#fff',
-  cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.35 : 1,
-  minWidth: 22,
-});
+/** The video panel's dense step buttons. The disabled look is NOT spelled here:
+ *  `.ds-pill:disabled` already dims and blocks it, and these buttons all carry
+ *  a real `disabled` attribute — saying it twice is how the two drifted apart
+ *  (0.35 opacity here, 0.45 in the design system). */
+const VIDEO_BTN = `${surfaceClass('plain')} ds-pill ds-pill--xs ds-fill-surface`;
+const btnIcon = (): React.CSSProperties => ({ minWidth: 22 });
 
 // ── Clip library section ─────────────────────────────────────────
 function ClipLibrarySection({
@@ -5271,7 +5186,7 @@ function ClipLibrarySection({
                 {clip.planId && <span style={{ marginLeft: 6 }}>plan: {clip.planId}</span>}
               </div>
             </div>
-            <button type="button" className="video-btn-tap" onClick={() => handleRedownload(clip)} disabled={isBusy} title="再ダウンロード" style={btnIcon(isBusy)}>↓</button>
+            <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={() => handleRedownload(clip)} disabled={isBusy} title="再ダウンロード" style={btnIcon()}>↓</button>
             <button type="button" className={`video-btn-tap ${dangerIconClass}`} onClick={() => handleDelete(clip.id)} disabled={isBusy} title="削除"><IconTrash /></button>
           </div>
         );
@@ -5468,22 +5383,16 @@ const S: Record<string, React.CSSProperties> = {
   fpsBig: {
     display: 'flex', alignItems: 'baseline', gap: 6,
     marginTop: 10, padding: '14px 16px',
-    background: tokens.gradient.neutral,
-    border: `1px solid ${COLOR.border}`,
-    borderRadius: tokens.radius.md,
-    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
   },
-  fpsBigLabel: { fontSize: 10.5, color: COLOR.textMute, fontWeight: tokens.font.weight.strong, letterSpacing: 1 },
 
   infoRow: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     gap: 8,
-    padding: '6px 0', borderBottom: `1px solid ${COLOR.borderSoft}`,
-    fontSize: 11.5,
+    padding: '6px 0', borderBottom: '1px solid var(--ds-hairline)',
   },
-  infoLabel: { color: COLOR.textMute, flexShrink: 0 },
+  infoLabel: { flexShrink: 0 },
   infoVal: {
-    color: COLOR.text, textAlign: 'right' as const,
+    textAlign: 'right' as const,
     minWidth: 0, flex: 1,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
   },
@@ -5492,9 +5401,6 @@ const S: Record<string, React.CSSProperties> = {
     position: 'relative' as const,
     marginTop: 10,
     padding: 6,
-    background: '#ffffff',
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 8,
     display: 'flex' as const,
     flexDirection: 'column' as const,
     gap: 6,
@@ -5521,8 +5427,6 @@ const S: Record<string, React.CSSProperties> = {
     maxHeight: 220,
     objectFit: 'contain' as const,
     display: 'block' as const,
-    background: 'rgba(0,0,0,0.04)',
-    borderRadius: 4,
   },
   floorPlanEditorWrap: {
     position: 'relative' as const,
@@ -5530,8 +5434,6 @@ const S: Record<string, React.CSSProperties> = {
     display: 'flex' as const,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    background: 'rgba(0,0,0,0.02)',
-    borderRadius: 4,
     padding: 4,
     minHeight: 220,
   },
@@ -5544,10 +5446,6 @@ const S: Record<string, React.CSSProperties> = {
 
   vpPosList: {
     marginTop: 10,
-    padding: 8,
-    background: 'rgba(0,0,0,0.03)',
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 6,
     display: 'flex' as const,
     flexDirection: 'column' as const,
     gap: 4,
@@ -5562,11 +5460,8 @@ const S: Record<string, React.CSSProperties> = {
     gridTemplateColumns: 'minmax(80px, 1fr) 64px 64px 28px',
     gap: 6,
     alignItems: 'center' as const,
-    fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 1.0,
-    color: COLOR.textMute,
     padding: '0 4px 2px 4px',
-    borderBottom: `1px solid ${COLOR.borderSoft}`,
-    fontFamily: tokens.font.mono,
+    borderBottom: '1px solid var(--ds-hairline)',
   },
   vpPosHeaderName: { textAlign: 'left' as const },
   vpPosHeaderCol: { textAlign: 'center' as const },
@@ -5576,73 +5471,20 @@ const S: Record<string, React.CSSProperties> = {
     gap: 6,
     alignItems: 'center' as const,
     padding: 4,
-    borderRadius: 4,
-    transition: 'background 0.15s',
-  },
-  vpPosRowActive: {
-    background: 'rgba(251,191,36,0.08)',
   },
   vpPosName: {
-    fontSize: 11.5, fontWeight: tokens.font.weight.medium,
     cursor: 'pointer',
     overflow: 'hidden' as const,
     textOverflow: 'ellipsis' as const,
     whiteSpace: 'nowrap' as const,
   },
-  vpPosInput: {
-    width: '100%',
-    padding: '4px 6px',
-    background: '#ffffff',
-    border: `1px solid ${COLOR.border}`,
-    borderRadius: 4,
-    color: COLOR.text,
-    fontSize: 10.5,
-    fontFamily: tokens.font.mono,
-    outline: 'none',
-    boxSizing: 'border-box' as const,
-    textAlign: 'right' as const,
-  },
-  vpPosActionBtn: {
-    width: 28, height: 24,
-    display: 'flex' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    background: 'transparent',
-    border: `1px solid ${COLOR.border}`,
-    borderRadius: 4,
-    color: COLOR.textDim,
-    fontSize: 11.5,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    padding: 0,
-    flexShrink: 0,
-  },
+  vpPosActionBtn: { width: 28, height: 24, flexShrink: 0 },
 
   vpYawRow: {
     display: 'flex' as const,
     flexDirection: 'column' as const,
     gap: 4,
     padding: 6,
-    borderRadius: 5,
-    transition: 'background 0.15s',
-  },
-  vpYawSelectBtn: {
-    textAlign: 'left' as const,
-    padding: '4px 8px',
-    background: 'rgba(0,0,0,0.04)',
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 4,
-    color: COLOR.textDim,
-    fontSize: 11.5, fontWeight: tokens.font.weight.medium,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'background 0.15s, color 0.15s, border-color 0.15s',
-  },
-  vpYawSelectBtnActive: {
-    background: 'rgba(251,191,36,0.12)',
-    border: '1px solid rgba(251,191,36,0.45)',
-    color: '#92400e',
-    fontWeight: tokens.font.weight.strong,
   },
   vpYawControls: {
     display: 'flex' as const,
@@ -5650,63 +5492,16 @@ const S: Record<string, React.CSSProperties> = {
     gap: 6,
     paddingLeft: 4,
   },
-  vpYawInput: {
-    width: 56,
-    padding: '4px 6px',
-    background: '#ffffff',
-    border: `1px solid ${COLOR.border}`,
-    borderRadius: 4,
-    color: COLOR.text,
-    fontSize: 10.5,
-    fontFamily: tokens.font.mono,
-    outline: 'none',
-    boxSizing: 'border-box' as const,
-    textAlign: 'right' as const,
-    flexShrink: 0,
-  },
-  vpYawUnit: {
-    fontSize: 10.5,
-    color: COLOR.textMute,
-    fontFamily: tokens.font.mono,
-    flexShrink: 0,
-  },
-  vpYawSlider: {
-    flex: 1,
-    minWidth: 80,
-    accentColor: COLOR.accent,
-  },
+  vpYawInput: { width: 56, flexShrink: 0 },
+  vpYawUnit: { flexShrink: 0 },
+  vpYawSlider: { flex: 1, minWidth: 80 },
 
-  codeInline: {
-    padding: '1px 5px',
-    background: 'rgba(0,0,0,0.08)',
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 3,
-    fontFamily: tokens.font.mono,
-    fontSize: 10.5,
-    color: COLOR.text,
-  },
-  zoomRangeBox: {
-    marginTop: 6,
-    padding: 8,
-    background: 'rgba(0,0,0,0.03)',
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 6,
-  },
+  zoomRangeBox: { marginTop: 6 },
   zoomRangeHead: {
     display: 'flex' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     marginBottom: 4,
-  },
-  zoomRangeClose: {
-    width: 22, height: 22,
-    background: 'transparent',
-    border: 'none',
-    color: COLOR.textMute,
-    fontSize: 14,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    padding: 0,
   },
 
   // ── Project main thumbnail picker ─────────────────────────────────
@@ -5720,10 +5515,6 @@ const S: Record<string, React.CSSProperties> = {
   projThumbPreview: {
     width: 88,
     aspectRatio: '4 / 3',
-    background: tokens.color.textFaint,
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 6,
-    overflow: 'hidden' as const,
     flexShrink: 0,
     display: 'flex' as const,
     alignItems: 'center' as const,
@@ -5732,20 +5523,6 @@ const S: Record<string, React.CSSProperties> = {
   projThumbPreviewImg: {
     width: '100%', height: '100%', objectFit: 'cover' as const, display: 'block' as const,
   },
-  projThumbEmpty: {
-    fontSize: 9.5, color: COLOR.textMute, letterSpacing: 0.5,
-  },
-  projThumbReset: {
-    padding: '4px 10px',
-    background: 'rgba(248,113,113,0.1)',
-    border: '1px solid rgba(248,113,113,0.35)',
-    color: COLOR.danger,
-    fontSize: 10.5, fontWeight: tokens.font.weight.strong,
-    borderRadius: 4,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    whiteSpace: 'nowrap' as const,
-  },
   projThumbGrid: {
     display: 'grid' as const,
     gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))',
@@ -5753,243 +5530,49 @@ const S: Record<string, React.CSSProperties> = {
     maxHeight: 280,
     overflowY: 'auto' as const,
     scrollbarWidth: 'thin' as const,
-    padding: 4,
-    background: 'rgba(0,0,0,0.02)',
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 6,
-  },
-  projThumbCell: {
-    position: 'relative' as const,
-    display: 'flex' as const,
-    flexDirection: 'column' as const,
-    alignItems: 'stretch' as const,
-    gap: 3,
-    padding: 3,
-    background: 'rgba(0,0,0,0.03)',
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 5,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    color: COLOR.textDim,
-    transition: 'border-color 0.15s, background 0.15s',
-  },
-  projThumbCellActive: {
-    background: 'rgba(96,165,250,0.16)',
-    borderColor: 'rgba(96,165,250,0.55)',
-    color: COLOR.text,
   },
   projThumbCellImg: {
     width: '100%',
     aspectRatio: '4 / 3',
     objectFit: 'cover' as const,
-    borderRadius: 3,
-    background: '#ffffff',
     display: 'block' as const,
   },
   projThumbCellPh: {
     width: '100%',
     aspectRatio: '4 / 3',
-    background: 'rgba(0,0,0,0.04)',
-    borderRadius: 3,
     display: 'flex' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    color: COLOR.textMute,
-    fontSize: 12.5,
   },
-  projThumbCellLabel: {
-    fontSize: 9.5,
-    letterSpacing: 0.2,
-    overflow: 'hidden' as const,
-    textOverflow: 'ellipsis' as const,
-    whiteSpace: 'nowrap' as const,
-    textAlign: 'center' as const,
-  },
-  projThumbCheck: {
-    position: 'absolute' as const,
-    top: 4, right: 6,
-    fontSize: 12.5, fontWeight: tokens.font.weight.strong,
-    color: '#bfdbfe',
-    textShadow: '0 1px 2px rgba(0,0,0,0.6)',
-  },
-
-  floorPlanRemoveBtn: {
-    alignSelf: 'flex-end' as const,
-    padding: '4px 10px',
-    background: 'rgba(248,113,113,0.1)',
-    border: '1px solid rgba(248,113,113,0.35)',
-    color: COLOR.danger,
-    fontSize: 10.5, fontWeight: tokens.font.weight.strong,
-    borderRadius: 6,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
+  projThumbCheck: { position: 'absolute' as const, top: 4, right: 6 },
 
   tabBar: {
     position: 'sticky' as const,
     top: 0,
     zIndex: 10,
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
-    gap: 4,
-    padding: 5,
     margin: '0 0 4px 0',
-    background: tokens.glass.surfaceStrong,
-    backdropFilter: tokens.backdrop,
-    WebkitBackdropFilter: tokens.backdrop,
-    border: `1px solid ${COLOR.border}`,
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glass,
   },
-  tabBtn: {
-    display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 1,
-    padding: '9px 12px',
-    background: 'transparent',
-    // Split border into long-hand props. Mixing the `border` shorthand
-    // here and the `borderColor` long-hand in the active overlay below
-    // makes React leak the active borderColor onto the inactive state
-    // after a re-render — the classic "black ring after click" bug.
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: 'transparent',
-    borderRadius: tokens.radius.pill,
-    cursor: 'pointer',
-    color: COLOR.textMute,
-    fontFamily: tokens.font.family,
-    boxShadow: 'none',
-    transition: `background ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}, border-color ${tokens.transition}`,
-    outline: 'none',
-  },
-  tabBtnActive: {
-    background: tokens.gradient.accent,
-    borderColor: tokens.color.accentBorder,
-    color: COLOR.text,
-    boxShadow: tokens.shadow.glassAccent,
-  },
-  tabBtnTitle: { fontSize: 12.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.4 },
-  tabBtnSub: { fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 1.2, opacity: 1, fontFamily: tokens.font.mono },
   planPills: {
     display: 'flex' as const,
     flexWrap: 'wrap' as const,
     alignItems: 'center' as const,
     gap: 6,
     padding: '8px 12px',
-    background: tokens.gradient.surface,
-    border: `1px solid ${COLOR.border}`,
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glass,
     marginBottom: 6,
   },
-  planPillsLabel: {
-    fontSize: 9.5,
-    fontWeight: tokens.font.weight.strong,
-    letterSpacing: 1.4,
-    color: COLOR.textMute,
-    fontFamily: tokens.font.mono,
-    marginRight: 2,
-    paddingLeft: 4,
-  },
-  planPill: {
-    flex: '0 1 auto' as const,
-    padding: '7px 14px',
-    background: 'transparent',
-    borderWidth: 1,
-    borderStyle: 'solid' as const,
-    borderColor: 'transparent',
-    borderRadius: tokens.radius.pill,
-    cursor: 'pointer',
-    color: COLOR.textMute,
-    fontSize: 11.5,
-    fontWeight: tokens.font.weight.strong,
-    fontFamily: tokens.font.family,
-    letterSpacing: 0.3,
-    transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
-    whiteSpace: 'nowrap' as const,
-    outline: 'none',
-  },
-  planPillActive: {
-    background: tokens.gradient.accent,
-    borderColor: tokens.color.accentBorder,
-    color: COLOR.text,
-    fontWeight: tokens.font.weight.strong,
-    boxShadow: tokens.shadow.glassAccent,
-  },
+  planPillsLabel: { marginRight: 2, paddingLeft: 4 },
   modeRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
-  modeBtn: {
-    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
-    padding: '10px 14px',
-    background: tokens.gradient.surface,
-    borderWidth: 1,
-    borderStyle: 'solid' as const,
-    borderColor: COLOR.border,
-    borderRadius: tokens.radius.md, cursor: 'pointer', color: COLOR.textMute,
-    fontFamily: tokens.font.family, textAlign: 'left' as const,
-    transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
-    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
-    outline: 'none',
-  },
-  modeBtnActive: {
-    background: tokens.gradient.accent,
-    borderColor: tokens.color.accentBorder,
-    color: COLOR.text,
-    boxShadow: tokens.shadow.glassAccent,
-  },
-  modeBtnTitle: { fontSize: 11.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.4 },
-  modeBtnSub: { fontSize: 9.5, color: COLOR.textMute, letterSpacing: 0.3 },
-  modeHint: {
-    marginTop: 8, padding: '10px 14px',
-    background: tokens.gradient.accent,
-    border: `1px solid ${tokens.color.accentBorder}`,
-    borderRadius: tokens.radius.md,
-    boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
-    fontSize: 10.5, color: COLOR.text, lineHeight: 1.55,
-  },
-  toolbarGroupHead: {
-    fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.5,
-    color: tokens.color.textMute, textTransform: 'uppercase',
-    marginTop: 12,
-  },
-  toolbarHint: { color: tokens.color.textFaint, marginLeft: 6, fontSize: 9.5 },
+  modeHint: { marginTop: 8 },
+  toolbarGroupHead: { marginTop: 12 },
+  toolbarHint: { marginLeft: 6 },
   sliderHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 },
-  sliderLabel: { fontSize: 10.5, color: COLOR.textDim },
-  sliderVal: { fontSize: 10.5, color: COLOR.textDim, fontFamily: tokens.font.mono },
-  sliderValInput: {
-    width: 64,
-    padding: '2px 6px',
-    fontSize: 10.5,
-    fontFamily: tokens.font.mono,
-    color: COLOR.textDim,
-    background: COLOR.panel,
-    border: `1px solid ${COLOR.borderSoft}`,
-    borderRadius: 4,
-    textAlign: 'right',
-    outline: 'none',
-    fontVariantNumeric: 'tabular-nums',
-  },
-  slider: { width: '100%', accentColor: COLOR.accent },
+  sliderValInput: { width: 64 },
+  slider: { width: '100%' },
 
-  preview: {
-    minHeight: 0, minWidth: 0,
-    position: 'relative', background: '#ffffff',
-    overflow: 'hidden',
-    borderWidth: 2, borderStyle: 'solid', borderColor: 'transparent',
-    transition: 'border-color 0.15s',
-  },
-  previewDrag: {
-    borderColor: COLOR.accent,
-  },
   errorBox: {
     position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-    background: 'rgba(20,20,25,0.92)', border: '1px solid rgba(248,113,113,0.4)',
-    color: '#fca5a5', padding: '14px 18px', borderRadius: 8,
+    padding: '14px 18px',
     maxWidth: 320, textAlign: 'center' as const,
     zIndex: 20,
-  },
-  dragOverlay: {
-    position: 'absolute', inset: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(96,165,250,0.18)', color: COLOR.accentText,
-    fontWeight: tokens.font.weight.strong, zIndex: 20, pointerEvents: 'none',
-    backdropFilter: 'blur(2px)',
   },
 };

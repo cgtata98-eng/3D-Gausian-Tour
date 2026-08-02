@@ -848,6 +848,87 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Well — a recessed area grouping controls inside a section
+   ─────────────────────────────────────────────────────────────────────────
+   Six places built this by hand out of `rgba(0,0,0,0.02..0.04)` plus a soft
+   border, at four different alphas, so the scrolling viewpoint list and the
+   thumbnail grid sitting one above the other were visibly different greys.
+   Sunken, because it is a place things sit IN — the same orientation as an
+   input, not the raised one of a card.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-well {
+  border-radius: var(--ds-r-sm);
+  padding: var(--ds-space-2);
+  background-image: linear-gradient(180deg, #efefef 0%, #f5f5f5 100%);
+  box-shadow: var(--ds-inner-sunken);
+}
+
+/* A dense numeric field: a 64px grid column cannot take the full-size input's
+   pill shape and 16px side padding. */
+.ds-input--compact {
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: var(--ds-r-sm);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-fs-sm);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inline literal in running text — a path, a key name. */
+.ds-code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-fs-sm);
+  color: var(--ds-text);
+}
+
+/* Two-line choice button in a grid: title over an explanatory sub. Wider than
+   a pill because the sub is a sentence, not a label. */
+.ds-optbtn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: var(--ds-r-md);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+/* The 3D preview pane. The drag-target ring is an inset shadow, not a border:
+   a border changes the element's box and the canvas inside it reflowed by 2px
+   every time a file crossed the window. */
+.ds-preview {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow var(--ds-dur) var(--ds-ease);
+}
+.ds-preview[data-drag='true'] { box-shadow: inset 0 0 0 2px rgba(112, 180, 222, 0.90); }
+/* "Drop it here" — covers the pane while a file is over it. */
+.ds-dropveil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(112, 180, 222, 0.18);
+  -webkit-backdrop-filter: blur(2px);
+          backdrop-filter: blur(2px);
+  color: #357fb2;
+  font-family: var(--ds-font);
+  z-index: 20;
+  pointer-events: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    Row — a selectable entry in a list (a plan, a viewpoint)
    ─────────────────────────────────────────────────────────────────────────
    Its states are DATA ATTRIBUTES, not style objects merged at render. Three
