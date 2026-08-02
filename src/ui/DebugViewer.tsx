@@ -1133,9 +1133,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     <LabeledInput label="所在地" value={info.location ?? ''} onChange={(v) => updateInfo({ location: v })} placeholder="東京都千代田区…" />
                     <LabeledInput label="メモ" value={info.notes ?? ''} onChange={(v) => updateInfo({ notes: v })} placeholder="自由記入 (改行で複数行)" />
                     <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div style={{ fontSize: 9.5, fontWeight: tokens.font.weight.strong, letterSpacing: 0.5, color: tokens.color.textMute, textTransform: 'uppercase' }}>
-                        ビューア「物件概要」表示
-                      </div>
+                      <div className="ds-label">ビューア「物件概要」表示</div>
                       <VisRow label="全体 (このブロックを表示)" checked={vis.overall !== false} onChange={(c) => setVis('overall', c)} />
                       <VisRow label="間取り見出し" checked={vis.heading !== false} onChange={(c) => setVis('heading', c)} disabled={vis.overall === false} />
                       <VisRow label="専有面積 + 坪換算" checked={vis.area !== false} onChange={(c) => setVis('area', c)} disabled={vis.overall === false} />
@@ -1194,18 +1192,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               return (
                 <Section title={`カラー (素材バリエーション)`} subtitle="COLOR VARIANTS" defaultOpen={false}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.5 }}>
+                    <div className="ds-hint">
                       同じ視点で素材色違いに切り替えるバリエーション。各バリアントに視点ごとの 360° パノラマを登録します (未登録の視点は標準パノラマを利用)。
                     </div>
                     <button onClick={addVariant} className={BTN_PRIMARY}>+ バリアント追加</button>
                     {variants.map((v) => (
-                      <div key={v.id} style={{ border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div key={v.id} className="ds-well" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <input
                             type="color"
                             value={v.swatch ?? '#a89372'}
                             onChange={(e) => updateVariant(v.id, { swatch: e.target.value })}
-                            style={{ width: 32, height: 28, border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4, cursor: 'pointer', padding: 0 }}
+                            className="ds-swatch-input"
+                            style={{ width: 32, height: 28 }}
                             title="スウォッチ色"
                           />
                           <input
@@ -1222,11 +1221,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           {(activePlan.viewpoints ?? []).map((vp) => {
                             const has = !!v.panoramas?.[vp.id];
                             return (
-                              <div key={vp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
-                                <span style={{ flex: 1, color: 'rgba(0,0,0,0.78)' }}>{vp.label}</span>
-                                <span style={{ fontSize: 9.5, color: has ? '#16a34a' : tokens.color.textFaint }}>
-                                  {has ? '登録済' : '未登録'}
-                                </span>
+                              <div key={vp.id} className="ds-body" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ flex: 1 }}>{vp.label}</span>
+                                <span className={`ds-sub ${has ? 'ds-ok' : 'ds-faint'}`}>{has ? '登録済' : '未登録'}</span>
                                 <label className={BTN} style={{ cursor: 'pointer' }}>
                                   パノラマ
                                   <input
@@ -1247,13 +1244,13 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             );
                           })}
                           {(activePlan.viewpoints ?? []).length === 0 && (
-                            <span style={{ fontSize: 10.5, color: tokens.color.textFaint }}>視点がまだありません</span>
+                            <div className="ds-empty">視点がまだありません</div>
                           )}
                         </div>
                       </div>
                     ))}
                     {variants.length === 0 && (
-                      <span style={{ fontSize: 10.5, color: tokens.color.textFaint }}>まだバリアントがありません</span>
+                      <div className="ds-empty">まだバリアントがありません</div>
                     )}
                   </div>
                 </Section>
@@ -1380,7 +1377,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         <button
                           onClick={() => switchPlan(p.id)}
                           className="ds-swatch"
-                          style={{ ...S.vpDot, background: isActive ? '#e0a83a' : 'rgba(0,0,0,0.2)' }}
+                          data-active={isActive}
+                          style={S.vpDot}
                           aria-label="activate"
                           title={isActive ? '使用中' : 'このプランに切替'}
                           disabled={isBusy}
@@ -1459,7 +1457,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     onChange={e => setNewPlanName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addPlan(); if (e.key === 'Escape') setShowAddPlan(false); }}
                     autoFocus style={S.input} />
-                  <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 6 }}>
+                  <div className="ds-hint" style={{ marginTop: 6 }}>
                     {isVRMode
                       ? '新規プランは完全に空（VR視点 / 画像 / 図面 / info すべて未設定）で作成されます。'
                       : '新規プランは完全に空（splat / 視点 / 図面 / info すべて未設定）で作成されます。'}
@@ -1511,7 +1509,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   {/* BGM (ループ環境音) */}
                   <div className="ds-label" style={S.subTitle}>BGM (ループ環境音)</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                    <span style={{ fontSize: 10.5, color: manifest?.audio ? '#16a34a' : tokens.color.textFaint }}>
+                    <span className={`ds-sub ${manifest?.audio ? 'ds-ok' : 'ds-faint'}`}>
                       {manifest?.audio ? '設定済' : '未設定'}
                     </span>
                     <div style={{ flex: 1 }} />
@@ -1557,9 +1555,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
                     <div className="ds-label" style={S.subTitle}>足音</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                      <span style={{ fontSize: 10.5, color: tokens.color.textMute }}>
-                        WASD で歩行、Shift で走行
-                      </span>
+                      <span className="ds-hint">WASD で歩行、Shift で走行</span>
                       <div style={{ flex: 1 }} />
                       {(() => {
                         const enabled = manifest?.settings.footstepEnabled !== false; // default ON
@@ -1567,17 +1563,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           <button
                             type="button"
                             onClick={() => useSceneStore.getState().updateSettings({ footstepEnabled: !enabled })}
-                            style={{
-                              padding: '4px 12px',
-                              fontSize: 10.5,
-                              background: enabled ? 'rgba(34,197,94,0.14)' : '#ffffff',
-                              border: `1px solid ${enabled ? 'rgba(34,197,94,0.5)' : 'rgba(0,0,0,0.2)'}`,
-                              color: enabled ? '#15803d' : tokens.color.textMute,
-                              borderRadius: 999,
-                              cursor: 'pointer',
-                              fontFamily: 'inherit',
-                              fontWeight: tokens.font.weight.strong,
-                            }}
+                            className={`${surfaceClass(enabled ? 'success' : 'plain')} ds-pill ds-pill--xs${enabled ? '' : ' ds-fill-surface'}`}
                           >
                             {enabled ? 'ON' : 'OFF'}
                           </button>
@@ -1589,7 +1575,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       const vol = Math.max(0, Math.min(1, manifest?.settings.footstepVolume ?? 0.7));
                       return (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, opacity: enabled ? 1 : 0.4 }}>
-                          <span style={{ fontSize: 10.5, color: tokens.color.textMute, minWidth: 64 }}>ボリューム</span>
+                          <span className="ds-hint" style={{ minWidth: 64 }}>ボリューム</span>
                           <input
                             type="range"
                             min={0}
@@ -1600,7 +1586,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             onChange={(e) => useSceneStore.getState().updateSettings({ footstepVolume: Number(e.target.value) })}
                             style={{ flex: 1, accentColor: tokens.color.accent }}
                           />
-                          <span style={{ fontSize: 10.5, color: tokens.color.textMute, minWidth: 32, textAlign: 'right', fontFamily: tokens.font.mono }}>
+                          <span className="ds-mono ds-faint" style={{ minWidth: 32, textAlign: 'right' }}>
                             {Math.round(vol * 100)}%
                           </span>
                         </div>
@@ -1644,13 +1630,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   // 短い視覚フィードバックを出してからリロード (本当に切替が起きたか確認用)。
                   const overlay = document.createElement('div');
                   overlay.textContent = `${engine.toUpperCase()} に切替中…`;
-                  overlay.style.cssText = `
-                    position: fixed; inset: 0; display: flex;
-                    align-items: center; justify-content: center;
-                    background: rgba(0,0,0,0.85); color: #fff;
-                    font-size: 24px; font-weight: 700; font-family: ui-monospace, monospace;
-                    z-index: 9999; letter-spacing: 1px;
-                  `;
+                  overlay.className = 'ds-reload-veil';
                   document.body.appendChild(overlay);
                   setTimeout(() => window.location.reload(), 600);
                 }}
@@ -1673,13 +1653,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   }
                   const overlay = document.createElement('div');
                   overlay.textContent = next ? '色調整なしで再起動中…' : 'SuperSplat 同等処理に戻して再起動中…';
-                  overlay.style.cssText = `
-                    position: fixed; inset: 0; display: flex;
-                    align-items: center; justify-content: center;
-                    background: rgba(0,0,0,0.85); color: #fff;
-                    font-size: 22px; font-weight: 700; font-family: ui-monospace, monospace;
-                    z-index: 9999; letter-spacing: 1px;
-                  `;
+                  overlay.className = 'ds-reload-veil';
                   document.body.appendChild(overlay);
                   setTimeout(() => window.location.reload(), 600);
                 }}
@@ -1774,11 +1748,11 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                         <div className="ds-hint" style={{ marginBottom: 6 }}>
                           PLY が上下逆さま / 床にめり込む場合に調整。プランごとに保存されます。
                         </div>
-                        <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginTop: 4 }}>回転 (°)</div>
+                        <div className="ds-label" style={{ marginTop: 4 }}>回転 (°)</div>
                         <Slider label="X (前後の傾き)" min={-180} max={180} step={1} value={rot[0]} onChange={(v) => setRot(0, v)} />
                         <Slider label="Y (水平回転)"   min={-180} max={180} step={1} value={rot[1]} onChange={(v) => setRot(1, v)} />
                         <Slider label="Z (左右の傾き)" min={-180} max={180} step={1} value={rot[2]} onChange={(v) => setRot(2, v)} />
-                        <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginTop: 8 }}>位置 (m)</div>
+                        <div className="ds-label" style={{ marginTop: 8 }}>位置 (m)</div>
                         <Slider label="X (左右)" min={-50} max={50} step={0.05} value={pos[0]} onChange={(v) => setPos(0, v)} />
                         <Slider label="Y (前後)" min={-50} max={50} step={0.05} value={pos[2]} onChange={(v) => setPos(2, v)} />
                         <Slider label="Z (高さ)" min={-50} max={50} step={0.05} value={pos[1]} onChange={(v) => setPos(1, v)} />
@@ -1805,7 +1779,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 6, lineHeight: 1.5 }}>
+                  <div className="ds-hint" style={{ marginBottom: 6 }}>
                     プレビュー上で <strong>マウスホイール</strong> でズーム可能。<br />
                     範囲は <code className="ds-code">{manifest?.settings.zoomFovMin ?? 25}°〜{manifest?.settings.zoomFovMax ?? 100}°</code> で固定。
                   </div>
@@ -2035,7 +2009,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       <button type="button" onClick={() => addVpPanoInputRef.current?.click()} className={`${shellClass}`} style={S.fileBtn}>
                         {addVpPanoName ? `🌐 ${addVpPanoName}` : '🌐 360 画像を選択（任意 / .jpg .png .hdr .exr）'}
                       </button>
-                      <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 6 }}>
+                      <div className="ds-hint" style={{ marginTop: 6 }}>
                         画像はあとから視点行の 🌐 ボタンでも差し替えできます。
                       </div>
                     </>
@@ -2059,15 +2033,15 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             <Section title="コリジョン" subtitle="COLLISION" defaultOpen={false}>
               <label className="ds-check" style={S.toggle}>
                 <input type="checkbox" checked={useCollisionWalkable} onChange={toggleUseCollisionWalkable} />
-                <span>walkable を使用 <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>（床スナップ／重力）</span></span>
+                <span>walkable を使用 <span className="ds-hint">（床スナップ／重力）</span></span>
               </label>
               <label className="ds-check" style={S.toggle}>
                 <input type="checkbox" checked={useCollisionBlock} onChange={toggleUseCollisionBlock} />
-                <span>block を使用 <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>（壁衝突）</span></span>
+                <span>block を使用 <span className="ds-hint">（壁衝突）</span></span>
               </label>
               <label className="ds-check" style={S.toggle}>
                 <input type="checkbox" checked={showCollision} onChange={toggleCollision} />
-                <span>コリジョンを表示 <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>（デバッグメッシュ）</span></span>
+                <span>コリジョンを表示 <span className="ds-hint">（デバッグメッシュ）</span></span>
               </label>
               {showCollision && (
                 <Slider label="不透明度" min={0} max={1} step={0.05} value={collisionOpacity} onChange={setCollisionOpacity} />
@@ -2101,12 +2075,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   <>
                     <div className="ds-label" style={{ ...S.subTitle, marginTop: 14 }}>全体調整（図面⇄GS 合わせ込み）</div>
                     {!hasAny ? (
-                      <div style={{ fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.55 }}>
+                      <div className="ds-hint">
                         コリジョンを生成/アップロードすると、ここで全体のオフセット・スケール・回転を調整できます。
                       </div>
                     ) : (
                       <>
-                        <div style={{ fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.55, marginBottom: 6 }}>
+                        <div className="ds-hint" style={{ marginBottom: 6 }}>
                           「コリジョンを表示」を ON にして、緑/赤メッシュが GS に重なるように調整してください。歩行判定は操作を止めた 0.3 秒後に追従します。
                         </div>
                         {(['X', 'Y', 'Z'] as const).map((label, axis) => (
@@ -2161,19 +2135,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               >
                 ⬇ GS を切って上から描く
               </button>
-              <div style={{ fontSize: 9.5, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.55 }}>
+              <div className="ds-hint" style={{ marginTop: 4 }}>
                 断面スライダーで切断高さを変えながら、見えている壁をなぞってください。
               </div>
 
               {/* ── GLB アップロード (外部ツールで作った場合) ── */}
               <div className="ds-label" style={{ ...S.subTitle, marginTop: 14 }}>GLB アップロード</div>
-              <div className="ds-label" style={{ ...S.subTitle, marginTop: 6 }}><span style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
+              <div className="ds-label" style={{ ...S.subTitle, marginTop: 6 }}><span className="ds-swatch" style={{ ...S.colorDot, background: '#22c55e' }} />WALKABLE</div>
               <button onClick={() => walkableRef.current?.click()} className={`${shellClass}`} style={S.fileBtn} disabled={busy}>
                 {colLoading === 'walkable' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>
               <input ref={walkableRef} type="file" accept=".glb" style={{ display: 'none' }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleColFile(f, 'walkable', 'manual'); e.target.value = ''; }} />
-              <div className="ds-label" style={{ ...S.subTitle, marginTop: 10 }}><span style={{ ...S.colorDot, background: '#ef4444' }} />BLOCK</div>
+              <div className="ds-label" style={{ ...S.subTitle, marginTop: 10 }}><span className="ds-swatch" style={{ ...S.colorDot, background: '#ef4444' }} />BLOCK</div>
               <button onClick={() => blockRef.current?.click()} className={`${shellClass}`} style={S.fileBtn} disabled={busy}>
                 {colLoading === 'block' ? '読み込み中…' : 'GLB ファイルを選択'}
               </button>
@@ -2190,7 +2164,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               const walkAssigned = walkNodes.filter(n => n.panorama).length;
               return (
                 <Section title="ウォークスルー" subtitle="WALKTHROUGH" defaultOpen={false}>
-                  <div style={{ fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.6, marginBottom: 8 }}>
+                  <div className="ds-hint" style={{ marginBottom: 8 }}>
                     100枚超の360°画像をグリッド配置し、向いている方向へ「前進」して隣のノードへ移動する
                     ストリートビュー型ナビ。シーン一覧の視点とは独立です。
                   </div>
@@ -2202,7 +2176,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       {walkEditorOpen ? '▼ エディタを閉じる' : '🗺 グリッドエディタを開く（画面下部）'}
                     </button>
                   ) : (
-                    <div style={{ fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.55 }}>
+                    <div className="ds-hint">
                       図面画像が未設定です。「図面設定」で画像と bounds を設定するとグリッドエディタが使えます。
                     </div>
                   )}
@@ -2219,12 +2193,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   <button onClick={() => fileInputRef.current?.click()} className={`${shellClass}`} style={S.fileBtn}>
                     {fp?.image ? '画像を変更' : '画像を選択'}（またはプレビューにドロップ）
                   </button>
-                  <div style={{ fontSize: 10.5, color: 'rgba(0,0,0,0.45)', marginTop: 6 }}>
+                  <div className="ds-hint" style={{ marginTop: 6 }}>
                     対応形式: JPG / PNG / GIF / WebP / BMP / SVG / AVIF / HEIC / TIFF
                   </div>
                   {fp?.image && (
                     <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={S.floorPlanThumbWrap}>
-                      <div style={S.floorPlanSticky}>
+                      <div className="ds-sticky-cover" style={S.floorPlanSticky}>
                       <div className="ds-well" style={S.floorPlanEditorWrap}>
                         <FloorPlanMiniMap
                           onViewpointClick={handleVpClick}
@@ -2238,8 +2212,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           onMoveViewpointEnd={() => { /* map-only: dragging the dot never moves the camera (use 📍 reflect) */ }}
                         />
                       </div>
-                      <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 4, lineHeight: 1.6 }}>
-                        ・<strong style={{ color: '#fecaca' }}>赤ピン</strong>（選択中の視点）— マップクリックで配置。<strong>初期位置</strong>は視点リストの 🏁 で指定<br />
+                      <div className="ds-hint" style={{ marginTop: 4 }}>
+                        ・<strong className="ds-warn">赤ピン</strong>（選択中の視点）— マップクリックで配置。<strong>初期位置</strong>は視点リストの 🏁 で指定<br />
                         ・他の視点のドットを直接ドラッグして移動も可<br />
                         ・扇形 = その視点の視野の向き（下の yaw スライダーで調整）
                       </div>
@@ -2339,7 +2313,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             {/* ===== Environment (HDRI) — プランタブ最下部 ===== */}
             {debugTab === 'plan' && (
             <Section title="HDRI環境" subtitle="HDRI" defaultOpen={false}>
-              <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginTop: 4, marginBottom: 4 }}>HDRI (360° 背景)</div>
+              <div className="ds-label" style={{ marginTop: 4, marginBottom: 4 }}>HDRI (360° 背景)</div>
               <button onClick={() => hdriInputRef.current?.click()} className={`${shellClass}`} style={S.fileBtn}>
                 {hdriLoading ? '読み込み中…' : (hdriName || '画像ファイルを選択 (HDR / PNG / JPG)')}
               </button>
@@ -2351,7 +2325,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               )}
 
               <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-                <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginBottom: 4 }}>背景色</div>
+                <div className="ds-label" style={{ marginBottom: 4 }}>背景色</div>
                 <div className="ds-hint" style={{ marginBottom: 8 }}>
                   HDRI 未設定時に見える背景の色。HDRI を読み込むとその裏側になります。
                 </div>
@@ -2765,82 +2739,64 @@ function PublishButton({ sceneId, manifest }: { sceneId: string; manifest: { id?
         onClick={onClick}
         disabled={busy}
         title="現在のシーンを R2 に公開して、顧客が URL でアクセスできるようにする"
-        style={{
-          padding: '7px 16px',
-          fontSize: 11.5,
-          fontWeight: tokens.font.weight.strong,
-          letterSpacing: 0.3,
-          color: tokens.color.text,
-          background: busy ? tokens.gradient.neutral : tokens.gradient.success,
-          border: `1px solid ${busy ? tokens.color.border : tokens.color.successBorder}`,
-          borderRadius: tokens.radius.pill,
-          boxShadow: busy ? tokens.shadow.glass : tokens.shadow.glassSuccess,
-          cursor: busy ? 'not-allowed' : 'pointer',
-          marginRight: 6,
-          fontFamily: tokens.font.family,
-          outline: 'none',
-        }}
+        className={`${surfaceClass(busy ? 'neutral' : 'success')} ds-pill ds-pill--sm`}
+        style={{ marginRight: 6 }}
       >
         {busy ? '公開中…' : '🚀 公開'}
       </button>
       {(busy || doneUrl || error) && createPortal(
         <div
-          style={{
-            position: 'fixed',
-            top: 70, right: 16,
-            zIndex: 9999,
-            width: 360,
-            padding: 14,
-            background: '#fff',
-            borderRadius: 10,
-            boxShadow: '0 12px 32px rgba(15,23,42,0.18), 0 2px 6px rgba(15,23,42,0.08)',
-            fontFamily: 'system-ui, sans-serif',
-          }}
+          className={`${surfaceClass('plain')} ds-dialog ds-fill-surface`}
+          style={{ position: 'fixed', top: 70, right: 16, zIndex: 9999, width: 360 }}
         >
           {busy && progress && (
             <>
-              <div style={{ fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: '#1f2937', marginBottom: 6 }}>公開中…</div>
-              <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 6 }}>
+              <div className="ds-field-label" style={{ marginBottom: 6 }}>公開中…</div>
+              <div className="ds-hint" style={{ marginBottom: 6 }}>
                 {progress.message}
-                <span style={{ marginLeft: 6, color: tokens.color.textFaint }}>{progress.current}/{progress.total}</span>
+                <span className="ds-faint" style={{ marginLeft: 6 }}>{progress.current}/{progress.total}</span>
               </div>
-              <div style={{ height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.round((progress.current / Math.max(1, progress.total)) * 100)}%`, background: '#3b82f6', transition: 'width 120ms linear' }} />
+              <div className="ds-progress">
+                <div
+                  className="ds-progress__fill"
+                  style={{ width: `${Math.round((progress.current / Math.max(1, progress.total)) * 100)}%` }}
+                />
               </div>
             </>
           )}
           {!busy && doneUrl && (
             <>
-              <div style={{ fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: '#15803d', marginBottom: 8 }}>✓ 公開完了</div>
-              <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 6 }}>顧客に送る URL:</div>
+              <div className="ds-field-label ds-ok" style={{ marginBottom: 8 }}>✓ 公開完了</div>
+              <div className="ds-hint" style={{ marginBottom: 6 }}>顧客に送る URL:</div>
               <input
                 readOnly
                 value={doneUrl}
                 onClick={(e) => (e.target as HTMLInputElement).select()}
-                style={{ width: '100%', padding: '6px 8px', fontSize: 10.5, border: '1px solid #d1d5db', borderRadius: 4, fontFamily: 'monospace', boxSizing: 'border-box' }}
+                className="ds-input ds-input--compact ds-mono"
               />
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(doneUrl)}
-                  style={{ flex: 1, padding: '5px 8px', fontSize: 10.5, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                  className={`${surfaceClass('accent')} ds-pill ds-pill--xs`}
+                  style={{ flex: 1 }}
                 >コピー</button>
                 <button
                   type="button"
                   onClick={() => setDoneUrl(null)}
-                  style={{ padding: '5px 10px', fontSize: 10.5, background: '#fff', color: tokens.color.textMute, border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
+                  className={`${surfaceClass('plain')} ds-pill ds-pill--xs ds-fill-surface`}
                 >閉じる</button>
               </div>
             </>
           )}
           {!busy && error && (
             <>
-              <div style={{ fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: '#991b1b', marginBottom: 6 }}>公開失敗</div>
-              <div style={{ fontSize: 10.5, color: '#7f1d1d', marginBottom: 8, wordBreak: 'break-word' }}>{error}</div>
+              <div className="ds-field-label ds-warn" style={{ marginBottom: 6 }}>公開失敗</div>
+              <div className="ds-hint" style={{ marginBottom: 8, wordBreak: 'break-word' }}>{error}</div>
               <button
                 type="button"
                 onClick={() => setError(null)}
-                style={{ padding: '5px 10px', fontSize: 10.5, background: '#fff', color: tokens.color.textMute, border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}
+                className={`${surfaceClass('plain')} ds-pill ds-pill--xs ds-fill-surface`}
               >閉じる</button>
             </>
           )}
@@ -2973,7 +2929,7 @@ function PinsPlanSection({
             return (
             <div
               key={pin.id}
-              style={pinCardStyle}
+              className={`${surfaceClass('plain')} ds-panel ds-fill-surface`}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData('application/x-pin-id', pin.id);
@@ -3039,7 +2995,8 @@ function PinsPlanSection({
                 onChange={(e) => updatePin(pin.id, { comment: e.target.value })}
                 placeholder="コメント (任意 / 複数行)"
                 rows={2}
-                style={{ ...S.input, fontFamily: 'inherit', resize: 'vertical', minHeight: 48 }}
+                className="ds-textarea"
+                style={{ minHeight: 48 }}
               />
               <div style={{ height: 6 }} />
               <input
@@ -3052,9 +3009,9 @@ function PinsPlanSection({
 
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
                 {pin.image ? (
-                  <img src={pin.image} alt="" style={pinThumbStyle} />
+                  <img src={pin.image} alt="" className="ds-thumb" style={pinThumbStyle} />
                 ) : (
-                  <div style={{ ...pinThumbStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.color.textFaint, fontSize: 15.5 }}>
+                  <div className="ds-thumb ds-faint" style={{ ...pinThumbStyle, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     🖼
                   </div>
                 )}
@@ -3082,11 +3039,11 @@ function PinsPlanSection({
                   : placements;
                 return (
               <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginBottom: 6 }}>
+                <div className="ds-label" style={{ marginBottom: 6 }}>
                   配置一覧 ({onlyCurrentVp ? `この視点 ${visiblePlacements.length} / 全 ${placementCount}` : `${placementCount}箇所`})
-                  {placementCount === 0 && <span style={{ marginLeft: 8, color: tokens.color.textFaint, fontWeight: tokens.font.weight.medium }}>未配置 — タイトル行をドラッグでプレビューに配置</span>}
+                  {placementCount === 0 && <span className="ds-sub ds-faint" style={{ marginLeft: 8 }}>未配置 — タイトル行をドラッグでプレビューに配置</span>}
                   {placementCount > 0 && visiblePlacements.length === 0 && (
-                    <span style={{ marginLeft: 8, color: tokens.color.textFaint, fontWeight: tokens.font.weight.medium }}>この視点への配置なし（フィルタ解除で全表示）</span>
+                    <span className="ds-sub ds-faint" style={{ marginLeft: 8 }}>この視点への配置なし（フィルタ解除で全表示）</span>
                   )}
                 </div>
                 {visiblePlacements.length > 0 && (
@@ -3239,25 +3196,10 @@ function PinsPlanSection({
   );
 }
 
-const pinCardStyle: React.CSSProperties = {
-  padding: 10,
-  background: tokens.gradient.surface,
-  borderWidth: 1,
-  borderStyle: 'solid' as const,
-  borderColor: tokens.color.border,
-  borderRadius: tokens.radius.md,
-  boxShadow: 'inset 0 1px 0.5px rgba(255,255,255,0.85)',
-};
-
+/* Size only — the frame and the empty-slot fill come from `.ds-thumb`. */
 const pinThumbStyle: React.CSSProperties = {
   width: 56,
   height: 56,
-  borderRadius: tokens.radius.md,
-  objectFit: 'cover' as const,
-  background: 'rgba(0,0,0,0.06)',
-  borderWidth: 1,
-  borderStyle: 'solid' as const,
-  borderColor: tokens.color.border,
   flexShrink: 0,
 };
 
@@ -3365,18 +3307,10 @@ function SaveIndicator({ state, lastSavedAt, onClick }: {
       type="button"
       onClick={onClick}
       title="今すぐ IndexedDB に保存します（ブラウザを閉じても残ります）"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '7px 14px',
-        background: tokens.gradient.surface,
-        border: `1px solid ${COLOR.border}`,
-        borderRadius: tokens.radius.pill,
-        boxShadow: tokens.shadow.glass,
-        color: tokens.color.text, fontSize: 10.5, fontWeight: tokens.font.weight.strong,
-        cursor: 'pointer', fontFamily: tokens.font.family,
-        outline: 'none',
-      }}
+      className={`${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`}
+      style={{ gap: 8 }}
     >
+      {/* The dot's colour IS the state, so it stays a value rather than a class. */}
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, boxShadow: `0 0 6px ${dot}`, flexShrink: 0 }} />
       {label}
     </button>
@@ -3486,61 +3420,23 @@ function ViewerToolbarSection({
       defaultOpen={false}
       action={<button onClick={onReset} className={BTN} title="すべて表示 (既定) に戻す">既定に戻す</button>}
     >
-      <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 8, lineHeight: 1.55 }}>
+      <div className="ds-hint" style={{ marginBottom: 8 }}>
         ビューアに出す項目を選びます。チェックを外すと閲覧者にも非表示になります。<br />
         薄く表示されている項目は、現在のプロジェクト種別 / モードでは元から出ない項目です。
       </div>
 
       <div className="ds-label" style={S.toolbarGroupHead}>サイドバーサイズ</div>
-      <div style={{
-        display: 'flex', gap: 4, marginTop: 4, padding: 5,
-        background: tokens.glass.surfaceStrong,
-        backdropFilter: tokens.backdrop,
-        WebkitBackdropFilter: tokens.backdrop,
-        border: `1px solid ${tokens.color.border}`,
-        borderRadius: tokens.radius.pill,
-        boxShadow: tokens.shadow.glass,
-      }}>
-        {(['small', 'large'] as const).map((s) => {
-          const labels: Record<string, { label: string; sub: string }> = {
-            // Default flipped to "small" — fits more content on the screen
-            // and avoids the empty bottom that "large" leaves on short panels.
-            small: { label: '小', sub: '内容の高さ分のみ (既定)' },
-            large: { label: '大', sub: '全高表示' },
-          };
-          const isA = (tb.size ?? 'small') === s;
-          return (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onChange({ size: s })}
-              style={{
-                flex: 1,
-                padding: '8px 10px',
-                fontSize: 11.5,
-                lineHeight: 1.3,
-                background: isA ? tokens.gradient.accent : 'transparent',
-                borderWidth: 1,
-                borderStyle: 'solid' as const,
-                borderColor: isA ? tokens.color.accentBorder : 'transparent',
-                color: tokens.color.text,
-                borderRadius: tokens.radius.pill,
-                boxShadow: isA ? tokens.shadow.glassAccent : 'none',
-                cursor: 'pointer',
-                fontFamily: tokens.font.family,
-                fontWeight: tokens.font.weight.strong,
-                textAlign: 'center',
-                outline: 'none',
-                transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
-              }}
-              title={`サイドバーを ${labels[s].label} で表示`}
-            >
-              <div>{labels[s].label}</div>
-              <div style={{ fontSize: 9.5, color: tokens.color.textMute, marginTop: 2, fontWeight: tokens.font.weight.medium }}>{labels[s].sub}</div>
-            </button>
-          );
-        })}
-      </div>
+      {/* Default is "small" — fits more content on the screen and avoids the
+          empty bottom that "large" leaves on short panels. */}
+      <PillToggle
+        value={tb.size ?? 'small'}
+        onChange={(size) => onChange({ size })}
+        options={[
+          { value: 'small', title: '小', sub: '内容の高さ分のみ (既定)' },
+          { value: 'large', title: '大', sub: '全高表示' },
+        ]}
+        style={{ marginTop: 4 }}
+      />
       <div className="ds-hint" style={{ marginTop: 6 }}>
         どちらも幅は 320px。「小」は表示中のセクション分だけ縦に伸びます。
       </div>
@@ -3693,9 +3589,7 @@ function SidebarOrderEditor({ tb, isVRMode, onChange }: { tb: ToolbarPatch; isVR
         サイドバーに表示される項目だけが並びます。ドラッグで順序を入替。表示／非表示は上のチェックボックスで切替。
       </div>
       {visibleOrdered.length === 0 ? (
-        <div style={{ fontSize: 10.5, color: tokens.color.textFaint, padding: '8px 10px', background: 'rgba(0,0,0,0.03)', borderRadius: 6, textAlign: 'center' }}>
-          表示中の項目がありません
-        </div>
+        <div className="ds-empty">表示中の項目がありません</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {visibleOrdered.map((id, idx) => {
@@ -3709,22 +3603,14 @@ function SidebarOrderEditor({ tb, isVRMode, onChange }: { tb: ToolbarPatch; isVR
                 onDragOver={(e) => onDragOver(e, idx)}
                 onDrop={(e) => onDrop(e, idx)}
                 onDragEnd={onDragEnd}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 8px',
-                  background: isDragging ? 'rgba(59,130,246,0.08)' : '#ffffff',
-                  border: `1px solid ${isDropTarget ? 'rgba(59,130,246,0.6)' : 'rgba(0,0,0,0.1)'}`,
-                  borderRadius: 6,
-                  cursor: 'grab',
-                  opacity: isDragging ? 0.5 : 1,
-                  userSelect: 'none',
-                }}
+                className={`${surfaceClass('plain')} ds-row ds-fill-surface`}
+                data-drop={isDropTarget || undefined}
+                data-reorder={isDragging || undefined}
+                style={{ cursor: 'grab', opacity: isDragging ? 0.5 : 1, userSelect: 'none' }}
               >
-                <span style={{ fontSize: 11.5, color: 'rgba(0,0,0,0.35)', minWidth: 14, lineHeight: 1, cursor: 'grab' }} title="ドラッグして並び替え">⋮⋮</span>
+                <span className="ds-faint" style={{ minWidth: 14, lineHeight: 1 }} title="ドラッグして並び替え">⋮⋮</span>
                 <span className="ds-mono ds-hint" style={{ minWidth: 18 }}>{idx + 1}</span>
-                <span style={{ fontSize: 10.5, color: '#1f2937', flex: 1 }}>{ORDER_LABELS[id]}</span>
+                <span className="ds-body" style={{ flex: 1 }}>{ORDER_LABELS[id]}</span>
               </div>
             );
           })}
@@ -3755,34 +3641,17 @@ function EngineSwitchButton({
     <button
       type="button"
       onClick={() => { if (!isActive) onClick(); }}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1,
-        padding: '8px 12px',
-        fontSize: 11.5,
-        background: isActive ? tokens.gradient.accent : tokens.gradient.surface,
-        // Long-hand split for the React shorthand-vs-longhand bug.
-        borderWidth: 1,
-        borderStyle: 'solid' as const,
-        borderColor: isActive ? tokens.color.accentBorder : tokens.color.border,
-        borderRadius: tokens.radius.pill,
-        boxShadow: isActive ? tokens.shadow.glassAccent : tokens.shadow.glass,
-        cursor: isActive ? 'default' : 'pointer',
-        fontWeight: tokens.font.weight.strong,
-        color: tokens.color.text,
-        fontFamily: tokens.font.family,
-        width: '100%',
-        textAlign: 'left',
-        lineHeight: 1.3,
-        outline: 'none',
-        transition: `background ${tokens.transition}, border-color ${tokens.transition}, box-shadow ${tokens.transition}`,
-      }}
+      className={`${surfaceClass(isActive ? 'accent' : 'plain')} ds-pill ds-pill--block${isActive ? '' : ' ds-fill-surface'}`}
+      /* Layout only — the stacked, left-aligned content is specific to this
+         button; surface / edge / motion all come from the classes above. */
+      style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 1, textAlign: 'left' }}
       title={isActive ? '使用中' : `${label} に切替えてリロード`}
     >
       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 9.5 }}>{isActive ? '●' : '○'}</span>
+        <span className="ds-badge__char">{isActive ? '●' : '○'}</span>
         <span>{label}</span>
       </span>
-      <span style={{ fontSize: 9.5, color: tokens.color.textMute, fontWeight: tokens.font.weight.medium }}>{sub}</span>
+      <span className="ds-hint">{sub}</span>
     </button>
   );
 }
@@ -3875,7 +3744,7 @@ function RenderQualitySection({
       defaultOpen={false}
       action={<button onClick={onReset} className={BTN} title="manifest.settings.render を未設定に戻す">既定に戻す</button>}
     >
-      <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginBottom: 8, lineHeight: 1.55 }}>
+      <div className="ds-hint" style={{ marginBottom: 8 }}>
         露出 / 背景色は両エンジン反映。彩度・コントラスト・明るさ・トーンマップは PlayCanvas のみ反映。
       </div>
 
@@ -3928,7 +3797,7 @@ function RenderQualitySection({
       <Slider label="露出 (EV)" min={-3} max={3} step={0.1} value={ev} onChange={(v) => patch({ exposureEV: +v.toFixed(2) })} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-        <span style={{ fontSize: 10.5, color: tokens.color.textMute, width: 56 }}>背景色</span>
+        <span className="ds-hint" style={{ width: 56 }}>背景色</span>
         <input
           type="color"
           value={colorHex}
@@ -3939,9 +3808,10 @@ function RenderQualitySection({
             const b = parseInt(hex.slice(5, 7), 16) / 255;
             patch({ clearColor: [r, g, b] });
           }}
-          style={{ width: 36, height: 24, border: '1px solid rgba(0,0,0,0.12)', borderRadius: 4, padding: 0, cursor: 'pointer' }}
+          className="ds-swatch-input"
+          style={{ width: 36, height: 24 }}
         />
-        <span style={{ fontSize: 9.5, fontFamily: tokens.font.mono, color: tokens.color.textMute }}>{colorHex}</span>
+        <span className="ds-mono ds-faint">{colorHex}</span>
       </div>
 
       {/* カラー調整 — PlayCanvas (CameraFrame) でのみ反映。Spark / mkkellogg では無視される。
@@ -4020,7 +3890,7 @@ function Slider({ label, min, max, step, value, onChange }: { label: string; min
 function StudioColorRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0' }}>
-      <span style={{ flex: 1, fontSize: 11.5, color: tokens.color.textMute }}>{label}</span>
+      <span className="ds-sub" style={{ flex: 1 }}>{label}</span>
       {/* Both wells were still on platform chrome: a 4px-radius OS colour box
           and a text field that inherited the sunken recipe. The hex readout is
           something you read far more often than you type into, so it takes the
@@ -4029,14 +3899,15 @@ function StudioColorRow({ label, value, onChange }: { label: string; value: stri
         type="color"
         value={value}
         onChange={e => onChange(e.target.value)}
+        className="ds-swatch-input"
         style={{ width: 44 }}
       />
       <input
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
-        className={`${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`}
-        style={{ width: 92, textAlign: 'center', fontFamily: tokens.font.mono }}
+        className={`${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface ds-mono`}
+        style={{ width: 92, textAlign: 'center' }}
       />
     </div>
   );
@@ -4046,32 +3917,13 @@ function StudioColorRow({ label, value, onChange }: { label: string; value: stri
 const DEFAULT_SEGMENT_SEC = 3.0;
 const FREE_REC_BUFFER_SEC = 2; // start countdown / stop countdown for the free-recording mode
 
-/** One-time CSS injection for video tab interactive elements (button tap feedback,
- *  thumbnail hover ring, countdown overlay). */
-function useVideoTabStyles() {
-  useEffect(() => {
-    const id = 'video-tab-styles';
-    if (document.getElementById(id)) return;
-    const style = document.createElement('style');
-    style.id = id;
-    style.textContent = `
-      .video-btn-tap { transition: transform 80ms ease-out, background 80ms, box-shadow 80ms; }
-      .video-btn-tap:hover:not(:disabled) { background: rgba(0,0,0,0.06); }
-      .video-btn-tap:active:not(:disabled) { transform: scale(0.9); background: rgba(0,0,0,0.12); }
-      .video-btn-cta { transition: transform 80ms ease-out, box-shadow 80ms, filter 80ms; }
-      .video-btn-cta:hover:not(:disabled) { filter: brightness(1.05); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
-      .video-btn-cta:active:not(:disabled) { transform: scale(0.97); filter: brightness(0.95); }
-      .video-thumb { transition: outline 100ms; outline: 1px solid rgba(0,0,0,0.1); }
-      .video-thumb:hover { outline: 2px solid #3b82f6; }
-      @keyframes video-rec-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
-      .video-rec-dot { animation: video-rec-pulse 1.2s ease-in-out infinite; }
-      @keyframes video-countdown-pop { 0% { transform: scale(0.6); opacity: 0; } 30% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
-      .video-countdown-num { animation: video-countdown-pop 280ms ease-out; }
-    `;
-    document.head.appendChild(style);
-    return () => { document.getElementById(id)?.remove(); };
-  }, []);
-}
+/* The video tab used to inject its own stylesheet here — tap feedback, a
+ * thumbnail hover ring and two @keyframes. Every rule either duplicated
+ * `.ds-pill` / `.ds-thumb` or fought them (a 0.9 press against the pill's
+ * 0.975, a #3b82f6 outline against the accent ring), so one panel's buttons
+ * behaved unlike every other button in the app. The two animations that were
+ * genuinely missing — the REC pulse and the countdown pop — now live on
+ * `.ds-rec-dot` / `.ds-countdown` in design-system.css. */
 
 function VideoTabPanel(props: {
   manifest: { id: string } | null;
@@ -4109,7 +3961,6 @@ function VideoTabPanel(props: {
   trimEnd: number;
   setTrimEnd: (n: number) => void;
 }) {
-  useVideoTabStyles();
   // Movement mode (walk / fly) — usually toggled from the LeftPanel which is
   // hidden in the video tab, so we surface it here too.
   const movementMode = useUIStore((s) => s.movementMode);
@@ -4364,7 +4215,8 @@ function PathRecordingPanel({
               <img
                 src={kf.thumbnail}
                 alt={`scene ${i + 1}`}
-                className="video-thumb ds-thumb"
+                className="ds-thumb"
+            data-clickable="true"
                 draggable={false}
                 onClick={() => !isBusy && jumpToIndex(i)}
                 style={{ width: 84, height: 56, cursor: isBusy ? 'default' : 'pointer' }}
@@ -4383,7 +4235,7 @@ function PathRecordingPanel({
                     onClick={() => togglePassThrough(i)}
                     disabled={isBusy}
                     title={kf.passThrough ? '通過 (止まらない) — クリックで停止に切替' : '停止 (waypoint で減速) — クリックで通過に切替'}
-                    className={`video-btn-tap ${surfaceClass(kf.passThrough ? 'processing' : 'neutral')} ds-pill ds-pill--xs${kf.passThrough ? '' : ' ds-fill-neutral'}`}
+                    className={`${surfaceClass(kf.passThrough ? 'processing' : 'neutral')} ds-pill ds-pill--xs${kf.passThrough ? '' : ' ds-fill-neutral'}`}
                   >
                     {kf.passThrough ? '⤳ 通過' : '■ 停止'}
                   </button>
@@ -4397,7 +4249,7 @@ function PathRecordingPanel({
                   <span className="ds-hint">次の scene へ</span>
                   <button
                     type="button"
-                    className={`video-btn-tap ${VIDEO_BTN}`}
+                    className={`${VIDEO_BTN}`}
                     onClick={() => adjustSegmentDuration(i, -1)}
                     disabled={isBusy || kf.durationSec <= 1}
                     title="−1 秒"
@@ -4408,7 +4260,7 @@ function PathRecordingPanel({
                   </span>
                   <button
                     type="button"
-                    className={`video-btn-tap ${VIDEO_BTN}`}
+                    className={`${VIDEO_BTN}`}
                     onClick={() => adjustSegmentDuration(i, +1)}
                     disabled={isBusy || kf.durationSec >= 60}
                     title="+1 秒"
@@ -4420,13 +4272,13 @@ function PathRecordingPanel({
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div style={{ display: 'flex', gap: 2 }}>
-                <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={() => jumpToIndex(i)} disabled={isBusy} title="この位置にジャンプ" style={btnIcon()}>↑</button>
-                <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={() => overwriteScene(i)} disabled={isBusy} title="現在のカメラで上書き" style={btnIcon()}>⟳</button>
+                <button type="button" className={`${VIDEO_BTN}`} onClick={() => jumpToIndex(i)} disabled={isBusy} title="この位置にジャンプ" style={btnIcon()}>↑</button>
+                <button type="button" className={`${VIDEO_BTN}`} onClick={() => overwriteScene(i)} disabled={isBusy} title="現在のカメラで上書き" style={btnIcon()}>⟳</button>
               </div>
               <div style={{ display: 'flex', gap: 2 }}>
-                <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={() => moveScene(i, -1)} disabled={isBusy || i === 0} title="上へ" style={btnIcon()}>▲</button>
-                <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={() => moveScene(i, 1)} disabled={isBusy || isLast} title="下へ" style={btnIcon()}>▼</button>
-                <button type="button" className={`video-btn-tap ${dangerIconClass}`} onClick={() => removeScene(i)} disabled={isBusy} title="削除"><IconTrash /></button>
+                <button type="button" className={`${VIDEO_BTN}`} onClick={() => moveScene(i, -1)} disabled={isBusy || i === 0} title="上へ" style={btnIcon()}>▲</button>
+                <button type="button" className={`${VIDEO_BTN}`} onClick={() => moveScene(i, 1)} disabled={isBusy || isLast} title="下へ" style={btnIcon()}>▼</button>
+                <button type="button" className={`${dangerIconClass}`} onClick={() => removeScene(i)} disabled={isBusy} title="削除"><IconTrash /></button>
               </div>
             </div>
           </div>
@@ -4435,7 +4287,7 @@ function PathRecordingPanel({
 
       <button
         type="button"
-        className="video-btn-tap ds-dropzone"
+        className="ds-dropzone"
         onClick={addCurrentAsScene}
         disabled={isBusy}
         style={{ marginTop: 6 }}
@@ -4451,7 +4303,7 @@ function PathRecordingPanel({
           <button
             key={f}
             type="button"
-            className={`video-btn-tap ${surfaceClass(fps === f ? 'accent' : 'plain')} ds-pill ds-pill--xs${fps === f ? '' : ' ds-fill-surface'}`}
+            className={`${surfaceClass(fps === f ? 'accent' : 'plain')} ds-pill ds-pill--xs${fps === f ? '' : ' ds-fill-surface'}`}
             onClick={() => setFps(f)}
             disabled={isBusy}
           >
@@ -4504,13 +4356,13 @@ function PathRecordingPanel({
           {(trimStart * totalSec).toFixed(1)}s 〜 {(trimEnd * totalSec).toFixed(1)}s
           <span className="ds-faint" style={{ marginLeft: 6 }}>({((trimEnd - trimStart) * totalSec).toFixed(1)}s)</span>
         </span>
-        <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={handleSetTrimStart} disabled={isBusy}
+        <button type="button" className={`${VIDEO_BTN}`} onClick={handleSetTrimStart} disabled={isBusy}
           title="現在のスクラブ位置を開始に設定"
         >⊏ 開始</button>
-        <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={handleSetTrimEnd} disabled={isBusy}
+        <button type="button" className={`${VIDEO_BTN}`} onClick={handleSetTrimEnd} disabled={isBusy}
           title="現在のスクラブ位置を終了に設定"
         >終了 ⊐</button>
-        <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={handleResetTrim} disabled={isBusy || (trimStart === 0 && trimEnd === 1)}
+        <button type="button" className={`${VIDEO_BTN}`} onClick={handleResetTrim} disabled={isBusy || (trimStart === 0 && trimEnd === 1)}
           title="全体に戻す"
         >↻</button>
       </div>
@@ -4519,7 +4371,7 @@ function PathRecordingPanel({
         {recState === 'previewing' ? (
           <button
             type="button"
-            className={`video-btn-cta ${surfaceClass('neutral')} ds-pill ds-fill-neutral`}
+            className={`${surfaceClass('neutral')} ds-pill ds-fill-neutral`}
             onClick={handleStopPreview}
             style={{ flex: '1 1 auto' }}
           >
@@ -4528,7 +4380,7 @@ function PathRecordingPanel({
         ) : (
           <button
             type="button"
-            className={`video-btn-cta ${surfaceClass('plain')} ds-pill ds-fill-surface`}
+            className={`${surfaceClass('plain')} ds-pill ds-fill-surface`}
             onClick={handlePreview}
             disabled={!canRun}
             style={{ flex: '1 1 auto' }}
@@ -4538,7 +4390,7 @@ function PathRecordingPanel({
         )}
         <button
           type="button"
-          className={`video-btn-cta ${surfaceClass('danger')} ds-pill`}
+          className={`${surfaceClass('danger')} ds-pill`}
           onClick={handleRecord}
           disabled={!canRun}
           style={{ flex: '1 1 auto' }}
@@ -4547,7 +4399,7 @@ function PathRecordingPanel({
         </button>
         <button
           type="button"
-          className={`video-btn-tap ${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`}
+          className={`${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`}
           onClick={handleClear}
           disabled={isBusy || keyframes.length === 0}
         >
@@ -4726,7 +4578,7 @@ function FreeRecordingPanel({
           <button
             key={f}
             type="button"
-            className={`video-btn-tap ${surfaceClass(fps === f ? 'accent' : 'plain')} ds-pill ds-pill--xs${fps === f ? '' : ' ds-fill-surface'}`}
+            className={`${surfaceClass(fps === f ? 'accent' : 'plain')} ds-pill ds-pill--xs${fps === f ? '' : ' ds-fill-surface'}`}
             onClick={() => setFps(f)}
             disabled={isBusy}
           >
@@ -4735,7 +4587,7 @@ function FreeRecordingPanel({
         ))}
         <div style={{ flex: 1 }} />
         {freeRecState === 'recording' && (
-          <span className="ds-mono" style={{ color: '#a94b4b' }}>
+          <span className="ds-mono ds-warn">
             ● {elapsedSec.toFixed(1)}s
           </span>
         )}
@@ -4745,7 +4597,7 @@ function FreeRecordingPanel({
       {freeRecState === 'idle' && (
         <button
           type="button"
-          className={`video-btn-cta ${surfaceClass('danger')} ds-pill ds-pill--lg`}
+          className={`${surfaceClass('danger')} ds-pill ds-pill--lg`}
           onClick={handleStart}
           style={{ width: '100%' }}
         >
@@ -4755,7 +4607,7 @@ function FreeRecordingPanel({
       {freeRecState === 'starting' && (
         <button
           type="button"
-          className={`video-btn-cta ${surfaceClass('warn')} ds-pill ds-pill--lg`}
+          className={`${surfaceClass('warn')} ds-pill ds-pill--lg`}
           onClick={handleAbort}
           style={{ width: '100%' }}
         >
@@ -4765,7 +4617,7 @@ function FreeRecordingPanel({
       {freeRecState === 'recording' && (
         <button
           type="button"
-          className={`video-btn-cta ${surfaceClass('neutral')} ds-pill ds-pill--lg ds-fill-neutral`}
+          className={`${surfaceClass('neutral')} ds-pill ds-pill--lg ds-fill-neutral`}
           onClick={handleStop}
           style={{ width: '100%' }}
         >
@@ -4803,7 +4655,7 @@ function VideoOverlay({
         <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
           <div
             key={freeRecCountdown}
-            className="video-countdown-num ds-countdown"
+            className="ds-countdown"
           >
             {freeRecCountdown}
           </div>
@@ -4814,7 +4666,7 @@ function VideoOverlay({
       )}
       {showRecBadge && !showCountdown && (
         <div className="ds-hud" style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="video-rec-dot ds-rec-dot" />
+            <span className="ds-rec-dot" />
             REC {freeRecState === 'recording' ? `${(freeRecElapsedMs / 1000).toFixed(1)}s` : ''}
         </div>
       )}
@@ -4966,7 +4818,7 @@ function ClipLibrarySection({
         {selectedCount > 0 && (
           <button
             type="button"
-            className={`video-btn-tap ${VIDEO_BTN}`}
+            className={`${VIDEO_BTN}`}
             onClick={() => setSelectedClipIds(new Set())}
             disabled={isBusy}
           >
@@ -5035,8 +4887,8 @@ function ClipLibrarySection({
                 {clip.planId && <span style={{ marginLeft: 6 }}>plan: {clip.planId}</span>}
               </div>
             </div>
-            <button type="button" className={`video-btn-tap ${VIDEO_BTN}`} onClick={() => handleRedownload(clip)} disabled={isBusy} title="再ダウンロード" style={btnIcon()}>↓</button>
-            <button type="button" className={`video-btn-tap ${dangerIconClass}`} onClick={() => handleDelete(clip.id)} disabled={isBusy} title="削除"><IconTrash /></button>
+            <button type="button" className={`${VIDEO_BTN}`} onClick={() => handleRedownload(clip)} disabled={isBusy} title="再ダウンロード" style={btnIcon()}>↓</button>
+            <button type="button" className={`${dangerIconClass}`} onClick={() => handleDelete(clip.id)} disabled={isBusy} title="削除"><IconTrash /></button>
           </div>
         );
       })}
@@ -5044,7 +4896,7 @@ function ClipLibrarySection({
       {library.length >= 2 && (
         <button
           type="button"
-          className={`video-btn-cta ${surfaceClass('accent')} ds-pill`}
+          className={`${surfaceClass('accent')} ds-pill`}
           onClick={handleConcat}
           disabled={isBusy || selectedCount < 2}
           style={{ width: '100%', marginTop: 8 }}
@@ -5254,7 +5106,6 @@ const S: Record<string, React.CSSProperties> = {
     position: 'sticky' as const,
     top: 56,
     zIndex: 4,
-    background: '#ffffff',
     paddingBottom: 4,
     margin: '-6px -6px 0 -6px',
     paddingLeft: 6,

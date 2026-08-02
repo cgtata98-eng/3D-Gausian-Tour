@@ -221,7 +221,7 @@ function PinPopup({ pin }: { pin: ScenePin }) {
     >
       <div className="ds-title" style={{ marginBottom: 8 }}>{pin.title || 'タグ'}</div>
       {pin.image && (
-        <img src={pin.image} alt="" style={popupImage} />
+        <img src={pin.image} alt="" className="ds-thumb" style={popupImage} />
       )}
       {pin.comment && (
         <div className="ds-sub" style={popupComment}>{pin.comment}</div>
@@ -272,13 +272,12 @@ const popupStyle: React.CSSProperties = {
   zIndex: 70,
 };
 
+/* Size only — the frame, the radius and the empty-slot ground come from
+   `.ds-thumb`, so a pin's picture is framed like every other picture. */
 const popupImage: React.CSSProperties = {
   width: '100%',
   height: 120,
-  objectFit: 'cover' as const,
-  borderRadius: 16,
   marginBottom: 8,
-  background: 'rgba(0,0,0,0.06)',
 };
 
 const popupComment: React.CSSProperties = {

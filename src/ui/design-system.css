@@ -508,6 +508,27 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   z-index: 100;
 }
 
+/* The full-screen notice shown for the moment between "we are reloading" and
+   the reload actually happening (engine switch, colour-pipeline switch). Dark
+   on purpose — the app is going away, and a light veil would read as a panel
+   that is still yours to interact with. Built imperatively by
+   `document.createElement`, so it takes a class rather than a cssText blob;
+   two call sites had drifted to 24px and 22px type for the same message. */
+.ds-reload-veil {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font-family: var(--ds-font-mono);
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  z-index: 9999;
+}
+
 /* A stage: full-bleed picture with nothing of the app on top of it (the
    mirror page). Deliberately NOT a shell — the absence of chrome is the
    point. It still belongs here so the one screen that opts out of the
@@ -553,6 +574,9 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   text-align: center;
   color: #fff;
   text-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  /* Each number pops in — without it the count reads as a static number that
+     happens to change, and you cannot tell it is still running. */
+  animation: ds-pop 280ms var(--ds-ease);
 }
 .ds-countdown__label {
   margin-top: 8px;
@@ -563,7 +587,24 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 /* The dot beside a REC readout. */
-.ds-rec-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d47c7c; }
+/* The dot pulses because a recording indicator that does not move is
+   indistinguishable from a decoration. The animation used to live in a
+   stylesheet the video tab injected at runtime, which meant "is recording"
+   looked different depending on which panel you were in. */
+.ds-rec-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d47c7c;
+  animation: ds-pulse 1.2s var(--ds-ease) infinite;
+}
+@keyframes ds-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes ds-pop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  30%  { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
 
 /* A rendered image judged on its own — an equirect panorama preview, a video
    frame. It gets a neutral dark ground rather than a shell, because a shell
@@ -1020,7 +1061,22 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   font-family: var(--ds-font);
   font-size: var(--ds-fs-xs);
   object-fit: cover;
+  transition: box-shadow var(--ds-dur) var(--ds-ease);
 }
+/* Only a thumbnail you can act on answers the pointer. The video tab drew this
+   as a hard `outline: 2px solid #3b82f6`, which was the one blue in the app
+   that came from nowhere; the accent ring is the same one every selectable
+   surface uses. */
+.ds-thumb[data-clickable='true']:hover {
+  box-shadow: var(--ds-inner-sunken), 0 0 0 2px rgba(112, 180, 222, 0.85);
+}
+
+/* A sticky header inside a scrolling panel has to be opaque or the content
+   passing under it shows through. It takes the panel's own white rather than a
+   literal — a hardcoded #ffffff here is exactly how the whites drifted apart
+   before. Position / offset stay at the call site: what it clears is a layout
+   fact about that panel, not a design decision. */
+.ds-sticky-cover { background: var(--ds-surface); }
 
 /* Inline literal in running text — a path, a key name. */
 .ds-code {
@@ -1651,6 +1707,26 @@ input[type='range']::-moz-range-thumb {
 /* A standalone colour well, larger than `.ds-chip__swatch`. The colour itself
    is always data, so it stays at the call site. */
 .ds-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 50%; box-shadow: var(--ds-inner); }
+/* A swatch used as an on/off marker rather than to show a colour — the plan
+   list's activate dot. Here the colour is state, so it belongs to the system;
+   the two literals were sitting in the screen. */
+.ds-swatch[data-active='true']  { background: #d9a441; }
+.ds-swatch[data-active='false'] { background: rgba(0, 0, 0, 0.2); }
+/* `<input type="color">` — the browser paints the colour itself, so all we own
+   is the frame around it. Replaced element: no pseudo-element ring available,
+   hence the field rim emulated with inset shadows (same trick as `.ds-input`).
+   Size stays at the call site; the swatch is 32×28 in one place and 36×24 in
+   another for reasons of the surrounding row, not of the control. */
+.ds-swatch-input {
+  padding: 0;
+  border: none;
+  border-radius: var(--ds-r-sm);
+  background: transparent;
+  cursor: pointer;
+  box-shadow: var(--ds-rim-field);
+  transition: box-shadow var(--ds-dur) var(--ds-ease);
+}
+.ds-swatch-input:hover { box-shadow: var(--ds-rim-field), var(--ds-lift); }
 /* Full-width bar that behaves as a button but paints no surface — used to
    re-open a block that has been closed down to a handle. */
 .ds-rowbtn {
