@@ -1351,27 +1351,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               );
             })()}
 
-            {/* ===== ツールバー表示 (全体) — 全プロジェクト共通。
-                 ビューアのサイドバー / オーバーレイの各項目を表示するか個別に切替える。 ===== */}
-            {debugTab === 'global' && (
-              <ViewerToolbarSection
-                tb={manifest?.viewerToolbar ?? {}}
-                isOtherProject={isOtherProject}
-                isVRMode={isVRMode}
-                variants={manifest?.variants}
-                onChange={(patch) => {
-                  const cur = manifest?.viewerToolbar ?? {};
-                  useSceneStore.getState().setViewerToolbar({ ...cur, ...patch });
-                }}
-                onReset={() => useSceneStore.getState().setViewerToolbar(null)}
-                onToggleVariant={toggleVariantTool}
-              />
-            )}
-
-            {/* ===== プラン管理 (全体タブ — どのプランを編集中か) ===== */}
+            {/* ===== 各プラン (プロジェクトタブ — どのプランを編集中か) =====
+                 ツールバー表示より先。プロジェクトを開いて最初にすることは
+                 「どのプランを編集するか」で、ビューアの項目出し分けはその後。 */}
             {debugTab === 'global' && (
             <Section
-              title={`プラン (${manifest?.plans?.length ?? 0})`}
+              title={`各プラン (${manifest?.plans?.length ?? 0})`}
               subtitle="PLANS"
               action={<button onClick={() => { setShowAddPlan(true); setNewPlanName(''); }} className={BTN_PRIMARY}>+ プランを追加</button>}
               defaultOpen={false}
@@ -1501,7 +1486,24 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             </Section>
             )}
 
-            {/* ===== 環境音 (全体, プラン管理の下) =====
+            {/* ===== ツールバー表示 (プロジェクトタブ) — 全プロジェクト共通。
+                 ビューアのサイドバー / オーバーレイの各項目を表示するか個別に切替える。 ===== */}
+            {debugTab === 'global' && (
+              <ViewerToolbarSection
+                tb={manifest?.viewerToolbar ?? {}}
+                isOtherProject={isOtherProject}
+                isVRMode={isVRMode}
+                variants={manifest?.variants}
+                onChange={(patch) => {
+                  const cur = manifest?.viewerToolbar ?? {};
+                  useSceneStore.getState().setViewerToolbar({ ...cur, ...patch });
+                }}
+                onReset={() => useSceneStore.getState().setViewerToolbar(null)}
+                onToggleVariant={toggleVariantTool}
+              />
+            )}
+
+            {/* ===== 環境音 (プロジェクトタブ, 各プランの下) =====
                 BGM は両モードで使える (パノラマでも音楽は流せる)。足音は歩く
                 3DGS でしか意味がないので、VR モード or splat データが無い場合は
                 subsection を出さない。 */}
