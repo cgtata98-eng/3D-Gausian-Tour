@@ -173,7 +173,8 @@ const gearBtn: React.CSSProperties = {
   // Sit just BELOW the FPS counter (top:12 right:12, z50) so they don't overlap,
   // and above the other preview overlays (ScenePins z60/70, FPS z50).
   top: 52, right: 16,
-  width: 40, height: 40,
+  // Size comes from `.ds-pill--icon` — a hardcoded 40 here also overrode the
+  // 44px touch size, so this one button stayed a cursor target on a phone.
   zIndex: 80,
 };
 

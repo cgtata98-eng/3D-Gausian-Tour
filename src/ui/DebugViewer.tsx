@@ -1039,7 +1039,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   return (
     <div className="ds-screen" style={S.root}>
       {/* Header */}
-      <div className="ds-blur" style={S.header}>
+      <div className="ds-blur ds-authoring__bar" style={S.header}>
         <a
           href="/"
           onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate('/'); }}
@@ -1060,9 +1060,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
         >Viewer →</a>
       </div>
 
-      <div style={S.body}>
+      <div className="ds-authoring" style={S.body}>
         {/* LEFT: scrollable settings */}
-        <div style={S.left}>
+        <div className="ds-authoring__panel" style={S.left}>
             {/* ===== Tabs: プロジェクト / プラン / 動画 ===== */}
             {/* Three two-line buttons plus an "active" recipe — i.e. the shared
                 segmented control, re-implemented. Switching to the real one
@@ -4991,17 +4991,16 @@ const S: Record<string, React.CSSProperties> = {
   },
   fpsDot: { width: 6, height: 6, borderRadius: '50%' },
   viewerBtn: { textDecoration: 'none' },
-  body: {
-    minHeight: 0, overflow: 'hidden',
-    display: 'grid', gridTemplateColumns: 'minmax(440px, 560px) 1fr',
-  },
+  /* The two-column split and the panel's divider live in `.ds-authoring` /
+     `.ds-authoring__panel` — they need a media query to survive a phone, and
+     a media query cannot be written inline. */
+  body: { minHeight: 0, overflow: 'hidden' },
   left: {
     minWidth: 0, minHeight: 0,
     overflowY: 'auto', overflowX: 'hidden',
     padding: '14px 10px',
     display: 'flex', flexDirection: 'column', gap: 10,
     scrollbarWidth: 'thin',
-    borderRight: `1px solid ${COLOR.border}`,
   },
 
   kvGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 },

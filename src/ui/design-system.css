@@ -1842,14 +1842,51 @@ input[type='range']::-moz-range-thumb {
 /* Coarse pointer = finger. Not a width query: a small window on a desktop
    still has a mouse, and a large tablet still has a finger. */
 @media (pointer: coarse) {
+  /* The type scale is drawn for a screen an arm's length away. In the hand,
+     9.5px is not small — it is unreadable, and it is the size most of the
+     app's explanatory copy and every uppercase marker is set in. Raising the
+     two tokens moves all of it at once; the alternative is a per-screen
+     override, which is how this drifts.
+     Declared on `:root`, not bare inside the media block — a custom property
+     outside a selector is silently dropped, which would have made this whole
+     paragraph a comment describing something that never happened. */
+  :root {
+    --ds-fs-xs: 11px;
+    --ds-fs-sm: 12px;
+  }
+
   /* 44px is the smallest reliably hittable target; the desktop sizes are
-     tuned for a cursor and are too small to land on with a thumb. */
+     tuned for a cursor and are too small to land on with a thumb.
+     `--sm` and `--xs` used to keep their cursor sizes here — 38px and, for
+     `--xs`, no rule at all, so the densest icon rows in the app (a viewpoint
+     row's 5 actions) stayed at 24px on a phone. On touch there is exactly one
+     minimum and everything meets it, even where that costs the size contrast
+     the variants carry on a desktop.
+
+     Deliberately NOT solved with an invisible 44px ::after hit area: those
+     rows sit on a 30px pitch, so the padded areas would overlap and the
+     button that answers your tap would be whichever one is later in the DOM,
+     not the one under your thumb. */
   .ds-pill { padding: 12px 20px; min-height: 44px; }
-  .ds-pill--sm { padding: 9px 16px; min-height: 38px; }
+  .ds-pill--sm { padding: 9px 16px; min-height: 44px; }
+  .ds-pill--xs { padding: 8px 14px; min-height: 44px; }
   .ds-pill--icon { width: 44px; height: 44px; }
-  .ds-pill--icon.ds-pill--sm { width: 38px; height: 38px; }
+  .ds-pill--icon.ds-pill--sm { width: 44px; height: 44px; }
+  .ds-pill--icon.ds-pill--xs { width: 44px; height: 44px; }
   .ds-seg__btn { padding: 12px 20px; min-height: 44px; }
   .ds-badge { width: 44px; height: 44px; }
+  /* Row affordances that are buttons in their own right. */
+  .ds-iconbtn, .ds-scene-nav, .ds-scene-fold { min-width: 44px; min-height: 44px; }
+
+  /* A section header LOOKS like a full-width button but only the text was one:
+     `.ds-section__toggle` carries `padding: 0`, so its box was the 15px the
+     type occupies and the header's own 10px padding belonged to no control.
+     Tapping a hair above or below the title did nothing, which reads as the
+     section being stuck rather than as a miss. The padding moves into the
+     button so the whole row is the target. Touch only — on a desktop the
+     15px strip is a fine cursor target and the header keeps its height. */
+  .ds-section__head { padding-top: 0; padding-bottom: 0; }
+  .ds-section__toggle { align-self: stretch; padding: 12px 0; min-height: 44px; }
 
   /* Hover does not exist on a touch screen; a `:hover` rule there sticks
      after the tap and leaves the surface lifted until something else is
@@ -1868,13 +1905,53 @@ input[type='range']::-moz-range-thumb {
   input[type='checkbox']::after { left: 7.5px; top: 4px; width: 5px; height: 9.5px; }
   input[type='radio']::after { inset: 6px; }
 
-  /* Fingers need a bigger slider thumb and a fatter track to aim at. */
-  input[type='range'] { height: 30px; }
+  /* Fingers need a bigger slider thumb and a fatter track to aim at. The
+     control's own box goes to 44 so grabbing it does not require hitting the
+     track exactly — the visible track stays 14px, the rest is reach. */
+  input[type='range'] { height: 44px; }
   input[type='range']::-webkit-slider-runnable-track { height: 14px; }
   input[type='range']::-webkit-slider-thumb { width: 28px; height: 28px; margin-top: -7px; }
 
   /* iOS zooms the page when a focused field is under 16px. */
   input:not([type='range']), select, textarea { font-size: 16px; }
+}
+
+/* ── The authoring screen ──────────────────────────────────────────────
+   A workbench: a column of controls beside a live preview. The split was
+   `minmax(440px, 560px) 1fr` written inline, and a minimum of 440px on a
+   390px screen does not shrink — it overflows, and because the grid clips,
+   the overflow was thrown away in silence. The 動画 tab, 公開 and Viewer →
+   were all off the right edge of a phone with no scrollbar to reveal them,
+   and the screen still looked deliberate. */
+.ds-authoring {
+  display: grid;
+  grid-template-columns: minmax(440px, 560px) 1fr;
+}
+.ds-authoring__panel { border-right: 1px solid var(--ds-hairline); }
+
+/* Below the point where the two columns stop fitting side by side, stack them:
+   controls first at full width, preview beneath. Not a phone-only rule — a
+   half-width desktop window has the same problem. */
+@media (max-width: 900px) {
+  .ds-authoring {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr minmax(200px, 38vh);
+  }
+  /* The divider follows the split it divides. */
+  .ds-authoring__panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--ds-hairline);
+  }
+  /* The top bar is a fixed 48px row, so it cannot wrap without breaking the
+     grid row it sits in. It scrolls instead — every control stays reachable,
+     which is the whole point. */
+  .ds-authoring__bar {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .ds-authoring__bar::-webkit-scrollbar { display: none; }
+  .ds-authoring__bar > * { flex-shrink: 0; }
 }
 
 /* Narrow layout. Cards go single-column and dialogs become sheets — a 480px
