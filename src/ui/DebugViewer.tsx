@@ -40,7 +40,7 @@ import { useDemoModeCamera } from './useDemoModeCamera';
 import { targetFromYaw } from '../core/viewpoint';
 import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
-import { tokens , shellSurface } from './design-tokens';
+import { tokens } from './design-tokens';
 import { surfaceClass, Chip, Tag, PillToggle, SegmentedControl, IconClose, IconTrash, IconCheck } from './components';
 import * as idb from '../utils/idb';
 import { unzipSync } from 'fflate';
@@ -3977,16 +3977,15 @@ function RenderQualitySection({
           bypass ON 中は CameraFrame が無いので、これらのスライダーは保存はされるが描画には反映されない。 */}
       <div className="ds-label" style={S.toolbarGroupHead}>カラー調整 (PlayCanvas)</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-        <span style={{ fontSize: 10.5, color: tokens.color.textMute, width: 80 }}>トーン</span>
+        <span className="ds-sub" style={{ width: 80 }}>トーン</span>
+        {/* This was the last surface still on the migration bridge, and it was
+            wearing the RAISED shell — a select dressed as a button — while
+            every other field in the app is a recessed slot. Element-level
+            styling handles it now. */}
         <select
-          className="glass-edge"
           value={cfg.toneMapping ?? 'linear'}
           onChange={(e) => patch({ toneMapping: e.target.value as NonNullable<import('../core/types').RenderQualityConfig['toneMapping']> })}
-          style={{
-            flex: 1, padding: '6px 12px', fontSize: tokens.font.size.sm,
-            ...shellSurface('plain', { fill: 'surface' }),
-            cursor: 'pointer', outline: 'none',
-          }}
+          style={{ flex: 1, padding: '6px 12px' }}
         >
           <option value="linear">Linear (既定)</option>
           <option value="neutral">Neutral</option>

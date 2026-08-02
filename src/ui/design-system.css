@@ -131,6 +131,23 @@
     inset 0 2px 3px rgba(118, 130, 154, 0.15),
     inset 0 -1.5px 1px rgba(255, 255, 255, 0.90);
 
+  /* The rim of a recessed control.
+     ─────────────────────────────────────────────────────────────────────
+     The shell's ring is a masked pseudo-element, and `input` / `select` are
+     REPLACED elements — they render no `::before`, so the entire edge
+     language was simply absent from every field in the app. A field had a
+     groove and no rim, which on a white panel reads as a flat grey slab
+     rather than as glass. These layered insets stand in for the ring, in the
+     same order: one hue hairline all the way round for the sides, the darkest
+     line on top, the caustic along the bottom. */
+  --ds-rim-field:
+    inset 0 0 0 1px rgba(176, 190, 210, 0.44),
+    inset 0 1.5px 0 0 rgba(142, 151, 170, 0.22),
+    inset 0 -1.5px 0 0 rgba(255, 255, 255, 0.96);
+  /* Fields sit ON white panels now, so the old #ededed read as a grey block.
+     Lighter, and it is the rim that says "this is a slot", not the darkness. */
+  --ds-field-fill: linear-gradient(180deg, #f1f2f3 0%, #f8f9fa 100%);
+
   --ds-lift:
     0 1px 2px rgba(40, 48, 80, 0.05),
     0 4px 14px rgba(40, 48, 80, 0.07),
@@ -254,29 +271,10 @@
           backdrop-filter: var(--ds-backdrop-scene);
 }
 
-/* ── Migration bridge ──────────────────────────────────────────────────
-   Screens still on the previous opt-in pair — `shellSurface()` in the style
-   object, which sets `--edge-grad` / `--edge-w`, plus this class to draw them
-   — keep rendering correctly until they are moved onto `.ds-surface`.
-   Without it they lose their edge the moment the old rule is deleted, which
-   is a worse state than before the rewrite started.
-
-   DELETE THIS BLOCK once `grep -r glass-edge src/` comes back empty. */
-.glass-edge { position: relative; isolation: isolate; }
-.glass-edge::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: var(--edge-w, 1.2px);
-  background: var(--edge-grad);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
-  pointer-events: none;
-  z-index: 3;
-}
+/* The migration bridge (`.glass-edge`, fed by `shellSurface()` in a style
+   object) lived here. Every surface is on `.ds-surface` now, so it is gone —
+   leaving it would have meant two ways to draw the same ring, and the older
+   one silently keeps working, which is how half-migrations become permanent. */
 
 /* ══════════════════════════════════════════════════════════════════════════
    Pill button
@@ -563,8 +561,8 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   height: 6px;
   border-radius: var(--ds-r-pill);
   overflow: hidden;
-  background-image: linear-gradient(180deg, #ececec 0%, #f3f3f3 100%);
-  box-shadow: var(--ds-inner-sunken);
+  background-image: var(--ds-field-fill);
+  box-shadow: var(--ds-rim-field), var(--ds-inner-sunken);
 }
 /* Same fill as the range track, so a determinate bar and a slider at the same
    value read as the same amount of the same thing. */
@@ -1231,8 +1229,8 @@ textarea,
   border: 0 solid transparent;
   border-radius: var(--ds-r-pill);
   background-color: transparent;
-  background-image: linear-gradient(180deg, #ededed 0%, #f4f4f4 100%);
-  box-shadow: var(--ds-inner-sunken);
+  background-image: var(--ds-field-fill);
+  box-shadow: var(--ds-rim-field), var(--ds-inner-sunken);
   color: var(--ds-text);
   font-family: var(--ds-font);
   font-size: var(--ds-fs-lg);
@@ -1242,10 +1240,19 @@ textarea,
 }
 input::placeholder, textarea::placeholder { color: var(--ds-text-faint); }
 
+/* Hover brightens the material rather than moving it: a field does not lift,
+   because it is a hole. Everything else in the language answers the pointer,
+   and a field that did not was the last dead surface left. */
+input:not([type='range']):not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']):hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  filter: brightness(1.015);
+}
+
 input:not([type='range']):not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']):focus,
 select:focus,
 textarea:focus {
-  box-shadow: var(--ds-inner-sunken), 0 0 0 3px rgba(112, 180, 222, 0.30);
+  box-shadow: var(--ds-rim-field), var(--ds-inner-sunken), 0 0 0 3px rgba(112, 180, 222, 0.30);
 }
 
 textarea, .ds-textarea { border-radius: var(--ds-r-md); resize: vertical; line-height: 1.6; }
@@ -1260,7 +1267,7 @@ select, .ds-select {
   cursor: pointer;
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236e7076' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"),
-    linear-gradient(180deg, #ededed 0%, #f4f4f4 100%);
+    var(--ds-field-fill);
   background-repeat: no-repeat, no-repeat;
   background-position: right 12px center, 0 0;
 }
@@ -1286,8 +1293,8 @@ input[type='checkbox'], input[type='radio'] {
   border: 0;
   border-radius: 5.5px;
   background-color: transparent;
-  background-image: linear-gradient(180deg, #ededed 0%, #f4f4f4 100%);
-  box-shadow: var(--ds-inner-sunken);
+  background-image: var(--ds-field-fill);
+  box-shadow: var(--ds-rim-field), var(--ds-inner-sunken);
   cursor: pointer;
   transition:
     background-image var(--ds-dur) var(--ds-ease),
@@ -1339,7 +1346,7 @@ input[type='radio']::after {
 input[type='radio']:checked::after { opacity: 1; transform: scale(1); }
 
 input[type='checkbox']:focus-visible, input[type='radio']:focus-visible {
-  box-shadow: var(--ds-inner-sunken), 0 0 0 3px rgba(112, 180, 222, 0.30);
+  box-shadow: var(--ds-rim-field), var(--ds-inner-sunken), 0 0 0 3px rgba(112, 180, 222, 0.30);
 }
 input[type='checkbox']:disabled, input[type='radio']:disabled {
   opacity: 0.42;
@@ -1404,10 +1411,10 @@ input[type='range']::-webkit-slider-runnable-track {
   border-radius: var(--ds-r-pill);
   background-image:
     linear-gradient(180deg, rgba(220, 240, 252, 0.98) 0%, rgba(150, 205, 238, 0.98) 100%),
-    linear-gradient(180deg, #ececec 0%, #f3f3f3 100%);
+    var(--ds-field-fill);
   background-size: var(--ds-range-p, 0%) 100%, 100% 100%;
   background-repeat: no-repeat;
-  box-shadow: var(--ds-inner-sunken);
+  box-shadow: var(--ds-rim-field), var(--ds-inner-sunken);
 }
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -1432,8 +1439,8 @@ input[type='range']:hover::-webkit-slider-thumb {
 }
 input[type='range']::-moz-range-track {
   height: 10px; border-radius: var(--ds-r-pill);
-  background-image: linear-gradient(180deg, #ececec 0%, #f3f3f3 100%);
-  box-shadow: var(--ds-inner-sunken);
+  background-image: var(--ds-field-fill);
+  box-shadow: var(--ds-rim-field), var(--ds-inner-sunken);
 }
 input[type='range']::-moz-range-progress {
   height: 10px; border-radius: var(--ds-r-pill);
