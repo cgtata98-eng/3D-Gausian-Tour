@@ -51,6 +51,36 @@ export const IconTrash = svg(
   </>,
 );
 export const IconPlus = svg(<path d="M12 5.2v13.6M5.2 12h13.6" />);
+/** A place on a map — the viewpoint the scene opens at. */
+export const IconPin = svg(
+  <>
+    <path d="M12 21.2s6.6-6.1 6.6-11a6.6 6.6 0 0 0-13.2 0c0 4.9 6.6 11 6.6 11z" />
+    <circle cx="12" cy="10.2" r="2.4" />
+  </>,
+);
+/** Bring something to where the crosshair is — reflect the map dot onto the camera. */
+export const IconTarget = svg(
+  <>
+    <circle cx="12" cy="12" r="7.2" />
+    <circle cx="12" cy="12" r="2.4" />
+    <path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3" />
+  </>,
+);
+/** Take the shot that is on screen right now. */
+export const IconCamera = svg(
+  <>
+    <path d="M3.2 8.4a1.7 1.7 0 0 1 1.7-1.7h2.3l1.3-2.1h6.6l1.3 2.1h2.3a1.7 1.7 0 0 1 1.7 1.7v9.1a1.7 1.7 0 0 1-1.7 1.7H4.9a1.7 1.7 0 0 1-1.7-1.7z" />
+    <circle cx="12" cy="12.6" r="3.6" />
+  </>,
+);
+/** A picture that already exists — a panorama, an uploaded still. */
+export const IconPhoto = svg(
+  <>
+    <rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2.2" />
+    <circle cx="8.6" cy="9.8" r="1.7" />
+    <path d="M3.2 16.2l4.6-4.2 3.7 3.3 3.1-2.6 6.2 5.1" />
+  </>,
+);
 export const IconSettings = svg(
   <>
     <circle cx="12" cy="12" r="3.1" />

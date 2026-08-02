@@ -41,7 +41,10 @@ import { targetFromYaw } from '../core/viewpoint';
 import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
 import { tokens } from './design-tokens';
-import { surfaceClass, Chip, Tag, PillToggle, SegmentedControl, IconClose, IconTrash, IconCheck } from './components';
+import {
+  surfaceClass, Chip, Tag, PillToggle, SegmentedControl,
+  IconClose, IconTrash, IconCheck, IconEdit, IconPin, IconTarget, IconCamera, IconPhoto,
+} from './components';
 import * as idb from '../utils/idb';
 import { unzipSync } from 'fflate';
 
@@ -139,7 +142,6 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const projectType = useUIStore(s => s.projectType);
   const isOtherProject = projectType === 'other';
   const setPlanPanoramaStore = useSceneStore(s => s.setPlanPanorama);
-  const setViewpointManualThumbStore = useSceneStore(s => s.setViewpointManualThumbnail);
   const activePlanId = useSceneStore(s => s.activePlanId);
   const addPlanStore = useSceneStore(s => s.addPlan);
   const removePlanStore = useSceneStore(s => s.removePlan);
@@ -176,9 +178,6 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   // 新規タグ作成は「+ タグを追加」(未配置で list へ) → ドラッグで preview に配置。
   const [pinMoveTargetId, setPinMoveTargetId] = useState<{ pinId: string; placementId: string } | null>(null);
   const thumbs = useSceneStore(s => s.viewpointThumbnails);
-  const [thumbBusy, setThumbBusy] = useState<string | null>(null);
-  const thumbInputRef = useRef<HTMLInputElement>(null);
-  const [thumbTargetVp, setThumbTargetVp] = useState<string | null>(null);
   // For VR-mode "+ VR視点を追加" form: an optional panorama file picked alongside the name.
   const [addVpPanoFile, setAddVpPanoFile] = useState<File | null>(null);
   const [addVpPanoName, setAddVpPanoName] = useState<string | null>(null);
@@ -804,17 +803,6 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
       }
     }
     void sm.captureCurrentFrameAsManualThumbnail(id);
-  };
-  const handleManualThumbFile = (file: File, id: string) => {
-    if (!activePlanId) return;
-    setThumbBusy(id);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const d = e.target?.result as string;
-      if (d) setViewpointManualThumbStore(activePlanId, id, d);
-      setThumbBusy(null);
-    };
-    reader.readAsDataURL(file);
   };
 
   const addPlan = () => {
@@ -1467,7 +1455,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 <div className="ds-empty">プランがまだありません</div>
               )}
               {showAddPlan && (
-                <div className={`${surfaceClass('success')} ds-panel`} style={S.inlineCard}>
+                <div className={`${surfaceClass('plain')} ds-panel ds-fill-surface`} style={S.inlineCard}>
                   <input type="text" placeholder="プラン名を入力（例: モダン / 北欧）" value={newPlanName}
                     onChange={e => setNewPlanName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') addPlan(); if (e.key === 'Escape') setShowAddPlan(false); }}
@@ -1804,7 +1792,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     <button onClick={() => { setShowAddVp(true); setNewVpName(''); }} className={BTN_PRIMARY}>+ 視点として保存</button>
                   </div>
                   {showAddVp && (
-                    <div className={`${surfaceClass('success')} ds-panel`} style={S.inlineCard}>
+                    <div className={`${surfaceClass('plain')} ds-panel ds-fill-surface`} style={S.inlineCard}>
                       <input type="text" placeholder="視点名を入力（例: リビング）" value={newVpName}
                         onChange={e => setNewVpName(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') addVp(); if (e.key === 'Escape') setShowAddVp(false); }}
@@ -1919,7 +1907,6 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       const isE = editId === vp.id;
                       const thumb = planThumbs[vp.id] ?? autoThumbs[vp.id];
                       const isManual = !!planThumbs[vp.id];
-                      const isThumbBusy = thumbBusy === vp.id;
                       const vpPanoSrc = activePlan?.panoramas?.[vp.id];
                       const showVrPreview = isA && isVRMode && !!vpPanoSrc && !!activePlanId;
                       const isVpDragOver = vpDragOverId === vp.id;
@@ -1980,12 +1967,15 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             </div>
                           </div>
                           <div style={S.vpActions}>
+                            {/* Emoji, not icons, until now: a glyph is whatever the
+                                installed font decides, so this row sat at a different
+                                weight and size from every other control beside it. */}
                             <button
                               title={isStart ? '初期位置に設定済み（シーンを開くとここから開始）' : 'この視点を初期位置にする（開いたらここから開始）'}
                               onClick={() => setStartViewpoint(vp.id)}
                               className={isStart ? `${surfaceClass('accent')} ds-pill ds-pill--icon ds-pill--xs` : 'ds-iconbtn'}
                             >
-                              🏁
+                              <IconPin />
                             </button>
                             {dotOffset && (
                               <button
@@ -1993,7 +1983,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                                 onClick={() => bakeViewpointToCamera(vp.id)}
                                 className="ds-iconbtn ds-warn"
                               >
-                                📍
+                                <IconTarget />
                               </button>
                             )}
                             <button
@@ -2001,15 +1991,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               onClick={() => captureCurrentAsThumb(vp.id)}
                               className="ds-iconbtn"
                             >
-                              📷
-                            </button>
-                            <button
-                              title={isThumbBusy ? '読み込み中…' : '画像ファイルからサムネを設定'}
-                              onClick={() => { setThumbTargetVp(vp.id); thumbInputRef.current?.click(); }}
-                              className="ds-iconbtn"
-                              disabled={isThumbBusy}
-                            >
-                              {isThumbBusy ? '⏳' : '🖼'}
+                              <IconCamera />
                             </button>
                             <button
                               title={activePlan?.panoramas?.[vp.id] ? '360パノラマ: 設定済み（クリックで差し替え）' : '360パノラマを追加'}
@@ -2017,12 +1999,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               className={`ds-iconbtn${activePlan?.panoramas?.[vp.id] ? ' ds-ok' : ''}`}
                               disabled={panoLoading === vp.id}
                             >
-                              {panoLoading === vp.id ? '⏳' : '🌐'}
+                              <IconPhoto />
                             </button>
                             {activePlan?.panoramas?.[vp.id] && (
-                              <button title="360パノラマを削除" onClick={() => handlePanoRemove(vp.id)} className={dangerXsClass}>360 を削除</button>
+                              <button title="360パノラマを削除" onClick={() => handlePanoRemove(vp.id)} className={dangerXsClass}>削除</button>
                             )}
-                            <button title="名前を変更" onClick={() => { setEditId(vp.id); setEditLabel(vp.label); }} className="ds-iconbtn">✎</button>
+                            <button title="名前を変更" onClick={() => { setEditId(vp.id); setEditLabel(vp.label); }} className="ds-iconbtn"><IconEdit /></button>
                             <button title="削除" onClick={() => removeViewpoint(vp.id)} className={dangerIconClass}><IconTrash /></button>
                           </div>
                         </div>
@@ -2038,7 +2020,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 <div className="ds-empty">読み込み中…</div>
               )}
               {showAddVp && (
-                <div className={`${surfaceClass('success')} ds-panel`} style={S.inlineCard}>
+                <div className={`${surfaceClass('plain')} ds-panel ds-fill-surface`} style={S.inlineCard}>
                   <input
                     type="text"
                     placeholder={isVRMode ? 'VR視点名を入力（例: 玄関 / リビング）' : '視点名を入力（例: リビング）'}
@@ -2357,7 +2339,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 
             {/* ===== Environment (HDRI) — プランタブ最下部 ===== */}
             {debugTab === 'plan' && (
-            <Section title="環境" subtitle="ENVIRONMENT" defaultOpen={false}>
+            <Section title="HDRI環境" subtitle="HDRI" defaultOpen={false}>
               <div style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, marginTop: 4, marginBottom: 4 }}>HDRI (360° 背景)</div>
               <button onClick={() => hdriInputRef.current?.click()} className={`${shellClass}`} style={S.fileBtn}>
                 {hdriLoading ? '読み込み中…' : (hdriName || '画像ファイルを選択 (HDR / PNG / JPG)')}
@@ -2594,19 +2576,9 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
           e.target.value = '';
         }}
       />
-      <input
-        ref={thumbInputRef}
-        type="file"
-        accept="image/*"
-        style={{ display: 'none' }}
-        onChange={e => {
-          const f = e.target.files?.[0];
-          const id = thumbTargetVp;
-          if (f && id) handleManualThumbFile(f, id);
-          setThumbTargetVp(null);
-          e.target.value = '';
-        }}
-      />
+      {/* The "画像ファイルからサムネを設定" picker was removed along with its
+          button. `setViewpointManualThumb` in the store is untouched, so
+          restoring it is putting the button and this input back. */}
       <input
         ref={planSplatInputRef}
         type="file"

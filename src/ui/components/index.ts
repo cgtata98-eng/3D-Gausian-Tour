@@ -15,7 +15,7 @@ export { PillButton, IconButton, PillToggle, SegmentedControl, Tag, Badge, surfa
 export type { PillVariant, TagVariant } from './Pill';
 export { Card, Panel } from './Card';
 export { Block, Chip, Tile } from './Block';
-export { IconClose, IconEdit, IconLink, IconCheck, IconTrash, IconPlus, IconSettings } from './Icon';
+export { IconClose, IconEdit, IconLink, IconCheck, IconTrash, IconPlus, IconSettings, IconPin, IconTarget, IconCamera, IconPhoto } from './Icon';
 export { PillInput } from './Input';
 
 /**

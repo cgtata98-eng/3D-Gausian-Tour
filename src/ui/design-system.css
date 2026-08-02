@@ -1429,13 +1429,24 @@ input[type='range']::-webkit-slider-thumb {
      second concentric edge — two rings read as two objects. Same top-down
      gradient as every other accent surface. */
   background-image: linear-gradient(180deg, #ecf6fc 0%, #c8e1f1 100%);
-  /* Accent glow, not the neutral drop — a blue bead casting a grey shadow
-     reads as two unrelated things. */
-  box-shadow: var(--ds-inner), 0 1px 2px rgba(61, 142, 197, 0.14), 0 4px 10px rgba(130, 200, 235, 0.34);
+  /* A rim, thin. The bead is pale blue on a pale track, so with only the
+     glow beneath it its outline had nothing to sit against and the thing you
+     actually drag was the hardest part of the slider to see. A hairline in
+     the accent hue is enough — a heavier one would be the second concentric
+     edge the fill was chosen to avoid. */
+  box-shadow:
+    inset 0 0 0 1px rgba(112, 180, 222, 0.85),
+    var(--ds-inner),
+    0 1px 2px rgba(61, 142, 197, 0.14),
+    0 4px 10px rgba(130, 200, 235, 0.34);
   transition: box-shadow var(--ds-dur) var(--ds-ease);
 }
 input[type='range']:hover::-webkit-slider-thumb {
-  box-shadow: var(--ds-inner), 0 1px 2px rgba(61, 142, 197, 0.16), 0 6px 18px rgba(130, 200, 235, 0.46);
+  box-shadow:
+    inset 0 0 0 1px rgba(93, 168, 214, 0.95),
+    var(--ds-inner),
+    0 1px 2px rgba(61, 142, 197, 0.16),
+    0 6px 18px rgba(130, 200, 235, 0.46);
 }
 input[type='range']::-moz-range-track {
   height: 10px; border-radius: var(--ds-r-pill);
@@ -1449,7 +1460,7 @@ input[type='range']::-moz-range-progress {
 input[type='range']::-moz-range-thumb {
   width: 20px; height: 20px; border: none; border-radius: 50%;
   background-image: linear-gradient(180deg, #ecf6fc 0%, #c8e1f1 100%);
-  box-shadow: var(--ds-inner), 0 4px 10px rgba(130, 200, 235, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(112, 180, 222, 0.85), var(--ds-inner), 0 4px 10px rgba(130, 200, 235, 0.34);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
