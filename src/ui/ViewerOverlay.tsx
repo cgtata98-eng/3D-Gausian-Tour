@@ -86,7 +86,7 @@ export function ViewerOverlay({ sceneId, onViewpointClick, showDebugLink = true,
       // キーを取り置く相手がおらず、押しても何も起きない状態になる。
       const st = useSceneStore.getState();
       const activePlan = st.manifest?.plans?.find((p) => p.id === st.activePlanId);
-      const walkLive = !WALKTHROUGH_AUTHORING_ONLY || useUIStore.getState().authoring;
+      const walkLive = !WALKTHROUGH_AUTHORING_ONLY || useUIStore.getState().isDeveloper;
       if (walkLive && activePlan?.walk && activePlan.walk.nodes.length > 0) return;
       const ui = useUIStore.getState();
       ui.setViewMode('splat');

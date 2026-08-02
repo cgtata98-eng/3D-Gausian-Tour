@@ -398,7 +398,11 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
 /* Icon buttons come in three sizes because the panels genuinely need them:
    36 for standalone controls, 29 alongside a title, 24 inside a dense row.
    LeftPanel had eight separate recipes covering the same three sizes. */
-.ds-pill--icon { padding: 0; width: 36px; height: 36px; }
+/* `min-height: 0` because the size modifiers set one and it outranks `height`:
+   `--icon.--sm` came out 29 wide and 32 tall, i.e. an "icon" pill that was not
+   round. An icon button is square by definition — the width and height here
+   are the whole size, nothing else may raise it. */
+.ds-pill--icon { padding: 0; width: 36px; height: 36px; min-height: 0; }
 .ds-pill--icon.ds-pill--sm { width: 29px; height: 29px; }
 .ds-pill--icon.ds-pill--xs { width: 24px; height: 24px; }
 .ds-pill--xs { padding: 0 11px; min-height: 24px; font-size: var(--ds-fs-xs); gap: 5px; }

@@ -136,13 +136,6 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     setVideoTrimStart(0);
     setVideoTrimEnd(1);
   }, [videoKeyframes.length]);
-  /* This shell IS the authoring side. Features that are still being built —
-     currently the dense walkthrough — read this to stay out of the viewer
-     entirely, controls and behaviour both. */
-  useEffect(() => {
-    useUIStore.getState().setAuthoring(true);
-    return () => useUIStore.getState().setAuthoring(false);
-  }, []);
   const viewMode = useUIStore(s => s.viewMode);
   const movementMode = useUIStore(s => s.movementMode);
   // 「その他」(展示 / 屋外 / 任意の空間) では住居系 (基本情報 = 間取り / 専有面積 / 階数 / 所在地) は出さない

@@ -1062,7 +1062,7 @@ export class SceneManager {
     // Authoring-only for now: in the viewer a walk-only plan must not open
     // into 360 on a walk node, because nothing there can step forward — the
     // visitor would be parked in a panorama with no way out.
-    if (WALKTHROUGH_AUTHORING_ONLY && !useUIStore.getState().authoring) return null;
+    if (WALKTHROUGH_AUTHORING_ONLY && !useUIStore.getState().isDeveloper) return null;
     const planId = useSceneStore.getState().activePlanId;
     const plan = this.manifest?.plans?.find((p) => p.id === planId);
     const walk = plan?.walk;

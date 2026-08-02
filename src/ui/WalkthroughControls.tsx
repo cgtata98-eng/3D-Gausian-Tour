@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { findWalkNode, resolveStartNode, stepForward } from '../core/walk-graph';
+import { findWalkNode, resolveStartNode, stepForward, WALKTHROUGH_AUTHORING_ONLY } from '../core/walk-graph';
 import { walkPlaceholderPanorama } from '../utils/walk-placeholder';
 import { useCameraStore } from '../store/camera-store';
 import { useSceneStore } from '../store/scene-store';
@@ -32,7 +32,21 @@ export function WalkthroughControls({ getManager }: Props) {
 
   const plan = manifest?.plans?.find((p) => p.id === activePlanId);
   const walk = plan?.walk;
-  const active = viewMode === '360' && !!walk && walk.nodes.length > 0;
+  /**
+   * The kill switch lives HERE, not at the two call sites.
+   *
+   * Gating the mount in `Viewer` left the DebugViewer's preview — which is a
+   * preview OF the viewer — still running it, so the feature was still on
+   * screen. A component that must not ship yet should refuse to render
+   * itself; then there is no call site left to forget.
+   *
+   * `?mode=dev` still brings it up, so it can be exercised while it is being
+   * built. `active` also gates the key handler and the step effect below, so
+   * this switches off the behaviour, not just the bar.
+   */
+  const isDeveloper = useUIStore((s) => s.isDeveloper);
+  const enabled = !WALKTHROUGH_AUTHORING_ONLY || isDeveloper;
+  const active = enabled && viewMode === '360' && !!walk && walk.nodes.length > 0;
   const animated = manifest?.settings.walkAnimated !== false; // default true
 
   const [currentId, setCurrentId] = useState<string | null>(null);

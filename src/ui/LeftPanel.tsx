@@ -167,7 +167,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
                 <div style={overviewHeaderRow}>
                   <span className="ds-label">{isOther ? 'MAP' : 'FLOOR MAP'}</span>
                   <div style={{ flex: 1 }} />
-                  <button onClick={() => setSectionHidden('map', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="MAP を閉じる"><IconClose /></button>
+                  <button onClick={() => setSectionHidden('map', true)} className={BLOCK_CLOSE_BTN} title="MAP を閉じる"><IconClose /></button>
                 </div>
                 {hasMap ? (
                   <MapContent onViewpointClick={onViewpointClick} />
@@ -317,7 +317,7 @@ function SceneStrip({ onViewpointClick, onHide }: {
       <button
         type="button"
         onClick={onHide}
-        className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`}
+        className={BLOCK_CLOSE_BTN}
         style={{ alignSelf: 'center', flexShrink: 0 }}
         title="シーンを閉じる"
       >
@@ -531,7 +531,7 @@ function TypeSelectBlock({ onPlanSwitch }: { onPlanSwitch?: (planId: string) => 
       <div style={overviewHeaderRow}>
         <span className="ds-label">{blockLabel}</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setSectionHidden('type', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title={`${blockLabel}を閉じる`}><IconClose /></button>
+        <button onClick={() => setSectionHidden('type', true)} className={BLOCK_CLOSE_BTN} title={`${blockLabel}を閉じる`}><IconClose /></button>
       </div>
       {plans.length === 0 ? (
         <div className="ds-sub">プラン未追加 — デバッグ画面のプランタブで追加できます</div>
@@ -584,7 +584,7 @@ function ColorSelectBlock() {
       <div style={overviewHeaderRow}>
         <span className="ds-label">カラー</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setSectionHidden('color', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="カラーを閉じる"><IconClose /></button>
+        <button onClick={() => setSectionHidden('color', true)} className={BLOCK_CLOSE_BTN} title="カラーを閉じる"><IconClose /></button>
       </div>
       {variants.length === 0 ? (
         <div className="ds-sub">素材バリエーション未設定 — デバッグ画面の「カラー」セクションから追加できます</div>
@@ -674,7 +674,7 @@ function OverviewBlock() {
           <button onClick={restoreAll} className={`${surfaceClass('accent')} ds-pill ds-pill--xs`} title="非表示にした項目を戻す" aria-label="全表示"><IconPlus /></button>
         )}
         <div style={{ flex: 1 }} />
-        <button onClick={() => setVis('overall', false)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="間取り概要を閉じる"><IconClose /></button>
+        <button onClick={() => setVis('overall', false)} className={BLOCK_CLOSE_BTN} title="間取り概要を閉じる"><IconClose /></button>
       </div>
       <InfoSummary inline visibility={vis} />
     </div>
@@ -780,7 +780,7 @@ function MovementModeBlock() {
       <div style={overviewHeaderRow}>
         <span className="ds-label">移動モード</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setSectionHidden('movement', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="移動モードを閉じる"><IconClose /></button>
+        <button onClick={() => setSectionHidden('movement', true)} className={BLOCK_CLOSE_BTN} title="移動モードを閉じる"><IconClose /></button>
       </div>
       <SegmentedToggle
         value={value}
@@ -1229,7 +1229,7 @@ function AiImageGenBlock() {
       <div style={overviewHeaderRow}>
         <span className="ds-label">AI 画像生成</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setSectionHidden('aiGenerate', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="AI 画像生成を閉じる"><IconClose /></button>
+        <button onClick={() => setSectionHidden('aiGenerate', true)} className={BLOCK_CLOSE_BTN} title="AI 画像生成を閉じる"><IconClose /></button>
       </div>
       <textarea
         value={prompt}
@@ -1427,7 +1427,7 @@ function QualityBlock() {
       <div style={overviewHeaderRow}>
         <span className="ds-label">画質</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setSectionHidden('quality', true)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="画質を閉じる"><IconClose /></button>
+        <button onClick={() => setSectionHidden('quality', true)} className={BLOCK_CLOSE_BTN} title="画質を閉じる"><IconClose /></button>
       </div>
       <SegmentedToggle
         value={value}
@@ -1495,7 +1495,7 @@ function MobileToolsBlock({ onClose }: { onClose: () => void }) {
       <div style={overviewHeaderRow}>
         <span className="ds-label">移動スピード</span>
         <div style={{ flex: 1 }} />
-        <button onClick={onClose} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="閉じる"><IconClose /></button>
+        <button onClick={onClose} className={BLOCK_CLOSE_BTN} title="閉じる"><IconClose /></button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
         <span className="ds-hint">遅</span>
@@ -1541,7 +1541,7 @@ function DemoModeBlock() {
         <span className="ds-label">ヘッドトラッキング</span>
         <div style={{ flex: 1 }} />
         <span className={`ds-sub ${statusTone}`}>{status}</span>
-        <button onClick={() => setSectionHidden('tracking', true)} className={TITLE_ICON_BTN} style={{ marginLeft: 6 }} title="ヘッドトラッキングを閉じる"><IconClose /></button>
+        <button onClick={() => setSectionHidden('tracking', true)} className={BLOCK_CLOSE_BTN} style={{ marginLeft: 6 }} title="ヘッドトラッキングを閉じる"><IconClose /></button>
       </div>
       <SegmentedToggle
         value={enabled ? 'on' : 'off'}
@@ -1756,6 +1756,11 @@ function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'lef
 
 /** Icon button beside the sidebar title. */
 const TITLE_ICON_BTN = `${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--sm ds-fill-surface`;
+/** The × that closes a sidebar group. A CONSTANT, not the class list written
+ *  out at each block: it was spelled by hand nine times, and the head-tracking
+ *  one had drifted to the larger `--sm` size — a single × bigger than its
+ *  eight siblings. */
+const BLOCK_CLOSE_BTN = `${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`;
 /** The button the collapsed sidebar leaves behind — floats over the canvas. */
 const COLLAPSED_HANDLE = `${surfaceClass('plain')} ds-overlay ds-overlay--pill ds-pill ds-pill--icon`;
 
