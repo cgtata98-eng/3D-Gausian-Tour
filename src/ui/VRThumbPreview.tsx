@@ -3,7 +3,7 @@ import type { Viewpoint } from '../core/types';
 import { deriveYawFromTarget, targetFromYaw } from '../core/viewpoint';
 import { useSceneStore } from '../store/scene-store';
 import { resolveBlobRef } from '../utils/idb';
-import { tokens } from './design-tokens';
+import { surfaceClass, IconClose } from './components';
 
 /**
  * Inline panorama-direction picker shown below an active VR viewpoint row in DebugViewer.
@@ -149,22 +149,29 @@ export function VRThumbPreview({
   };
 
   return (
-    <div style={styles.wrap}>
+    <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={styles.wrap}>
       <div style={styles.header}>
-        <span style={styles.title}>サムネ / 初期向き設定</span>
-        <span style={styles.yaw}>{yawDeg.toFixed(0)}°</span>
-        {onClose && <button style={styles.closeBtn} onClick={onClose} title="閉じる">✕</button>}
+        <span className="ds-title" style={{ flex: 1 }}>サムネ / 初期向き設定</span>
+        <span className="ds-mono ds-accent">{yawDeg.toFixed(0)}°</span>
+        {onClose && (
+          <button
+            className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`}
+            onClick={onClose}
+            title="閉じる"
+          ><IconClose /></button>
+        )}
       </div>
       <div style={styles.canvasWrap}>
         <canvas
           ref={canvasRef}
           width={400}
           height={250}
+          className="ds-plate"
           style={styles.canvas}
           onMouseDown={onMouseDown}
         />
-        {!imgReady && !error && <div style={styles.overlay}>読み込み中…</div>}
-        {error && <div style={styles.overlay}>{error}</div>}
+        {!imgReady && !error && <div className="ds-plate__veil">読み込み中…</div>}
+        {error && <div className="ds-plate__veil">{error}</div>}
       </div>
       <div style={styles.controls}>
         <input
@@ -174,80 +181,39 @@ export function VRThumbPreview({
           step={1}
           value={Math.round(yawDeg)}
           onChange={(e) => setYawDeg(+e.target.value)}
-          style={styles.slider}
+          style={{ flex: 1 }}
         />
-        <button style={styles.saveBtn} onClick={save} disabled={!imgReady}>
+        <button
+          className={`${surfaceClass('accent')} ds-pill ds-pill--sm`}
+          onClick={save}
+          disabled={!imgReady}
+        >
           この向きで保存 (サムネ + 初期向き)
         </button>
       </div>
-      <div style={styles.hint}>
+      <div className="ds-hint">
         パノラマをドラッグするか下のスライダーで向きを選び、保存を押してください。3D ビューアの live カメラには影響しません。
       </div>
     </div>
   );
 }
 
+/** Layout only. The panel, its buttons and its type come from the classes
+ *  applied above; what is left here is position and size. */
 const styles: Record<string, React.CSSProperties> = {
   wrap: {
     margin: '0 8px 10px',
-    padding: 12,
-    background: tokens.gradient.surface,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.md,
-    boxShadow: tokens.shadow.glass,
     display: 'flex',
     flexDirection: 'column',
     gap: 10,
-    fontFamily: tokens.font.family,
   },
-  header: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: tokens.color.text },
-  title: { flex: 1, fontWeight: tokens.font.weight.strong, letterSpacing: 0.3 },
-  yaw: { fontFamily: tokens.font.mono, color: tokens.color.accent, fontWeight: tokens.font.weight.strong },
-  closeBtn: {
-    background: tokens.gradient.surface,
-    border: `1px solid ${tokens.color.border}`,
-    color: tokens.color.textMute,
-    width: 24, height: 24,
-    borderRadius: tokens.radius.pill,
-    cursor: 'pointer',
-    fontSize: 10.5,
-    lineHeight: '22px',
-    padding: 0,
-    boxShadow: tokens.shadow.glass,
-    fontFamily: tokens.font.family,
-  },
+  header: { display: 'flex', alignItems: 'center', gap: 8 },
   canvasWrap: { position: 'relative', alignSelf: 'center' },
   canvas: {
-    display: 'block',
     width: 400,
     height: 250,
-    borderRadius: tokens.radius.md,
-    background: '#1f2937',
     cursor: 'grab',
     userSelect: 'none',
-    border: `1px solid ${tokens.color.border}`,
-  },
-  overlay: {
-    position: 'absolute', inset: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: 'rgba(255,255,255,0.88)', fontSize: 11.5, fontWeight: tokens.font.weight.medium,
-    background: 'rgba(31,41,55,0.55)', borderRadius: tokens.radius.md,
-    pointerEvents: 'none',
   },
   controls: { display: 'flex', alignItems: 'center', gap: 10 },
-  slider: { flex: 1, accentColor: tokens.color.accent },
-  saveBtn: {
-    padding: '8px 16px',
-    fontSize: 11.5, fontWeight: tokens.font.weight.strong,
-    background: tokens.gradient.accent,
-    color: tokens.color.text,
-    border: `1px solid ${tokens.color.accentBorder}`,
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glassAccent,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    fontFamily: tokens.font.family,
-    outline: 'none',
-  },
-  hint: { fontSize: 9.5, color: tokens.color.textMute, lineHeight: 1.55 },
 };

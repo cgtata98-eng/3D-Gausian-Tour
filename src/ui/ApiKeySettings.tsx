@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { tokens, softCard } from './design-tokens';
-import { surfaceClass } from './components';
+import { surfaceClass, IconClose } from './components';
 import { PillInput } from './components/Input';
 import {
   getOpenAIKey, setOpenAIKey,
@@ -90,17 +89,22 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
       </button>
 
       {open && createPortal(
-        <div style={overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+        <div className="ds-scrim" style={overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
           <div className={`${surfaceClass('plain')} ds-card ds-dialog ds-fill-surface`} style={card} onMouseDown={(e) => e.stopPropagation()}>
             <div style={titleRow}>
-              <span style={{ fontSize: 13, fontWeight: tokens.font.weight.strong, color: tokens.color.text }}>AI API キー設定</span>
-              <button type="button" onClick={() => setOpen(false)} style={closeBtn} aria-label="閉じる">✕</button>
+              <span className="ds-title">AI API キー設定</span>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--sm ds-fill-surface`}
+                aria-label="閉じる"
+              ><IconClose /></button>
             </div>
 
             {/* Gemini key */}
-            <div style={{ ...fieldLabel, marginTop: 16 }}>
+            <div className="ds-field-label" style={{ ...fieldLabel, marginTop: 16 }}>
               Gemini API キー
-              <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: gemSaved ? tokens.color.success : tokens.color.textFaint }}>
+              <span className={`ds-sub ${gemSaved ? 'ds-ok' : 'ds-faint'}`} style={{ marginLeft: 8 }}>
                 {gemSaved ? `設定済み (${maskKey(gemSaved)})` : '未設定'}
               </span>
             </div>
@@ -112,17 +116,18 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
                 placeholder="AIza..."
                 autoComplete="off"
                 spellCheck={false}
-                style={{ paddingRight: 48, fontFamily: tokens.font.mono }}
+                className="ds-mono"
+                style={{ paddingRight: 48 }}
               />
-              <button type="button" onClick={() => setShowGem((v) => !v)} title={showGem ? '隠す' : '表示'} aria-label={showGem ? '隠す' : '表示'} style={eyeBtn}>
+              <button type="button" onClick={() => setShowGem((v) => !v)} title={showGem ? '隠す' : '表示'} aria-label={showGem ? '隠す' : '表示'} className="ds-pill ds-pill--icon ds-pill--sm" style={eyeBtn}>
                 {showGem ? '🙈' : '👁'}
               </button>
             </div>
 
             {/* OpenAI key */}
-            <div style={{ ...fieldLabel, marginTop: 14 }}>
+            <div className="ds-field-label" style={{ ...fieldLabel, marginTop: 14 }}>
               OpenAI (ChatGPT) API キー
-              <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: tokens.font.weight.strong, color: oaSaved ? tokens.color.success : tokens.color.textFaint }}>
+              <span className={`ds-sub ${oaSaved ? 'ds-ok' : 'ds-faint'}`} style={{ marginLeft: 8 }}>
                 {oaSaved ? `設定済み (${maskKey(oaSaved)})` : '未設定'}
               </span>
             </div>
@@ -134,17 +139,18 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
                 placeholder="sk-..."
                 autoComplete="off"
                 spellCheck={false}
-                style={{ paddingRight: 48, fontFamily: tokens.font.mono }}
+                className="ds-mono"
+                style={{ paddingRight: 48 }}
               />
-              <button type="button" onClick={() => setShowOa((v) => !v)} title={showOa ? '隠す' : '表示'} aria-label={showOa ? '隠す' : '表示'} style={eyeBtn}>
+              <button type="button" onClick={() => setShowOa((v) => !v)} title={showOa ? '隠す' : '表示'} aria-label={showOa ? '隠す' : '表示'} className="ds-pill ds-pill--icon ds-pill--sm" style={eyeBtn}>
                 {showOa ? '🙈' : '👁'}
               </button>
             </div>
 
-            <div style={{ fontSize: 10.5, color: tokens.color.textMute, marginTop: 10, lineHeight: 1.7 }}>
+            <div className="ds-hint" style={{ marginTop: 10 }}>
               「カラー / 素材バリエーション」の AI 画像生成に使います。キーはこの端末の
               localStorage に保存され、生成時にプロバイダ別ヘッダで <code>/api/ai/edit</code> へ送られます。
-              <br />・<b>Gemini</b>（Nano Banana）= <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: tokens.color.accent }}>Google AI Studio</a> でキー取得。課金有効なキーが必要（無料枠は画像生成が制限/不可の場合あり）。組織認証は不要。
+              <br />・<b>Gemini</b>（Nano Banana）= <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="ds-link">Google AI Studio</a> でキー取得。課金有効なキーが必要（無料枠は画像生成が制限/不可の場合あり）。組織認証は不要。
               <br />・<b>OpenAI</b>（gpt-image）= <b>組織(Organization)の本人確認が必須</b>。未認証だと有効なキーでも 403「organization must be verified」になります。
             </div>
 
@@ -161,32 +167,24 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
   );
 }
 
+/* Layout only from here down. */
 const gearBtn: React.CSSProperties = {
   position: 'absolute',
   // Sit just BELOW the FPS counter (top:12 right:12, z50) so they don't overlap,
   // and above the other preview overlays (ScenePins z60/70, FPS z50).
   top: 52, right: 16,
   width: 40, height: 40,
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  background: tokens.glass.surfaceStrong,
-  backdropFilter: tokens.backdrop,
-  WebkitBackdropFilter: tokens.backdrop,
   zIndex: 80,
 };
 
 const overlay: React.CSSProperties = {
-  position: 'fixed', inset: 0,
-  background: 'rgba(20,24,35,0.42)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
   padding: 24,
   zIndex: 10000,
 };
 
 const card: React.CSSProperties = {
-  ...softCard,
   width: 460, maxWidth: '100%',
   padding: 24,
-  boxShadow: tokens.shadow.dialog,
   overflow: 'visible',
 };
 
@@ -194,35 +192,12 @@ const titleRow: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
 };
 
-const fieldLabel: React.CSSProperties = {
-  fontSize: 11.5, fontWeight: tokens.font.weight.strong, color: tokens.color.text,
-  marginBottom: 6,
-};
-
-const closeBtn: React.CSSProperties = {
-  width: 28, height: 28,
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  background: 'transparent',
-  border: 'none',
-  borderRadius: tokens.radius.pill,
-  color: tokens.color.textMute,
-  cursor: 'pointer',
-  fontSize: 12.5,
-  outline: 'none',
-  fontFamily: tokens.font.family,
-};
+const fieldLabel: React.CSSProperties = { marginBottom: 6 };
 
 const eyeBtn: React.CSSProperties = {
   position: 'absolute',
   top: '50%', right: 8, transform: 'translateY(-50%)',
   width: 34, height: 34,
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  background: 'transparent',
-  border: 'none',
-  cursor: 'pointer',
-  fontSize: 13,
-  outline: 'none',
-  lineHeight: 1,
 };
 
 const primaryBtn: React.CSSProperties = {

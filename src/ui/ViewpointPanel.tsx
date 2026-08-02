@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import { useSceneStore } from '../store/scene-store';
 import { useCameraStore } from '../store/camera-store';
-import { tokens, shellSurface } from './design-tokens';
+import { surfaceClass, Tile } from './components';
 
 interface ViewpointPanelProps {
   onViewpointClick: (id: string) => void;
@@ -9,8 +8,10 @@ interface ViewpointPanelProps {
 
 /**
  * Floating viewpoint thumbnail strip — bottom-center of the viewer canvas.
- * Glass pill panel with mini cards inside; active card uses the accent
- * gradient + glow recipe to match the rest of the design system.
+ *
+ * The strip is an on-scene overlay and each entry is a `Tile`; both were
+ * previously re-implemented here as local style objects, down to a hand-rolled
+ * hover lift that the shell already provides.
  */
 export function ViewpointPanel({ onViewpointClick }: ViewpointPanelProps) {
   const manifest = useSceneStore((s) => s.manifest);
@@ -26,47 +27,23 @@ export function ViewpointPanel({ onViewpointClick }: ViewpointPanelProps) {
   const autoThumbs = (activePlanId && thumbs[activePlanId]) || {};
 
   return (
-    <div className="glass-edge" style={panel}>
+    <div className={`${surfaceClass('plain')} ds-overlay ds-overlay--lg`} style={panel}>
       {viewpoints.map((vp) => (
-        <ViewpointCard
+        <Tile
           key={vp.id}
           label={vp.label}
           thumb={planThumbs[vp.id] ?? autoThumbs[vp.id]}
+          placeholder={<span className="ds-sub">…</span>}
           active={activeViewpoint === vp.id}
           onClick={() => onViewpointClick(vp.id)}
+          style={{ width: 104, flex: '0 0 auto' }}
         />
       ))}
     </div>
   );
 }
 
-function ViewpointCard({ label, thumb, active, onClick }: {
-  label: string;
-  thumb?: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const [hover, setHover] = useState(false);
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      className="glass-edge"
-      style={{
-        ...card,
-        ...(active ? cardActive : null),
-        ...(hover && !active ? cardHover : null),
-      }}
-    >
-      <div style={thumbWrap}>
-        {thumb ? <img src={thumb} alt="" style={thumbImg} /> : <div style={thumbPlaceholder}>…</div>}
-      </div>
-      <span style={{ ...labelStyle, ...(active ? labelActive : null) }}>{label}</span>
-    </button>
-  );
-}
-
+/** Layout only — see the note at the top of `components/Pill.tsx`. */
 const panel: React.CSSProperties = {
   position: 'absolute',
   bottom: 24,
@@ -75,68 +52,7 @@ const panel: React.CSSProperties = {
   display: 'flex',
   gap: 6,
   padding: 8,
-  background: tokens.glass.surfaceStrong,
-  backdropFilter: tokens.backdrop,
-  WebkitBackdropFilter: tokens.backdrop,
-  ...shellSurface('plain', { radius: tokens.radius.lg }),
   zIndex: 5,
   maxWidth: 'calc(100vw - 48px)',
   overflowX: 'auto',
-};
-
-const card: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 6,
-  width: 104,
-  padding: 6,
-  ...shellSurface('plain', { radius: tokens.radius.md, fill: 'surface' }),
-  cursor: 'pointer',
-  flex: '0 0 auto',
-  outline: 'none',
-};
-
-const cardHover: React.CSSProperties = {
-  transform: 'translateY(-1px)',
-  boxShadow: `${tokens.shadow.shellInner}, ${tokens.shadow.raised}`,
-};
-
-const cardActive: React.CSSProperties = shellSurface('accent', { radius: tokens.radius.md });
-
-const thumbWrap: React.CSSProperties = {
-  width: '100%',
-  aspectRatio: '4 / 3',
-  borderRadius: tokens.radius.sm,
-  overflow: 'hidden',
-  background: tokens.color.surfaceSoft,
-  boxShadow: tokens.shadow.shellInner,
-};
-
-const thumbImg: React.CSSProperties = {
-  width: '100%',
-  height: '100%',
-  objectFit: 'cover',
-  display: 'block',
-};
-
-const thumbPlaceholder: React.CSSProperties = {
-  width: '100%',
-  height: '100%',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: tokens.color.textFaint,
-  fontSize: 11.5,
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 10.5,
-  fontWeight: tokens.font.weight.strong,
-  letterSpacing: 0.3,
-  color: tokens.color.text,
-};
-
-const labelActive: React.CSSProperties = {
-  fontWeight: tokens.font.weight.strong,
 };

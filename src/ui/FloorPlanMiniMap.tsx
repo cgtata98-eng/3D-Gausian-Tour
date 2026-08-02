@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useCameraStore } from '../store/camera-store';
 import { useSceneStore } from '../store/scene-store';
 import { resolveScenePath } from '../core/scene-manifest';
-import { tokens } from './design-tokens';
+import { surfaceClass, IconClose } from './components';
+
+/** The map is an on-scene overlay; the collapsed handle is the same surface
+ *  reduced to a round button. */
+const OVERLAY = `${surfaceClass('plain')} ds-overlay ds-overlay--card`;
+const HANDLE = `${surfaceClass('plain')} ds-overlay ds-overlay--pill ds-pill ds-pill--icon`;
 
 const PADDING = 20;
 
@@ -229,17 +234,11 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
 
   if (!manifest) return null;
 
+  /** Layout only — appearance comes from `OVERLAY`. */
   const defStyle: React.CSSProperties = {
     position: 'absolute', bottom: 24, left: 24, width: dW, height: dH,
-    background: tokens.glass.surfaceStrong,
-    borderRadius: tokens.radius.card,
-    backdropFilter: tokens.backdrop,
-    WebkitBackdropFilter: tokens.backdrop,
-    border: `1px solid ${tokens.color.border}`,
-    boxShadow: tokens.shadow.glass,
     overflow: 'hidden', userSelect: 'none',
     zIndex: 4,
-    fontFamily: tokens.font.family,
   };
 
   if (collapsible && collapsed) {
@@ -249,23 +248,14 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
       <button
         onClick={() => setCollapsed(false)}
         title="図面を表示"
+        className={HANDLE}
         style={{
           position: 'absolute', bottom: baseBottom, left: baseLeft,
           width: 44, height: 44,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: tokens.glass.surfaceStrong,
-          border: `1px solid ${tokens.color.border}`,
-          borderRadius: tokens.radius.pill,
-          backdropFilter: tokens.backdrop,
-          WebkitBackdropFilter: tokens.backdrop,
-          color: tokens.color.text,
-          cursor: 'pointer',
-          boxShadow: tokens.shadow.glass,
           zIndex: 4,
-          outline: 'none',
         }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="ds-icon" viewBox="0 0 24 24">
           <path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z" />
           <path d="M9 3v15M15 6v15" />
         </svg>
@@ -274,32 +264,15 @@ export function FloorPlanMiniMap({ onViewpointClick, size = 200, style: override
   }
 
   return (
-    <div style={{ ...defStyle, ...overrideStyle, width: dW, height: dH }}>
+    <div className={OVERLAY} style={{ ...defStyle, ...overrideStyle, width: dW, height: dH }}>
       {hasImage && <img src={imageUrl} alt="" style={{ position: 'absolute', top: PADDING, left: PADDING, width: dW - PADDING * 2, height: dH - PADDING * 2, objectFit: 'fill', opacity: 0.7, pointerEvents: 'none' }} />}
       {collapsible && (
         <button
           onClick={() => setCollapsed(true)}
           title="図面を隠す"
-          style={{
-            position: 'absolute', top: 8, right: 8,
-            width: 26, height: 26,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: tokens.glass.surfaceStrong,
-            border: `1px solid ${tokens.color.border}`,
-            borderRadius: tokens.radius.pill,
-            color: tokens.color.text,
-            cursor: 'pointer',
-            fontSize: 11.5,
-            lineHeight: 1,
-            padding: 0,
-            zIndex: 2,
-            backdropFilter: tokens.backdrop,
-            WebkitBackdropFilter: tokens.backdrop,
-            boxShadow: tokens.shadow.glass,
-            outline: 'none',
-            fontFamily: tokens.font.family,
-          }}
-        >×</button>
+          className={`${surfaceClass('plain')} ds-overlay ds-overlay--pill ds-pill ds-pill--icon ds-pill--xs`}
+          style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}
+        ><IconClose /></button>
       )}
       <svg
         ref={svgRef}

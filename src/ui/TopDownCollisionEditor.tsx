@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CollisionWallData, Vec2 } from '../core/types';
-import { tokens } from './design-tokens';
+import { surfaceClass, IconClose } from './components';
 
 /** Manager surface the editor needs (PlayCanvas SceneManager provides all). */
 export interface TopDownManager {
@@ -223,11 +223,11 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
   const projCursor = cursor ? project(cursor) : null;
 
   const paramInput = (label: string, value: number, step: number, onV: (v: number) => void, title: string) => (
-    <label style={ST.param} title={title}>
+    <label className="ds-sub" style={ST.param} title={title}>
       {label}
       <input type="number" step={step} value={value}
         onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) onV(v); }}
-        style={ST.numInput} />
+        className="ds-mono" style={ST.numInput} />
     </label>
   );
 
@@ -299,8 +299,8 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
       </svg>
 
       {/* Toolbar */}
-      <div style={ST.toolbar} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
-        <span style={ST.title}>⬇ 俯瞰で描く</span>
+      <div className={BAR} style={ST.toolbar} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
+        <span className="ds-title">⬇ 俯瞰で描く</span>
         {([['top', '上から'], ['side', '横から']] as ['top' | 'side', string][]).map(([v, label]) => (
           <button key={v} type="button"
             onClick={() => {
@@ -314,19 +314,19 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
               setViewTick((t) => t + 1);
             }}
             title={v === 'top' ? '平面図ビュー（壁・床を描く）' : '立面ビュー（床Y と壁の高さをドラッグで合わせる）'}
-            style={{ ...ST.modeBtn, ...(view === v ? ST.modeBtnActive : null) }}>{label}</button>
+            className={MODE_BTN(view === v)}>{label}</button>
         ))}
-        <span style={{ width: 1, alignSelf: 'stretch', background: tokens.color.hairline }} />
+        <span className="ds-divider" style={{ width: 1, alignSelf: 'stretch' }} />
         {view === 'top' && ([['wall', '壁'], ['floor', '床外周'], ['erase', '消す']] as [EditMode, string][]).map(([m, label]) => (
           <button key={m} type="button" onClick={() => { setMode(m); setPending(null); }}
-            style={{ ...ST.modeBtn, ...(mode === m ? ST.modeBtnActive : null) }}>{label}</button>
+            className={MODE_BTN(mode === m)}>{label}</button>
         ))}
         {view === 'top' && (
-          <label style={ST.param} title="この高さより上の GS を非表示（断面）">
+          <label className="ds-sub" style={ST.param} title="この高さより上の GS を非表示（断面）">
             断面
             <input type="range" min={data.floorY - 0.5} max={data.floorY + 4} step={0.05} value={sliceY}
               onChange={(e) => changeSlice(parseFloat(e.target.value))} style={{ width: 90 }} />
-            <span style={ST.mono}>{sliceY.toFixed(2)}m</span>
+            <span className="ds-mono">{sliceY.toFixed(2)}m</span>
           </label>
         )}
         {paramInput('床Y', data.floorY, 0.05, (v) => commit({ floorY: v }), '描画平面と床 GLB のワールド Y')}
@@ -342,15 +342,15 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
             }
             void onGenerate(data);
           }}
-          style={{ ...ST.generateBtn, opacity: generating ? 0.5 : 1 }}
+          className={ACTION_BTN}
           title="描いた壁→block / 床外周→walkable を生成して適用。描いていないチャンネルはクリアされます"
         >
           {generating ? '生成中…' : '⚒ 生成して適用'}
         </button>
-        <button type="button" style={ST.closeBtn} onClick={onClose}>✕ 終了</button>
+        <button type="button" className={CLOSE_BTN} onClick={onClose}><IconClose />終了</button>
       </div>
 
-      <div style={ST.hint}>
+      <div className={`${BAR} ds-pill ds-pill--xs`} style={ST.hint}>
         {view === 'side'
           ? <>緑の線 = 床の高さ / 赤の線 = 壁の上端。GS の床・天井に合わせて上下にドラッグ（離すと自動で再生成）／ 右ドラッグ: パン ／ ホイール: ズーム</>
           : <>左クリック: {mode === 'wall' ? '壁の点を置く（連続で折れ線 / 右クリックか Esc で終了）' : mode === 'floor' ? '床外周の頂点を追加（右クリックで最後を削除）' : '壁線・頂点を削除'}
@@ -359,6 +359,13 @@ export function TopDownCollisionEditor({ getManager, walls, onChange, onGenerate
     </div>
   );
 }
+
+/* The toolbar and the hint line are both on-scene overlays; the mode buttons
+   are pills that toggle. Only position and size are left here. */
+const BAR = `${surfaceClass('plain')} ds-overlay ds-overlay--pill`;
+const MODE_BTN = (active: boolean) => `${surfaceClass(active ? 'accent' : 'plain')} ds-pill ds-pill--xs${active ? '' : ' ds-fill-surface'}`;
+const ACTION_BTN = `${surfaceClass('accent')} ds-pill ds-pill--xs`;
+const CLOSE_BTN = `${surfaceClass('plain')} ds-pill ds-pill--xs ds-fill-surface`;
 
 const ST: Record<string, React.CSSProperties> = {
   overlay: {
@@ -378,85 +385,17 @@ const ST: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 8,
     padding: '8px 12px',
-    background: tokens.glass.surfaceStrong,
-    backdropFilter: tokens.backdrop,
-    WebkitBackdropFilter: tokens.backdrop,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glass,
-    fontFamily: tokens.font.family,
-    fontSize: 10.5,
-    color: tokens.color.text,
     cursor: 'default',
     whiteSpace: 'nowrap',
   },
-  title: { fontWeight: tokens.font.weight.strong, letterSpacing: 0.3 },
-  modeBtn: {
-    padding: '4px 10px',
-    fontSize: 10.5,
-    fontWeight: tokens.font.weight.strong,
-    background: tokens.gradient.surface,
-    color: tokens.color.textMute,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.pill,
-    cursor: 'pointer',
-    fontFamily: tokens.font.family,
-  },
-  modeBtnActive: {
-    background: tokens.gradient.accent,
-    color: tokens.color.text,
-    border: `1px solid ${tokens.color.accentBorder}`,
-    boxShadow: tokens.shadow.glassAccent,
-  },
-  param: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: tokens.color.textMute },
-  numInput: {
-    width: 58,
-    padding: '2px 4px',
-    fontSize: 10.5,
-    fontFamily: tokens.font.mono,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.sm,
-    background: tokens.glass.surface,
-    color: tokens.color.text,
-  },
-  mono: { fontFamily: tokens.font.mono, fontSize: 9.5 },
-  generateBtn: {
-    padding: '6px 12px',
-    fontSize: 10.5,
-    fontWeight: tokens.font.weight.strong,
-    background: tokens.gradient.accent,
-    color: tokens.color.text,
-    border: `1px solid ${tokens.color.accentBorder}`,
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glassAccent,
-    cursor: 'pointer',
-    fontFamily: tokens.font.family,
-  },
-  closeBtn: {
-    padding: '6px 10px',
-    fontSize: 10.5,
-    background: tokens.gradient.surface,
-    color: tokens.color.textMute,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.pill,
-    cursor: 'pointer',
-    fontFamily: tokens.font.family,
-  },
+  param: { display: 'flex', alignItems: 'center', gap: 4 },
+  numInput: { width: 58 },
   hint: {
     position: 'absolute',
     bottom: 12,
     left: '50%',
     transform: 'translateX(-50%)',
     padding: '5px 14px',
-    fontSize: 10.5,
-    color: tokens.color.text,
-    background: tokens.glass.surfaceStrong,
-    backdropFilter: tokens.backdrop,
-    WebkitBackdropFilter: tokens.backdrop,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.pill,
-    boxShadow: tokens.shadow.glass,
     whiteSpace: 'nowrap',
-    fontFamily: tokens.font.family,
   },
 };

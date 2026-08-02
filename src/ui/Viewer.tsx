@@ -16,7 +16,7 @@ import { FootstepAudio } from './FootstepAudio';
 import { useDemoModeCamera } from './useDemoModeCamera';
 import { MobileJoystick } from './MobileJoystick';
 import { ScenePinsOverlay } from './ScenePinsOverlay';
-import { tokens } from './design-tokens';
+import { surfaceClass } from './components';
 
 /** Subset of methods Viewer needs, satisfied by both ThreeSceneManager and the
  *  PlayCanvas SceneManager. Lets `sceneManagerRef` hold either implementation. */
@@ -181,7 +181,7 @@ export function Viewer({ sceneId }: ViewerProps) {
   };
 
   return (
-    <div ref={wrapRef} style={wrap}>
+    <div ref={wrapRef} className="ds-screen" style={wrap}>
       <canvas ref={canvasRef} style={canvasStyle} />
       <AiScreenOverlay />
       <AiGeneratingOverlay />
@@ -192,9 +192,9 @@ export function Viewer({ sceneId }: ViewerProps) {
       {(!ready || isLoading) && !error && <LoadingScreen />}
 
       {error && (
-        <div style={errorBox}>
-          <div style={{ fontSize: 13, fontWeight: tokens.font.weight.strong, marginBottom: 6 }}>読み込みに失敗しました</div>
-          <div style={{ fontSize: 11.5, opacity: 0.75 }}>{error}</div>
+        <div className={`${surfaceClass('danger')} ds-overlay ds-overlay--card`} style={errorBox}>
+          <div className="ds-title" style={{ marginBottom: 6 }}>読み込みに失敗しました</div>
+          <div className="ds-sub">{error}</div>
         </div>
       )}
 
@@ -243,14 +243,12 @@ function PinsOverlayGate({ containerRef }: { containerRef: React.RefObject<HTMLE
   return <ScenePinsOverlay containerRef={containerRef} />;
 }
 
+/** Layout only. The canvas fills it; `.ds-screen` supplies ground and ink. */
 const wrap: React.CSSProperties = {
   position: 'relative',
   width: '100vw',
   height: '100vh',
   overflow: 'hidden',
-  background: tokens.color.bg,
-  color: tokens.color.text,
-  fontFamily: tokens.font.family,
 };
 
 const canvasStyle: React.CSSProperties = { width: '100%', height: '100%', display: 'block' };
@@ -258,15 +256,7 @@ const canvasStyle: React.CSSProperties = { width: '100%', height: '100%', displa
 const errorBox: React.CSSProperties = {
   position: 'absolute', top: '50%', left: '50%',
   transform: 'translate(-50%, -50%)',
-  background: tokens.glass.surfaceStrong,
-  border: `1px solid ${tokens.color.dangerBorder}`,
-  color: tokens.color.text,
   padding: '20px 26px',
-  borderRadius: tokens.radius.card,
   textAlign: 'center',
   maxWidth: 360,
-  backdropFilter: tokens.backdrop,
-  WebkitBackdropFilter: tokens.backdrop,
-  boxShadow: tokens.shadow.dialog,
-  fontFamily: tokens.font.family,
 };

@@ -4,7 +4,7 @@ import { useUIStore } from '../store/ui-store';
 import { useCameraStore } from '../store/camera-store';
 import type { ScenePin } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
-import { tokens , shellSurface } from './design-tokens';
+import { surfaceClass } from './components';
 
 /**
  * HTML overlay that renders annotation pins anchored to 3D positions in the
@@ -192,10 +192,10 @@ export function ScenePinsOverlay({
                 if (dragRef.current && !dragRef.current.moved) dragRef.current = null;
               }}
               title={editable ? `${entry.pin.title || 'タグ'} — ドラッグで移動（メッシュ表面に吸着）` : entry.pin.title}
-              className="glass-edge"
-              style={{ ...chipStyle, ...(isOpen ? chipStyleActive : null), ...(editable ? { cursor: 'grab', touchAction: 'none' as const } : null) }}
+              className={`${surfaceClass(isOpen ? 'accent' : 'plain')} ds-chip ds-overlay ds-overlay--pill`}
+              style={{ maxWidth: 220, ...(editable ? { cursor: 'grab', touchAction: 'none' as const } : null) }}
             >
-              <span style={chipDot} />
+              <span className="ds-chip__swatch" />
               <span style={chipLabel}>{entry.pin.title || 'タグ'}</span>
             </button>
             {isOpen && <PinPopup pin={entry.pin} />}
@@ -215,18 +215,25 @@ function PinPopup({ pin }: { pin: ScenePin }) {
   return (
     <div
       data-pin-overlay
+      className={`${surfaceClass('plain')} ds-overlay ds-overlay--card`}
       style={popupStyle}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div style={popupTitle}>{pin.title || 'タグ'}</div>
+      <div className="ds-title" style={{ marginBottom: 8 }}>{pin.title || 'タグ'}</div>
       {pin.image && (
         <img src={pin.image} alt="" style={popupImage} />
       )}
       {pin.comment && (
-        <div style={popupComment}>{pin.comment}</div>
+        <div className="ds-sub" style={popupComment}>{pin.comment}</div>
       )}
       {pin.url && (
-        <a href={pin.url} target="_blank" rel="noopener noreferrer" style={popupLink}>
+        <a
+          href={pin.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${surfaceClass('accent')} ds-pill`}
+          style={{ display: 'flex', width: '100%', textDecoration: 'none' }}
+        >
           商品を見る ↗
         </a>
       )}
@@ -249,41 +256,12 @@ const pinAnchorStyle: React.CSSProperties = {
   willChange: 'transform',
 };
 
-const chipStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '5px 10px 5px 6px',
-  background: tokens.glass.surface,
-  backdropFilter: tokens.backdrop,
-  WebkitBackdropFilter: tokens.backdrop,
-  ...shellSurface('plain'),
-  fontSize: tokens.font.size.md,
-  fontWeight: tokens.font.weight.strong,
-  cursor: 'pointer',
-  outline: 'none',
-  whiteSpace: 'nowrap' as const,
-  maxWidth: 220,
-};
-
-const chipStyleActive: React.CSSProperties = shellSurface('accent');
-
-const chipDot: React.CSSProperties = {
-  width: 10,
-  height: 10,
-  borderRadius: '50%',
-  background: tokens.color.accent,
-  borderWidth: 1,
-  borderStyle: 'solid' as const,
-  borderColor: 'rgba(255,255,255,0.85)',
-  flexShrink: 0,
-};
-
 const chipLabel: React.CSSProperties = {
   overflow: 'hidden' as const,
   textOverflow: 'ellipsis',
 };
 
+/** Layout only. */
 const popupStyle: React.CSSProperties = {
   position: 'absolute',
   bottom: 'calc(100% + 8px)',
@@ -291,56 +269,20 @@ const popupStyle: React.CSSProperties = {
   transform: 'translateX(-50%)',
   width: 240,
   padding: 12,
-  background: tokens.glass.surfaceStrong,
-  backdropFilter: tokens.backdrop,
-  WebkitBackdropFilter: tokens.backdrop,
-  borderWidth: 1,
-  borderStyle: 'solid' as const,
-  borderColor: tokens.color.border,
-  borderRadius: tokens.radius.card,
-  boxShadow: tokens.shadow.dialog,
-  color: tokens.color.text,
-  fontFamily: tokens.font.family,
   zIndex: 70,
-};
-
-const popupTitle: React.CSSProperties = {
-  fontSize: 11.5,
-  fontWeight: tokens.font.weight.strong,
-  marginBottom: 8,
-  lineHeight: 1.4,
 };
 
 const popupImage: React.CSSProperties = {
   width: '100%',
   height: 120,
   objectFit: 'cover' as const,
-  borderRadius: tokens.radius.md,
+  borderRadius: 16,
   marginBottom: 8,
   background: 'rgba(0,0,0,0.06)',
 };
 
 const popupComment: React.CSSProperties = {
-  fontSize: 11.5,
-  lineHeight: 1.55,
-  color: tokens.color.textMute,
   marginBottom: 10,
   whiteSpace: 'pre-wrap' as const,
   wordBreak: 'break-word' as const,
-};
-
-const popupLink: React.CSSProperties = {
-  display: 'block',
-  textAlign: 'center' as const,
-  padding: '8px 12px',
-  background: tokens.gradient.accent,
-  color: tokens.color.text,
-  borderWidth: 1,
-  borderStyle: 'solid' as const,
-  borderColor: tokens.color.accentBorder,
-  borderRadius: tokens.radius.pill,
-  fontSize: 11.5,
-  fontWeight: tokens.font.weight.strong,
-  textDecoration: 'none',
-  boxShadow: tokens.shadow.glassAccent,
 };

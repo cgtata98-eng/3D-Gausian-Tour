@@ -4,7 +4,7 @@ import { walkPlaceholderPanorama } from '../utils/walk-placeholder';
 import { useCameraStore } from '../store/camera-store';
 import { useSceneStore } from '../store/scene-store';
 import { useUIStore } from '../store/ui-store';
-import { tokens, shellSurface } from './design-tokens';
+import { surfaceClass } from './components';
 
 interface Props {
   /** The live scene manager (PlayCanvas union member implements the preview;
@@ -142,30 +142,28 @@ export function WalkthroughControls({ getManager }: Props) {
     // Grid exists but the walkable range (blue) hasn't been painted yet.
     return (
       <div style={ST.wrap}>
-        <div className="glass-edge" style={ST.flash}>ウォークスルー範囲が未設定です — エディタの 🖌 で歩ける範囲（青）を塗ってください</div>
+        <div className={FLASH}>ウォークスルー範囲が未設定です — エディタの 🖌 で歩ける範囲（青）を塗ってください</div>
       </div>
     );
   }
 
   return (
     <div style={ST.wrap}>
-      {flash && <div className="glass-edge" style={ST.flash}>{flash}</div>}
-      <div className="glass-edge" style={ST.pill}>
+      {flash && <div className={FLASH}>{flash}</div>}
+      <div className={`${surfaceClass('plain')} ds-overlay ds-overlay--pill`} style={ST.pill}>
         <button
           type="button"
-          className="glass-edge"
-          style={{ ...ST.stepBtn, opacity: busy ? 0.6 : 1 }}
+          className={`${surfaceClass('accent')} ds-pill ds-pill--sm`}
           disabled={busy}
           onClick={() => void step()}
           title="向いている方向の隣のノードへ移動 (W / ↑ キーでも可)"
         >
           ▲ 前進
         </button>
-        <span style={ST.nodeLabel}>{current.id}</span>
+        <span className="ds-mono" style={ST.nodeLabel}>{current.id}</span>
         <button
           type="button"
-          className="glass-edge"
-          style={ST.animBtn}
+          className={`${surfaceClass('plain')} ds-pill ds-pill--xs ds-fill-surface`}
           onClick={() => useSceneStore.getState().updateSettings({ walkAnimated: !animated })}
           title="移動の見せ方の切替。ON = ウォークスルー風 (クロスフェード+ズームで歩く演出) / OFF = 即切替 (密なグリッドで GS のように動ける風)。どちらでも「向き→隣ノード」の移動ルールは同じ"
         >
@@ -176,6 +174,10 @@ export function WalkthroughControls({ getManager }: Props) {
   );
 }
 
+/** A transient status line above the control bar — same surface, pill shape. */
+const FLASH = `${surfaceClass('plain')} ds-overlay ds-overlay--pill ds-pill ds-pill--xs`;
+
+/** Layout only. */
 const ST: Record<string, React.CSSProperties> = {
   wrap: {
     position: 'absolute',
@@ -187,47 +189,15 @@ const ST: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: 8,
-    fontFamily: tokens.font.family,
-  },
-  flash: {
-    padding: '4px 12px',
-    fontSize: 10.5,
-    fontWeight: tokens.font.weight.strong,
-    background: tokens.glass.surfaceStrong,
-    backdropFilter: tokens.backdrop,
-    WebkitBackdropFilter: tokens.backdrop,
-    ...shellSurface('plain'),
   },
   pill: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
     padding: '6px 10px',
-    background: tokens.glass.surfaceStrong,
-    backdropFilter: tokens.backdrop,
-    WebkitBackdropFilter: tokens.backdrop,
-    ...shellSurface('plain'),
-  },
-  stepBtn: {
-    padding: '8px 18px',
-    fontSize: 11.5,
-    fontWeight: tokens.font.weight.strong,
-    ...shellSurface('accent'),
-    cursor: 'pointer',
   },
   nodeLabel: {
-    fontSize: 11.5,
-    fontWeight: tokens.font.weight.strong,
-    fontFamily: tokens.font.mono,
-    color: tokens.color.textMute,
     minWidth: 28,
     textAlign: 'center',
-  },
-  animBtn: {
-    padding: '6px 10px',
-    fontSize: 10.5,
-    ...shellSurface('plain', { fill: 'surface' }),
-    color: tokens.color.textMute,
-    cursor: 'pointer',
   },
 };

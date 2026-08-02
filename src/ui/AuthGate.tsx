@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { verifyCredentials, markAuthenticated, isAuthenticated } from '../utils/auth';
-import { tokens, PillButton, PillInput, Card, surfaceClass } from './components';
+import { PillButton, PillInput, Card, surfaceClass } from './components';
 
 /**
  * Wraps admin / debug routes. If not authenticated, renders a centred login
@@ -40,21 +40,15 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: tokens.color.bg,
-        fontFamily: tokens.font.family,
-      }}
+      className="ds-screen"
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
       <form onSubmit={submit} style={{ width: 380, maxWidth: 'calc(100vw - 32px)' }}>
         <Card tone="surface" style={{ padding: '32px 28px' }}>
-          <div style={{ fontSize: 15, fontWeight: tokens.font.weight.strong, color: tokens.color.text, marginBottom: 4, letterSpacing: 0.3 }}>
+          <div className="ds-title" style={{ marginBottom: 4 }}>
             管理画面ログイン
           </div>
-          <div style={{ fontSize: 11.5, color: tokens.color.textMute, marginBottom: 22, lineHeight: 1.5 }}>
+          <div className="ds-sub" style={{ marginBottom: 22 }}>
             顧客向けビューアは下記なしでご覧いただけます。
           </div>
 
@@ -99,7 +93,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
             </PillButton>
           </div>
 
-          <div style={{ marginTop: 14, fontSize: 9.5, color: tokens.color.textFaint, lineHeight: 1.5, textAlign: 'center' as const }}>
+          <div className="ds-hint" style={{ marginTop: 14, textAlign: 'center' }}>
             7 日間ログイン状態が保持されます。
           </div>
         </Card>
@@ -109,16 +103,5 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      fontSize: 10.5,
-      fontWeight: tokens.font.weight.strong,
-      letterSpacing: 0.6,
-      color: tokens.color.textMute,
-      textTransform: 'uppercase' as const,
-      marginBottom: 6,
-    }}>
-      {children}
-    </div>
-  );
+  return <div className="ds-label" style={{ marginBottom: 6 }}>{children}</div>;
 }

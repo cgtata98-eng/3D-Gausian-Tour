@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useUIStore } from '../store/ui-store';
 import { useMediaQuery } from '../utils/use-media-query';
-import { tokens, shellSurface } from './design-tokens';
+import { surfaceClass } from './components';
 
 /** スティック中心からのオフセットがこれ未満なら「動いていない」扱いにする。
  *  足音判定 (`mobileJoystickActive`) はこの値の外側でのみ true。
@@ -97,17 +97,14 @@ export function MobileJoystick({ onChange }: Props) {
       onPointerMove={handleMove}
       onPointerUp={handleUp}
       onPointerCancel={handleUp}
-      className="glass-edge"
+      className={`${surfaceClass('plain')} ds-overlay`}
       style={{
         position: 'fixed',
         left: 'max(env(safe-area-inset-left, 16px), 16px)',
         bottom: 'max(env(safe-area-inset-bottom, 24px), 24px)',
         width: BASE_SIZE,
         height: BASE_SIZE,
-        background: tokens.glass.surface,
-        backdropFilter: tokens.backdrop,
-        WebkitBackdropFilter: tokens.backdrop,
-        ...shellSurface('plain', { radius: BASE_SIZE / 2 }),
+        borderRadius: '50%',
         touchAction: 'none',
         userSelect: 'none',
         WebkitUserSelect: 'none',
@@ -115,7 +112,7 @@ export function MobileJoystick({ onChange }: Props) {
       }}
     >
       <div
-        className="glass-edge"
+        className={`${surfaceClass('plain')} ds-fill-surface`}
         style={{
           position: 'absolute',
           left: '50%',
@@ -124,7 +121,7 @@ export function MobileJoystick({ onChange }: Props) {
           height: THUMB_SIZE,
           marginLeft: -THUMB_SIZE / 2,
           marginTop: -THUMB_SIZE / 2,
-          ...shellSurface('plain', { radius: THUMB_SIZE / 2, fill: 'surface' }),
+          borderRadius: '50%',
           transform: `translate(${thumb.x}px, ${thumb.y}px)`,
           transition: dragging ? 'none' : 'transform 180ms ease-out',
           pointerEvents: 'none',

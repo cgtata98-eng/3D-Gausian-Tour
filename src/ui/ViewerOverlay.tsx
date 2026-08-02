@@ -5,7 +5,7 @@ import { useUIStore } from '../store/ui-store';
 import { LeftPanel } from './LeftPanel';
 import { calibrateHeadTracker } from '../utils/head-tracker';
 import { navigate } from '../utils/url';
-import { tokens, shellSurface, edgeVars } from './design-tokens';
+import { surfaceClass } from './components';
 
 interface ViewerOverlayProps {
   sceneId: string;
@@ -205,11 +205,11 @@ export function ViewerOverlay({ sceneId, onViewpointClick, showDebugLink = true,
           href={`/scene/${sceneId}`}
           onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(`/scene/${sceneId}`); }}
           title="デバッグモード"
-          className="glass-edge"
+          className={`${surfaceClass('plain')} ds-overlay ds-overlay--pill ds-pill ds-pill--icon`}
           style={debugBtn}
           aria-label="Debug Mode"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="ds-icon" viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
@@ -230,49 +230,30 @@ function MirrorStatusBadge() {
   return (
     <button
       onClick={() => setMode('off')}
-      className="glass-edge"
+      className={`${surfaceClass('accent')} ds-pill ds-pill--sm`}
       style={mirrorBadge}
       title="ミラーリング送信中 (クリックで停止)"
       aria-label="Mirror sending — click to stop"
     >
-      <span style={{ fontSize: 11.5, lineHeight: 1 }}>📡</span>
-      <span style={{ fontSize: 10.5, fontWeight: tokens.font.weight.strong }}>送信中</span>
-      <span style={{ fontSize: 11.5, opacity: 0.8 }}>⏹</span>
+      <span>📡</span>
+      <span>送信中</span>
+      <span style={{ opacity: 0.8 }}>⏹</span>
     </button>
   );
 }
 
+/** Layout only. */
 const mirrorBadge: React.CSSProperties = {
   position: 'absolute',
   top: 16,
   right: 16,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '7px 14px',
-  ...shellSurface('accent'),
-  cursor: 'pointer',
-  letterSpacing: tokens.font.tracking.base,
   zIndex: 10,
-  outline: 'none',
 };
 
 const debugBtn: React.CSSProperties = {
   position: 'absolute',
   bottom: 144, left: 16,
   width: 40, height: 40,
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  background: tokens.glass.surfaceStrong,
-  ...edgeVars('plain'),
-  borderWidth: 0,
-  borderStyle: 'solid',
-  borderColor: 'transparent',
-  borderRadius: tokens.radius.pill,
-  backdropFilter: tokens.backdrop,
-  WebkitBackdropFilter: tokens.backdrop,
-  boxShadow: tokens.shadow.glass,
-  color: tokens.color.text,
   textDecoration: 'none',
   zIndex: 5,
-  fontFamily: tokens.font.family,
 };

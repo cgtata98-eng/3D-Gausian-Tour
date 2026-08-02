@@ -2,7 +2,7 @@ import { useUIStore } from '../store/ui-store';
 import { useSceneStore } from '../store/scene-store';
 import { RENDER_PRESETS } from '../engine/render-presets';
 import type { RenderMode } from '../engine/gsplat-loader';
-import { tokens, shellSurface } from './design-tokens';
+import { SegmentedControl } from './components';
 
 const MODES: { id: RenderMode; label: string }[] = [
   { id: 'default', label: 'Default' },
@@ -25,54 +25,17 @@ export function RenderModePanel() {
     useSceneStore.getState().updateSettings({ render: { ...RENDER_PRESETS[id] } });
   };
 
+  // This panel WAS a segmented control re-implemented by hand — a track, three
+  // buttons and an accent recipe on the active one. The shared control also
+  // slides its indicator instead of hard-swapping the fill, which is the part
+  // a re-implementation always loses.
   return (
-    <div className="glass-edge" style={panel}>
-      {MODES.map((m) => {
-        const active = renderMode === m.id;
-        return (
-          <button
-            key={m.id}
-            onClick={() => apply(m.id)}
-            className={active ? 'glass-edge' : undefined}
-            style={{ ...seg, ...(active ? segActive : null) }}
-          >
-            {m.label}
-          </button>
-        );
-      })}
-    </div>
+    <SegmentedControl
+      value={renderMode}
+      onChange={apply}
+      options={MODES}
+      onScene
+      style={{ position: 'absolute', top: 12, left: 12, zIndex: 5 }}
+    />
   );
 }
-
-const panel: React.CSSProperties = {
-  position: 'absolute',
-  top: 12,
-  left: 12,
-  display: 'flex',
-  gap: 4,
-  padding: 5,
-  background: tokens.glass.surfaceStrong,
-  backdropFilter: tokens.backdrop,
-  WebkitBackdropFilter: tokens.backdrop,
-  ...shellSurface('plain'),
-  zIndex: 5,
-};
-
-const seg: React.CSSProperties = {
-  padding: '7px 15px',
-  borderWidth: 0,
-  borderStyle: 'solid',
-  borderColor: 'transparent',
-  borderRadius: tokens.radius.pill,
-  backgroundColor: 'transparent',
-  backgroundImage: 'none',
-  color: tokens.color.textMute,
-  cursor: 'pointer',
-  fontSize: tokens.font.size.sm,
-  fontWeight: tokens.font.weight.strong,
-  fontFamily: tokens.font.family,
-  outline: 'none',
-  transition: `background ${tokens.transition}, color ${tokens.transition}, box-shadow ${tokens.transition}`,
-};
-
-const segActive: React.CSSProperties = shellSurface('accent');

@@ -11,6 +11,10 @@ import { surfaceClass, IconTrash } from './components';
 /** Destructive controls — same shell as everywhere else, rather than `ST.btn`
  *  with a `#b91c1c` text colour bolted on. */
 const DANGER_BTN = `${surfaceClass('danger')} ds-pill ds-pill--sm`;
+/** Tool-row button (dense, single line) and side-panel button. */
+const HEAD_BTN = `${surfaceClass('plain')} ds-pill ds-pill--xs ds-fill-surface`;
+const HEAD_BTN_ON = `${surfaceClass('accent')} ds-pill ds-pill--xs`;
+const SIDE_BTN = `${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`;
 
 /** Matches FloorPlanMiniMap / CollisionWallEditor so all three plan-map views
  *  share the same world↔map calibration. */
@@ -494,15 +498,15 @@ export function WalkGraphEditor({ sceneId, plan, floorPlan, cameraHeight, onChan
   const assignedCount = nodes.filter((n) => n.panorama).length;
 
   const dock = (
-    <div style={{ ...ST.dock, top: expanded && !collapsed ? 12 : undefined, height: collapsed ? 40 : undefined }}>
+    <div className={`${surfaceClass('plain')} ds-dock`} style={{ ...ST.dock, top: expanded && !collapsed ? 12 : undefined, height: collapsed ? 40 : undefined }}>
       {/* Header */}
-      <div style={ST.header}>
-        <span style={ST.title}>ウォークスルー編集</span>
-        <span style={ST.stat}>ノード {nodes.length}（画像 {assignedCount}/{nodes.length}）</span>
-        <label style={ST.ctl} title="ノードをセル中心に吸着">
+      <div className="ds-dock__head">
+        <span className="ds-title">ウォークスルー編集</span>
+        <span className="ds-sub">ノード {nodes.length}（画像 {assignedCount}/{nodes.length}）</span>
+        <label className="ds-dock__ctl" title="ノードをセル中心に吸着">
           <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />スナップ
         </label>
-        <label style={ST.ctl} title="セル寸法 (m)。小さくするほどグリッドが細かくなる">
+        <label className="ds-dock__ctl" title="セル寸法 (m)。小さくするほどグリッドが細かくなる">
           セル
           <input
             type="number" min={0.1} max={5} step={0.05} value={cellSize}
@@ -510,7 +514,7 @@ export function WalkGraphEditor({ sceneId, plan, floorPlan, cameraHeight, onChan
             style={ST.numInput}
           />m
         </label>
-        <label style={ST.ctl} title="グリッドの列数を直接指定（セル寸法を自動計算）">
+        <label className="ds-dock__ctl" title="グリッドの列数を直接指定（セル寸法を自動計算）">
           分割
           <input
             type="number" min={2} max={100} step={1} value={cols}
@@ -528,12 +532,7 @@ export function WalkGraphEditor({ sceneId, plan, floorPlan, cameraHeight, onChan
             { k: 'erase', label: '⚪ グレーペン', tip: 'ドラッグしたセルを範囲外 (灰・進入不可) にする' },
           ] as const).map((t) => (
             <button key={t.k} type="button" title={t.tip}
-              style={{
-                ...ST.headBtn,
-                ...(paintMode === t.k
-                  ? { background: 'rgba(61,142,197,0.18)', borderColor: tokens.color.accent, fontWeight: tokens.font.weight.strong }
-                  : {}),
-              }}
+              className={paintMode === t.k ? HEAD_BTN_ON : HEAD_BTN}
               onClick={() => setPaintMode(t.k)}>
               {t.label}
             </button>
@@ -541,16 +540,16 @@ export function WalkGraphEditor({ sceneId, plan, floorPlan, cameraHeight, onChan
         </div>
         {selectedIds.size > 0 && (
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            <span style={{ ...ST.stat, color: tokens.color.accent, fontWeight: tokens.font.weight.strong }}>選択 {selectedIds.size}</span>
-            <button type="button" style={ST.headBtn} title="選択セルを歩ける範囲 (青) にする"
+            <span className="ds-sub ds-accent">選択 {selectedIds.size}</span>
+            <button type="button" className={HEAD_BTN} title="選択セルを歩ける範囲 (青) にする"
               onClick={() => setRangeFor(selectedIds, false)}>🔵 青に</button>
-            <button type="button" style={ST.headBtn} title="選択セルを範囲外 (灰・進入不可) にする"
+            <button type="button" className={HEAD_BTN} title="選択セルを範囲外 (灰・進入不可) にする"
               onClick={() => setRangeFor(selectedIds, true)}>⚪ 灰に</button>
-            <button type="button" style={ST.headBtn} title="選択解除 (Esc)"
+            <button type="button" className={HEAD_BTN} title="選択解除 (Esc)"
               onClick={() => selectOne(null)}>✕ 解除</button>
           </div>
         )}
-        <label style={ST.ctl} title="隣接の自動生成方式。manual = 各ノードの明示指定のみ">
+        <label className="ds-dock__ctl" title="隣接の自動生成方式。manual = 各ノードの明示指定のみ">
           隣接
           <select
             value={adjacency}
@@ -562,24 +561,26 @@ export function WalkGraphEditor({ sceneId, plan, floorPlan, cameraHeight, onChan
             <option value="manual">manual</option>
           </select>
         </label>
-        <button type="button" style={ST.headBtn} onClick={() => void fillAllCells()}
+        <button type="button" className={HEAD_BTN} onClick={() => void fillAllCells()}
           title="全セルを 1 セル 1 ノードに整理し直す。重複・古いラベルを解消（画像割当は保持、重複セルは画像持ち優先）">
           ⊞ 全セル配置
         </button>
         <div style={{ flex: 1 }} />
-        <button type="button" style={ST.headBtn} onClick={() => setExpanded((v) => !v)} title="地図を画面いっぱいに表示">
+        <button type="button" className={HEAD_BTN} onClick={() => setExpanded((v) => !v)} title="地図を画面いっぱいに表示">
           {expanded ? '⤡ 縮小' : '⛶ 拡大'}
         </button>
-        <button type="button" style={ST.headBtn} onClick={() => setCollapsed((v) => !v)}>{collapsed ? '▲ 開く' : '▼ たたむ'}</button>
-        <button type="button" style={ST.headBtn} onClick={onClose}>✕ 閉じる</button>
+        <button type="button" className={HEAD_BTN} onClick={() => setCollapsed((v) => !v)}>{collapsed ? '▲ 開く' : '▼ たたむ'}</button>
+        <button type="button" className={HEAD_BTN} onClick={onClose}>✕ 閉じる</button>
       </div>
 
       {!collapsed && (
-        <div style={{ ...ST.body, flex: 1, minHeight: 0, justifyContent: expanded ? 'center' : undefined }}>
+        <div className="ds-dock__body" style={{ flex: 1, minHeight: 0, justifyContent: expanded ? 'center' : undefined }}>
           {/* Map canvas */}
           <div
             ref={wrapRef}
-            style={{ ...ST.canvasWrap, width: dW, height: dH, boxShadow: dragOver ? `0 0 0 3px ${tokens.color.accent}` : undefined }}
+            className="ds-dock__canvas"
+            data-drop={dragOver || undefined}
+            style={{ width: dW, height: dH }}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={(e) => void onCanvasDrop(e)}
@@ -665,7 +666,7 @@ export function WalkGraphEditor({ sceneId, plan, floorPlan, cameraHeight, onChan
             </svg>
             </div>
             {view.z > 1 && (
-              <button type="button" style={ST.zoomBadge} title="ズームをリセット (100%)"
+              <button type="button" className={`${surfaceClass('plain')} ds-overlay ds-overlay--pill ds-pill ds-pill--xs`} style={ST.zoomBadge} title="ズームをリセット (100%)"
                 onClick={() => setView({ z: 1, tx: 0, ty: 0 })}>
                 🔍 {Math.round(view.z * 100)}% ✕
               </button>
@@ -673,20 +674,20 @@ export function WalkGraphEditor({ sceneId, plan, floorPlan, cameraHeight, onChan
           </div>
 
           {/* Side panel */}
-          <div style={ST.panel}>
+          <div className="ds-dock__side" style={ST.panel}>
             {selected ? (
               <>
-                <div style={ST.panelTitle}>ノード {selected.id}</div>
+                <div className="ds-title">ノード {selected.id}</div>
                 <div style={ST.panelRow}>
-                  位置 <span style={ST.mono}>[{selected.position[0]}, {selected.position[2]}]</span>
-                  {selected.cell && <span style={ST.mono}> cell({selected.cell.row},{selected.cell.col})</span>}
+                  位置 <span className="ds-mono">[{selected.position[0]}, {selected.position[2]}]</span>
+                  {selected.cell && <span className="ds-mono"> cell({selected.cell.row},{selected.cell.col})</span>}
                 </div>
-                <button type="button" style={ST.btn} onClick={() => panoInputRef.current?.click()}>
+                <button type="button" className={SIDE_BTN} onClick={() => panoInputRef.current?.click()}>
                   {selected.panorama ? '🖼 360°画像を差し替え' : '🖼 360°画像を割り当て'}
                 </button>
                 <input ref={panoInputRef} type="file" accept="image/*" style={{ display: 'none' }}
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) void assignPanorama(f); e.target.value = ''; }} />
-                <button type="button" style={ST.btn}
+                <button type="button" className={SIDE_BTN}
                   onClick={() => { onPreviewNode(selected); setPreviewedId(selected.id); setExpanded(false); }}>
                   👁 メインビューに表示{selected.panorama ? '' : '（仮画像）'}
                 </button>
@@ -696,39 +697,39 @@ export function WalkGraphEditor({ sceneId, plan, floorPlan, cameraHeight, onChan
                     onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) updateNode(selected.id, { yawOffset: v || undefined }); }}
                     style={ST.numInput} />°
                 </label>
-                <button type="button" style={ST.btn}
+                <button type="button" className={SIDE_BTN}
                   onClick={() => updateNode(selected.id, { excluded: !selected.excluded })}>
                   {selected.excluded ? '🔵 歩ける範囲に含める' : '⚪ 範囲から外す（灰）'}
                 </button>
-                <button type="button" style={ST.btn}
+                <button type="button" className={SIDE_BTN}
                   disabled={walk.startNodeId === selected.id}
                   onClick={() => commit({ startNodeId: selected.id })}>
                   🏁 開始ノードにする
                 </button>
-                <button type="button" style={ST.btn} onClick={testStep}
+                <button type="button" className={SIDE_BTN} onClick={testStep}
                   title="ライブカメラの向き (yaw) で stepForward を実行し、遷移先を選択・表示">
                   ⤴ 前進テスト（現在の向き {Math.round(liveYaw)}°）
                 </button>
-                {testMsg && <div style={ST.testMsg}>{testMsg}</div>}
+                {testMsg && <div className="ds-sub ds-accent">{testMsg}</div>}
                 <button type="button" className={DANGER_BTN} onClick={() => removeNodes(new Set([selected.id]))}><IconTrash />削除</button>
               </>
             ) : selectedIds.size > 1 ? (
               <>
-                <div style={ST.panelTitle}>{selectedIds.size} ノード選択中</div>
-                <button type="button" style={ST.btn} onClick={() => setRangeFor(selectedIds, false)}>
+                <div className="ds-title">{selectedIds.size} ノード選択中</div>
+                <button type="button" className={SIDE_BTN} onClick={() => setRangeFor(selectedIds, false)}>
                   🔵 歩ける範囲に含める
                 </button>
-                <button type="button" style={ST.btn} onClick={() => setRangeFor(selectedIds, true)}>
+                <button type="button" className={SIDE_BTN} onClick={() => setRangeFor(selectedIds, true)}>
                   ⚪ 範囲から外す（灰）
                 </button>
                 <button type="button" className={DANGER_BTN}
                   onClick={() => { if (confirm(`選択中の ${selectedIds.size} ノードを削除しますか？`)) removeNodes(selectedIds); }}>
                   <IconTrash />選択ノードを削除
                 </button>
-                <button type="button" style={ST.btn} onClick={() => selectOne(null)}>選択解除</button>
+                <button type="button" className={SIDE_BTN} onClick={() => selectOne(null)}>選択解除</button>
               </>
             ) : (
-              <div style={ST.panelEmpty}>
+              <div className="ds-hint">
                 灰 = 範囲外（進入不可） / 青 = 歩ける範囲（仮画像で表示） / 緑 = 画像あり。<br />
                 🔵 青ペン / ⚪ グレーペンでドラッグして範囲を塗り分け。<br />
                 🖱 選択でドラッグ → 矩形複数選択（Shift+クリックで追加）。<br />
@@ -753,118 +754,19 @@ export function WalkGraphEditor({ sceneId, plan, floorPlan, cameraHeight, onChan
   return createPortal(dock, document.body);
 }
 
+/** Layout only — the dock's surface, header and work area are `.ds-dock*`. */
 const ST: Record<string, React.CSSProperties> = {
   dock: {
-    position: 'fixed',
     left: 12,
     right: 12,
     bottom: 12,
     zIndex: 60,
-    background: tokens.glass.surfaceStrong,
-    backdropFilter: tokens.backdrop,
-    WebkitBackdropFilter: tokens.backdrop,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.md,
-    boxShadow: tokens.shadow.dialog,
-    overflow: 'hidden',
-    fontFamily: tokens.font.family,
-    display: 'flex',
-    flexDirection: 'column',
   },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '8px 14px',
-    borderBottom: `1px solid ${tokens.color.hairline}`,
-    fontSize: 11.5,
-    color: tokens.color.text,
-  },
-  title: { fontWeight: tokens.font.weight.strong, letterSpacing: 0.3 },
-  stat: { fontSize: 10.5, color: tokens.color.textMute },
-  ctl: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: tokens.color.textMute },
-  numInput: {
-    width: 56,
-    padding: '2px 4px',
-    fontSize: 10.5,
-    fontFamily: tokens.font.mono,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.sm,
-    background: tokens.glass.surface,
-    color: tokens.color.text,
-  },
-  select: {
-    padding: '3px 10px',
-    fontSize: tokens.font.size.xs,
-    borderWidth: 0,
-    borderStyle: 'solid',
-    borderColor: 'transparent',
-    borderRadius: tokens.radius.pill,
-    background: tokens.gradient.track,
-    color: tokens.color.text,
-    fontFamily: tokens.font.family,
-    boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
-    outline: 'none', cursor: 'pointer',
-  },
-  headBtn: {
-    padding: '4px 10px',
-    fontSize: 10.5,
-    background: tokens.gradient.surface,
-    color: tokens.color.text,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.pill,
-    cursor: 'pointer',
-    fontFamily: tokens.font.family,
-  },
-  body: { display: 'flex', gap: 12, padding: 12, alignItems: 'stretch', overflowX: 'auto' },
-  canvasWrap: {
-    position: 'relative',
-    borderRadius: tokens.radius.sm,
-    overflow: 'hidden',
-    border: `1px solid ${tokens.color.border}`,
-    background: '#f4f4f5',
-    flexShrink: 0,
-  },
+  numInput: { width: 56 },
+  select: { width: 'auto' },
   image: { position: 'absolute', inset: 0, width: '100%', height: '100%', userSelect: 'none' },
   svg: { position: 'absolute', top: 0, left: 0, cursor: 'crosshair' },
-  panel: {
-    width: 250,
-    flexShrink: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-    fontSize: 10.5,
-    color: tokens.color.text,
-  },
-  panelTitle: { fontWeight: tokens.font.weight.strong, fontSize: 11.5 },
-  panelRow: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: tokens.color.textMute },
-  mono: { fontFamily: tokens.font.mono, fontSize: 9.5 },
-  btn: {
-    padding: '6px 10px',
-    fontSize: 10.5,
-    textAlign: 'left',
-    background: tokens.gradient.surface,
-    color: tokens.color.text,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.sm,
-    cursor: 'pointer',
-    fontFamily: tokens.font.family,
-  },
-  zoomBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    zIndex: 2,
-    padding: '4px 10px',
-    fontSize: 10.5,
-    background: tokens.glass.surfaceStrong,
-    color: tokens.color.text,
-    border: `1px solid ${tokens.color.border}`,
-    borderRadius: tokens.radius.pill,
-    cursor: 'pointer',
-    fontFamily: tokens.font.family,
-    boxShadow: tokens.shadow.dialog,
-  },
-  testMsg: { fontSize: 10.5, color: tokens.color.accent, fontWeight: tokens.font.weight.strong },
-  panelEmpty: { fontSize: 10.5, color: tokens.color.textMute, lineHeight: 1.7 },
+  panel: { width: 250 },
+  panelRow: { display: 'flex', alignItems: 'center', gap: 4 },
+  zoomBadge: { position: 'absolute', top: 8, right: 8, zIndex: 2 },
 };

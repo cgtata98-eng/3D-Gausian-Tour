@@ -411,6 +411,137 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
 .ds-blur { -webkit-backdrop-filter: var(--ds-backdrop); backdrop-filter: var(--ds-backdrop); }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Overlay — a panel floating over the 3D view
+   ─────────────────────────────────────────────────────────────────────────
+   Eight files were each writing the same four lines by hand: a translucent
+   white fill, `backdrop-filter`, its `-webkit-` twin, then a shell recipe.
+   Four coupled declarations repeated eight times is four chances per file to
+   drift, and they had: the minimap, the pin overlay and the joystick were all
+   at slightly different opacities.
+
+   It sets `--ds-fill` rather than `background`, so the variant classes still
+   choose the hue. Do NOT pair it with `.ds-fill-surface` — that one is
+   declared later and would replace the translucency with a solid panel,
+   which is the whole thing this class exists to avoid.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-overlay {
+  border-radius: var(--ds-r-md);
+  --ds-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(246, 247, 249, 0.82) 100%);
+  -webkit-backdrop-filter: var(--ds-backdrop-scene);
+          backdrop-filter: var(--ds-backdrop-scene);
+}
+.ds-overlay--pill { border-radius: var(--ds-r-pill); }
+.ds-overlay--lg { border-radius: var(--ds-r-lg); }
+.ds-overlay--card { border-radius: var(--ds-r-card); }
+/* Over video / dark 3D content, where a white panel would glare. */
+.ds-overlay--dark {
+  --ds-fill: linear-gradient(180deg, rgba(28, 30, 36, 0.80) 0%, rgba(18, 20, 24, 0.86) 100%);
+  --ds-fg: #f2f3f5;
+  --ds-cut-rgb: 0, 0, 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Screen, veil, spinner, progress
+   ─────────────────────────────────────────────────────────────────────────
+   The whole-window pieces. They were living as one-off style objects in the
+   screens that happened to need them, which is why the loading veil blurred
+   at 12px while every other translucent surface in the app blurred at 10 or
+   14, and why the login screen re-stated the canvas colour and the font
+   family that `:root` already defines.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-screen {
+  min-height: 100vh;
+  background: var(--ds-bg);
+  color: var(--ds-text);
+  font-family: var(--ds-font);
+}
+/* Covers what is underneath without hiding it — used for loading states over
+   the 3D canvas. A dialog's darkening scrim is `--ds-scrim`, not this. */
+.ds-veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(248, 248, 248, 0.94);
+  -webkit-backdrop-filter: var(--ds-backdrop);
+          backdrop-filter: var(--ds-backdrop);
+  color: var(--ds-text);
+  font-family: var(--ds-font);
+  z-index: 100;
+}
+
+/* A stage: full-bleed picture with nothing of the app on top of it (the
+   mirror page). Deliberately NOT a shell — the absence of chrome is the
+   point. It still belongs here so the one screen that opts out of the
+   language does so by naming it, not by inventing black on its own. */
+.ds-stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  color: #fff;
+  font-family: var(--ds-font);
+}
+.ds-stage .ds-title { color: #fff; text-shadow: none; }
+.ds-stage .ds-sub, .ds-stage .ds-hint { color: rgba(255, 255, 255, 0.55); }
+
+/* A rendered image judged on its own — an equirect panorama preview, a video
+   frame. It gets a neutral dark ground rather than a shell, because a shell
+   would put the app's light source next to the picture's. */
+.ds-plate { border-radius: var(--ds-r-md); background: #1f2937; display: block; }
+.ds-plate__veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ds-r-md);
+  background: rgba(31, 41, 55, 0.55);
+  color: rgba(255, 255, 255, 0.88);
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-md);
+  pointer-events: none;
+}
+
+.ds-spinner {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--ds-hairline);
+  border-top-color: #7cc0e8;
+  border-radius: 50%;
+  animation: ds-spin 0.9s linear infinite;
+}
+.ds-stage .ds-spinner { border-color: rgba(255, 255, 255, 0.15); border-top-color: #7cc0e8; }
+@keyframes ds-spin { to { transform: rotate(360deg); } }
+
+.ds-progress {
+  width: 200px;
+  height: 6px;
+  border-radius: var(--ds-r-pill);
+  overflow: hidden;
+  background-image: linear-gradient(180deg, #ececec 0%, #f3f3f3 100%);
+  box-shadow: var(--ds-inner-sunken);
+}
+/* Same fill as the range track, so a determinate bar and a slider at the same
+   value read as the same amount of the same thing. */
+.ds-progress__fill {
+  height: 100%;
+  border-radius: var(--ds-r-pill);
+  background-image: linear-gradient(180deg, rgba(220, 240, 252, 0.98) 0%, rgba(150, 205, 238, 0.98) 100%);
+  transition: width 120ms ease-out;
+}
+
+/* Reduced motion: the spinner is the one place a loop is the message, so it
+   is slowed rather than stopped — a frozen spinner reads as a hang. */
+@media (prefers-reduced-motion: reduce) {
+  .ds-spinner { animation-duration: 1.8s; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    Sidebar block
    ─────────────────────────────────────────────────────────────────────────
    A titled group inside a side panel. Added before touching LeftPanel
@@ -497,6 +628,45 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
 .ds-section__body { padding: var(--ds-space-4); }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Dock — a full-width editor pinned to an edge of the window
+   ─────────────────────────────────────────────────────────────────────────
+   The grid editor and the collision editor are the same object: a translucent
+   slab with a dense tool row along the top and a work area below. Each had
+   built it separately, so their headers disagreed on padding and their tool
+   buttons on radius — two editors you switch between within one task looking
+   like two different products.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-dock {
+  position: fixed;
+  border-radius: var(--ds-r-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  -webkit-backdrop-filter: var(--ds-backdrop-scene);
+          backdrop-filter: var(--ds-backdrop-scene);
+  --ds-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.90) 0%, rgba(246, 247, 249, 0.86) 100%);
+  box-shadow: var(--ds-inner), var(--ds-lift-dialog);
+}
+.ds-dock__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--ds-hairline);
+  font-size: var(--ds-fs-md);
+  color: var(--ds-text);
+}
+.ds-dock__body { display: flex; gap: 12px; padding: 12px; align-items: stretch; overflow-x: auto; }
+/* Side panel of the dock — selection details, actions. */
+.ds-dock__side { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; font-size: var(--ds-fs-sm); color: var(--ds-text); }
+/* A control label inside the dense tool row. */
+.ds-dock__ctl { display: flex; align-items: center; gap: 4px; font-size: var(--ds-fs-sm); color: var(--ds-text-mute); }
+/* The work surface a plan image is drawn on. */
+.ds-dock__canvas { position: relative; border-radius: var(--ds-r-sm); overflow: hidden; background: #f4f4f5; flex-shrink: 0; box-shadow: var(--ds-inner-sunken); }
+/* Drag-and-drop target state — set while a file is over the canvas. */
+.ds-dock__canvas[data-drop] { box-shadow: var(--ds-inner-sunken), 0 0 0 3px rgba(112, 180, 222, 0.55); }
+
+/* ══════════════════════════════════════════════════════════════════════════
    Chip — a small pill that toggles
    ─────────────────────────────────────────────────────────────────────────
    Distinct from `.ds-tag`: a tag reports state, a chip changes it. LeftPanel
@@ -522,6 +692,9 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   height: 12px;
   border-radius: 50%;
   flex-shrink: 0;
+  /* Accent by default, so a chip that is not showing a user-chosen colour has
+     nothing to declare inline. Colour pickers still pass their own. */
+  background: #7cc0e8;
   box-shadow: var(--ds-inner);
 }
 
@@ -911,6 +1084,10 @@ input[type='range']::-moz-range-thumb {
 /* ══════════════════════════════════════════════════════════════════════════
    Typography & icons
    ══════════════════════════════════════════════════════════════════════════ */
+/* The one step above `--ds-fs-lg`: a screen's own heading, used once per
+   screen. Kept out of the four-step scale on purpose — a fifth step available
+   everywhere is a fifth step that turns up in a panel. */
+.ds-heading { font-size: 19px; font-weight: var(--ds-fw); letter-spacing: var(--ds-tracking); color: var(--ds-text); }
 .ds-title { font-size: var(--ds-fs-lg); font-weight: var(--ds-fw); letter-spacing: var(--ds-tracking); color: var(--ds-text); }
 .ds-sub { font-size: var(--ds-fs-sm); font-weight: var(--ds-fw); color: var(--ds-text-mute); }
 .ds-label {
@@ -921,7 +1098,58 @@ input[type='range']::-moz-range-thumb {
   color: var(--ds-text-faint);
 }
 .ds-required { color: #966f30; }
+/* The label above a field. Deliberately not `.ds-label` — that one is the
+   small-caps marker for a whole group; this names the thing you are about to
+   type into, so it sits in body ink at body size. */
+.ds-field-label {
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-md);
+  font-weight: var(--ds-fw);
+  letter-spacing: var(--ds-tracking);
+  color: var(--ds-text);
+}
+/* Inline status words beside a label ("設定済み" / "未設定"). */
+.ds-ok { color: #5c8c3e; }
+.ds-accent { color: #357fb2; }
+.ds-faint { color: var(--ds-text-faint); }
+.ds-link { color: #357fb2; text-decoration: none; }
+.ds-link:hover { text-decoration: underline; }
+
+/* Modal backdrop. The dim and the blur are part of the language, not a choice
+   each dialog makes — three dialogs had three different alphas. */
+.ds-scrim {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ds-scrim);
+  -webkit-backdrop-filter: var(--ds-scrim-blur);
+          backdrop-filter: var(--ds-scrim-blur);
+}
 .ds-mono { font-family: var(--ds-font-mono); font-size: var(--ds-fs-sm); letter-spacing: 0.3px; }
+/* Explanatory copy under a control. Every panel had its own idea of what this
+   was — 9.5px, 10.5px, sometimes with a line-height, sometimes without — so
+   the same kind of sentence sat at three sizes on one screen. */
+.ds-hint {
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-xs);
+  font-weight: var(--ds-fw);
+  line-height: 1.6;
+  color: var(--ds-text-mute);
+}
+/* The oversized glyph an empty state leads with. */
+.ds-empty__icon { font-size: 40px; opacity: 0.5; }
+/* The state a panel shows when it has nothing to list. */
+.ds-empty {
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-sm);
+  font-weight: var(--ds-fw);
+  line-height: 1.6;
+  color: var(--ds-text-faint);
+  text-align: center;
+  padding: var(--ds-space-5) var(--ds-space-3);
+}
 
 /* Stroke follows the text weight — 2px next to 400-weight labels reads as
    though the icons are bolder than what they sit beside. */

@@ -5,8 +5,7 @@ import { useUIStore, type ProjectType, type ViewMode } from '../store/ui-store';
 import { navigate } from '../utils/url';
 import * as idb from '../utils/idb';
 import type { SceneManifest } from '../core/types';
-import { tokens } from './design-tokens';
-import { PillButton, PillToggle, Tag, surfaceClass, IconTrash, IconEdit, IconLink, IconCheck, IconClose } from './components';
+import { PillButton, PillToggle, Tag, surfaceClass, IconTrash, IconEdit, IconLink, IconCheck, IconClose, IconPlus } from './components';
 import { ApiKeySettings } from './ApiKeySettings';
 
 /**
@@ -100,7 +99,7 @@ export function ProjectScreen() {
   };
 
   return (
-    <div style={S.root}>
+    <div className="ds-screen" style={S.root}>
       {/* Floating header pill — brand left, primary action right. The wrap
           fades the bg out so when the user scrolls, content disappears
           "under" the pill rather than under a hard bar. */}
@@ -119,7 +118,7 @@ export function ProjectScreen() {
             {isMirroring ? '⏹  ミラーリング停止' : '📡  ミラーリング'}
           </PillButton>
           <PillButton variant="accent" onClick={() => setShowCreate(true)}>
-            <span style={{ fontSize: 14, lineHeight: 1, marginRight: 2 }}>＋</span>
+            <IconPlus />
             <span>新規プロジェクト</span>
           </PillButton>
           <ApiKeySettings gearStyle={{ position: 'static', top: 'auto', right: 'auto', flexShrink: 0, marginLeft: 8 }} />
@@ -129,7 +128,7 @@ export function ProjectScreen() {
       <div style={S.body}>
         <div style={S.heading}>
           <div style={S.headingRow}>
-            <div className="ds-title" style={S.headingTitle}>
+            <div className="ds-heading" style={S.headingTitle}>
               プロジェクト一覧
               <span className={`${surfaceClass('accent')} ds-tag`} style={S.headingCount}>{projects.length}</span>
             </div>
@@ -149,7 +148,7 @@ export function ProjectScreen() {
 
         {projects.length === 0 ? (
           <div className={`${surfaceClass('plain')} ds-surface ds-fill-surface`} style={S.empty}>
-            <div style={S.emptyIcon}>📦</div>
+            <div className="ds-empty__icon" style={{ marginBottom: 4 }}>📦</div>
             <div className="ds-title">プロジェクトがまだありません</div>
             <div className="ds-sub" style={S.emptySub}>右上の「＋ 新規プロジェクト」から追加してください。</div>
           </div>
@@ -350,7 +349,7 @@ function ProjectDialog({ mode, initial, onCancel, onSubmit }: {
   const submitLabel = mode === 'create' ? '作成' : '保存';
 
   return (
-    <div style={S.dialogBackdrop} onClick={onCancel}>
+    <div className="ds-scrim" style={S.dialogBackdrop} onClick={onCancel}>
       <div className={`${surfaceClass('plain')} ds-card ds-dialog ds-fill-surface`} style={S.dialog} onClick={(e) => e.stopPropagation()}>
         <div style={S.dialogHeader}>
           <span className="ds-title">{title}</span>
@@ -414,7 +413,7 @@ function ProjectDialog({ mode, initial, onCancel, onSubmit }: {
               ]}
             />
             {(hasGsData || hasVrData) && (
-              <span style={S.modeLockHint}>
+              <span className="ds-hint" style={{ marginTop: 8 }}>
                 {hasGsData ? 'Splat (PLY/SOG) ' : ''}
                 {hasGsData && hasVrData ? '・' : ''}
                 {hasVrData ? 'パノラマ画像 ' : ''}
@@ -524,10 +523,7 @@ const S: Record<string, React.CSSProperties> = {
     // its OWN scroll context. With min-height the root grew with content
     // and overflow never triggered — once you had ~10+ projects the bottom
     // cards fell below the viewport with no scrollbar.
-    background: 'var(--ds-bg)',
-    color: 'var(--ds-text)',
-    fontFamily: 'var(--ds-font)',
-    fontSize: 'var(--ds-fs-md)',
+    // Ground and ink come from `.ds-screen` on the element itself.
     overflow: 'auto',
   },
 
@@ -537,9 +533,9 @@ const S: Record<string, React.CSSProperties> = {
     top: 0,
     zIndex: 10,
     padding: '20px 32px 12px',
-    // Wrap stays transparent so the glass header sees the canvas underneath
-    // it as the user scrolls — that's where the "liquid" comes from.
-    background: 'transparent',
+    // No fill declared: the wrap must stay transparent so the glass header
+    // sees the canvas underneath it as the user scrolls — that is where the
+    // "liquid" comes from.
   },
   // Header pill — same neutral light-gray as the project cards and
   // their action buttons, so every framing surface on this screen
@@ -572,7 +568,6 @@ const S: Record<string, React.CSSProperties> = {
     marginBottom: 8,
   },
   headingTitle: {
-    fontSize: 19,
     display: 'flex', alignItems: 'center', gap: 12,
   },
   sortRow: {
@@ -591,7 +586,6 @@ const S: Record<string, React.CSSProperties> = {
     textAlign: 'center' as const,
     display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 10,
   },
-  emptyIcon: { fontSize: 40, opacity: 0.5, marginBottom: 4 },
   emptySub: { lineHeight: 1.6 },
 
   grid: {
@@ -637,20 +631,8 @@ const S: Record<string, React.CSSProperties> = {
   // surface with a faint top-down gradient. Active inner segment is a
   // solid pale-blue pill with a luminous outer glow that bleeds beyond
   // the gutter (matching the "Create Project" button in the reference).
-  modeLockHint: {
-    fontSize: 10.5,
-    color: tokens.color.textMute,
-    marginTop: 8,
-    lineHeight: 1.55,
-  },
-
   // ── Dialog ───────────────────────────────────────────────
   dialogBackdrop: {
-    position: 'fixed' as const, inset: 0,
-    background: 'var(--ds-scrim)',
-    backdropFilter: 'var(--ds-scrim-blur)',
-    WebkitBackdropFilter: 'var(--ds-scrim-blur)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
     zIndex: 100,
     padding: 20,
   },
