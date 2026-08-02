@@ -489,6 +489,24 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
 .ds-stage .ds-title { color: #fff; text-shadow: none; }
 .ds-stage .ds-sub, .ds-stage .ds-hint { color: rgba(255, 255, 255, 0.55); }
 
+/* A readout printed over a picture — zoom factor, frame counter. Dark, small
+   and mono, because it must stay legible over any image without becoming a
+   control the user tries to press. */
+.ds-hud {
+  padding: 4px 10px;
+  border-radius: var(--ds-r-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-fs-sm);
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+/* A clipped plan image with pins drawn over it. Sized by the caller (the
+   aspect comes from the drawing), so only the frame lives here. */
+.ds-mapframe { position: relative; border-radius: var(--ds-r-sm); overflow: hidden; user-select: none; }
+
 /* A rendered image judged on its own — an equirect panorama preview, a video
    frame. It gets a neutral dark ground rather than a shell, because a shell
    would put the app's light source next to the picture's. */
@@ -626,6 +644,74 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   color: #357fb2;
 }
 .ds-section__body { padding: var(--ds-space-4); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Sidebar — flush against an edge of the window
+   ─────────────────────────────────────────────────────────────────────────
+   Deliberately NOT `.ds-overlay`: a panel with two edges off-screen must not
+   carry the shell ring, because a rim running down a seam that has no outside
+   reads as a crack rather than a lit edge. It takes the same material and the
+   same blur, and draws ONE real divider on the edge that meets the canvas.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-sidebar {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.90) 0%, rgba(246, 247, 249, 0.86) 100%);
+  -webkit-backdrop-filter: var(--ds-backdrop-scene);
+          backdrop-filter: var(--ds-backdrop-scene);
+  box-shadow: var(--ds-lift);
+  color: var(--ds-text);
+  font-family: var(--ds-font);
+}
+.ds-sidebar--left { border-right: 1px solid var(--ds-hairline); }
+.ds-sidebar--right { border-left: 1px solid var(--ds-hairline); }
+.ds-sidebar--top { border-bottom: 1px solid var(--ds-hairline); }
+/* `small` floats clear of the bottom of the window, so it needs its own edge. */
+.ds-sidebar--floating { border-bottom: 1px solid var(--ds-hairline); }
+.ds-sidebar__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 12px 14px 12px 16px;
+  border-bottom: 1px solid var(--ds-hairline);
+}
+/* Title stays put; only the blocks below it scroll. `min-height: 0` because a
+   flex child otherwise grows to its content and `overflow` never engages. */
+.ds-sidebar__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* A row in the sidebar's icon toolbar. No surface until it is pointed at —
+   a column of shells would read as a stack of buttons rather than a list. */
+.ds-navitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--ds-r-md);
+  background: none;
+  box-shadow: none;
+  color: var(--ds-text);
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-sm);
+  font-weight: var(--ds-fw);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: background-color var(--ds-dur) var(--ds-ease), color var(--ds-dur) var(--ds-ease);
+}
+.ds-navitem:hover { background-color: rgba(112, 180, 222, 0.10); }
+.ds-navitem[data-active='true'] { background-color: rgba(112, 180, 222, 0.16); color: #357fb2; }
+/* Stacked variant — glyph over label, used where the toolbar is a strip. */
+.ds-navitem--stacked { flex-direction: column; gap: 3px; width: 56px; padding: 8px 4px; text-align: center; }
 
 /* ══════════════════════════════════════════════════════════════════════════
    Dock — a full-width editor pinned to an edge of the window
@@ -1089,6 +1175,36 @@ input[type='range']::-moz-range-thumb {
    everywhere is a fifth step that turns up in a panel. */
 .ds-heading { font-size: 19px; font-weight: var(--ds-fw); letter-spacing: var(--ds-tracking); color: var(--ds-text); }
 .ds-title { font-size: var(--ds-fs-lg); font-weight: var(--ds-fw); letter-spacing: var(--ds-tracking); color: var(--ds-text); }
+/* Ordinary running copy inside a panel. */
+.ds-body { font-family: var(--ds-font); font-size: var(--ds-fs-md); font-weight: var(--ds-fw); color: var(--ds-text); line-height: 1.4; }
+/* The single large letter a summary block leads with. Serif on purpose — it is
+   a mark, not a word, and the UI face has no display weight to carry it. */
+.ds-badge__char { font-size: 28px; line-height: 1; font-family: Georgia, 'Times New Roman', serif; }
+/* A standalone colour well, larger than `.ds-chip__swatch`. The colour itself
+   is always data, so it stays at the call site. */
+.ds-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 50%; box-shadow: var(--ds-inner); }
+/* Full-width bar that behaves as a button but paints no surface — used to
+   re-open a block that has been closed down to a handle. */
+.ds-rowbtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  width: 100%;
+  padding: 8px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--ds-hairline);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ds-text);
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-sm);
+  font-weight: var(--ds-fw);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
 .ds-sub { font-size: var(--ds-fs-sm); font-weight: var(--ds-fw); color: var(--ds-text-mute); }
 .ds-label {
   font-size: var(--ds-fs-xs);
@@ -1110,6 +1226,7 @@ input[type='range']::-moz-range-thumb {
 }
 /* Inline status words beside a label ("設定済み" / "未設定"). */
 .ds-ok { color: #5c8c3e; }
+.ds-warn { color: #966f30; }
 .ds-accent { color: #357fb2; }
 .ds-faint { color: var(--ds-text-faint); }
 .ds-link { color: #357fb2; text-decoration: none; }

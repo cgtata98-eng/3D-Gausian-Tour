@@ -11,7 +11,7 @@ import { getOpenAIKey, getGeminiKey, getSelectedModelId, setSelectedModelId } fr
 import { getModelById, PROVIDERS, modelsForProvider, firstModelForProvider, type AiProvider } from '../utils/ai-models';
 import { getAuthHeader } from '../utils/auth';
 import { useMediaQuery } from '../utils/use-media-query';
-import { tokens, shellSurface } from './design-tokens';
+import { tokens } from './design-tokens';
 import { SegmentedControl, Tile, surfaceClass, IconClose, IconPlus, IconSettings, IconTrash } from './components';
 
 interface LeftPanelProps {
@@ -86,8 +86,8 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
     // 左/右上で「>」、右下では「<」のような感じだと意味が逆になるので、向きも合わせて反転。
     const chevronD = placement === 'left' ? 'M9 18l6-6-6-6' : 'M15 18l-6-6 6-6';
     return (
-      <button onClick={() => setSidebarCollapsed(false)} className="glass-edge" style={handleStyle} title={`${sceneName} を表示`}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+      <button onClick={() => setSidebarCollapsed(false)} className={COLLAPSED_HANDLE} style={handleStyle} title={`${sceneName} を表示`}>
+        <svg className="ds-icon" viewBox="0 0 24 24">
           <path d={chevronD} />
         </svg>
       </button>
@@ -97,15 +97,15 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
 
   return (
     <>
-      <div style={sStyles.sidebar}>
+      <div className={sidebarClass(sidebarSize, placement)} style={sStyles.sidebar}>
         {/* タイトル枠 — 右端に音声トグル + 拡大 + サイドバー全閉ボタン */}
-        <div style={sidebarTitleBlock}>
+        <div className="ds-sidebar__title">
           <span className="ds-title">{sceneName}</span>
           <div style={{ flex: 1 }} />
           {manifest?.audio && <AmbientAudioToggle />}
           {showPinsToggle && <PinsVisibilityToggle />}
           {showFullscreen && <FullscreenButton iconOnly />}
-          <button onClick={() => setSidebarCollapsed(true)} className="glass-edge" style={titleIconBtn} title="サイドバーを閉じる (ビューを最大化)">
+          <button onClick={() => setSidebarCollapsed(true)} className={TITLE_ICON_BTN} title="サイドバーを閉じる (ビューを最大化)">
             <span style={titleIconGlyph}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M15 6l-6 6 6 6" />
@@ -114,7 +114,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
           </button>
         </div>
 
-        <div style={sidebarScrollArea}>
+        <div className="ds-sidebar__scroll">
         {(() => {
           // Render blocks in the order defined by `viewerToolbar.order` (with the
           // default order filling in any missing ids). Each block is gated by its
@@ -173,7 +173,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
                 {hasMap ? (
                   <MapContent onViewpointClick={onViewpointClick} />
                 ) : (
-                  <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 11.5, textAlign: 'center' }}>
+                  <div className="ds-empty">
                     このプランの図面はまだ設定されていません
                   </div>
                 )}
@@ -241,7 +241,7 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
 
   if (!manifest || !floorPlan) {
     return (
-      <div style={{ padding: '20px 10px', color: tokens.color.textMute, fontSize: 11.5, textAlign: 'center' }}>
+      <div className="ds-empty">
         このプランの図面はまだ設定されていません
       </div>
     );
@@ -261,8 +261,8 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
   const viewpoints = activePlan?.viewpoints ?? [];
 
   return (
-    <div style={{ position: 'relative', width: dW, height: dH, borderRadius: 6, overflow: 'hidden', userSelect: 'none' }}>
-      {hasImage && <img src={imageUrl} alt="" style={{ position: 'absolute', top: 0, left: 0, width: dW, height: dH, objectFit: 'fill', display: 'block', borderRadius: 6 }} />}
+    <div className="ds-mapframe" style={{ width: dW, height: dH }}>
+      {hasImage && <img src={imageUrl} alt="" style={{ position: 'absolute', top: 0, left: 0, width: dW, height: dH, objectFit: 'fill', display: 'block' }} />}
       <svg width={dW} height={dH} viewBox={`0 0 ${dW} ${dH}`} style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible' }}>
         {!hasImage && <rect x={0} y={0} width={dW} height={dH} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" strokeWidth={1} rx={4} />}
         {/* Sort: inactive first, active last so the active dot sits on top. */}
@@ -340,7 +340,7 @@ function InfoSummary({
   if (info.roomType) items.push(info.roomType);
   if (info.area) items.push(info.area);
   if (items.length === 0) return null;
-  return <span style={infoSummary}>{items.join(' · ')}</span>;
+  return <span className="ds-sub" style={infoSummary}>{items.join(' · ')}</span>;
 }
 
 type VisKey = 'overall' | 'heading' | 'area' | 'floor' | 'location' | 'notes';
@@ -348,8 +348,8 @@ type VisKey = 'overall' | 'heading' | 'area' | 'floor' | 'location' | 'notes';
 /** Tiny sidebar handle for a closed big section (タイプ / カラー / MAP). Click to reopen. */
 function ClosedSectionHandle({ label, onOpen }: { label: string; onOpen: () => void }) {
   return (
-    <button onClick={onOpen} style={overviewClosedBar} title={`${label} を表示`}>
-      <span style={overviewClosedChevron}>▶</span>
+    <button onClick={onOpen} className="ds-rowbtn" title={`${label} を表示`}>
+      <span className="ds-section__chevron">▶</span>
       <span className="ds-label">{label}</span>
     </button>
   );
@@ -443,7 +443,7 @@ function ColorSelectBlock() {
             className={`${surfaceClass(activeColor === null ? 'accent' : 'plain')} ds-chip ${activeColor === null ? '' : 'ds-fill-surface'}`}
             title="標準カラー"
           >
-            <span style={{ ...colorSwatch, background: '#e5e7eb' }} />
+            <span className="ds-swatch" style={{ background:'#e5e7eb' }} />
             <span>標準</span>
           </button>
           {variants.map((v) => {
@@ -455,7 +455,7 @@ function ColorSelectBlock() {
                 className={`${surfaceClass(isA ? 'accent' : 'plain')} ds-chip ${isA ? '' : 'ds-fill-surface'}`}
                 title={v.label}
               >
-                <span style={{ ...colorSwatch, background: v.swatch || '#a89372' }} />
+                <span className="ds-swatch" style={{ background:v.swatch || '#a89372' }} />
                 <span>{v.label}</span>
               </button>
             );
@@ -468,13 +468,13 @@ function ColorSelectBlock() {
         <div style={colorInlineToggles}>
           {showFurnitureTool && (
             <div style={inlineToggleRow}>
-              <span style={inlineToggleLabel}>家具</span>
+              <span className="ds-label" style={inlineToggleLabel}>家具</span>
               <FurnitureContent />
             </div>
           )}
           {showLightingTool && (
             <div style={inlineToggleRow}>
-              <span style={inlineToggleLabel}>情景</span>
+              <span className="ds-label" style={inlineToggleLabel}>情景</span>
               <LightingContent />
             </div>
           )}
@@ -503,8 +503,8 @@ function OverviewBlock() {
   // Closed (overall = false) → tiny restore handle.
   if (!isOverall) {
     return (
-      <button onClick={() => setVis('overall', true)} style={overviewClosedBar} title="間取り概要を表示">
-        <span style={overviewClosedChevron}>▶</span>
+      <button onClick={() => setVis('overall', true)} className="ds-rowbtn" title="間取り概要を表示">
+        <span className="ds-section__chevron">▶</span>
         <span className="ds-label">間取り概要</span>
       </button>
     );
@@ -560,17 +560,17 @@ function InfoOverview({
   return (
     <div style={overviewWrap}>
       <div className={`${surfaceClass('accent')} ds-badge ds-badge--lg`} style={{ flexDirection: 'column' }}>
-        <span style={overviewBadgeChar}>{badgeChar}</span>
+        <span className="ds-badge__char">{badgeChar}</span>
         <span className="ds-label">type</span>
       </div>
       <div style={overviewBody}>
         {showHeading && (
-          <div style={overviewHeading}>{info.roomType}</div>
+          <div className="ds-title">{info.roomType}</div>
         )}
         {showArea && (
-          <div style={overviewArea}>
+          <div className="ds-body" style={overviewArea}>
             <span className="ds-sub">□ 専有面積</span>
-            <span style={overviewAreaSep}>｜</span>
+            <span className="ds-sub">｜</span>
             <span className="ds-title">{info.area}</span>
             {tsuboLabel && <span className="ds-sub">{tsuboLabel}</span>}
           </div>
@@ -793,6 +793,7 @@ export function AiScreenOverlay() {
   return (
     <div
       ref={wrapRef}
+      className="ds-stage"
       style={aiOverlayStyle}
       onWheel={onWheel}
       onMouseDown={onMouseDown}
@@ -824,15 +825,16 @@ export function AiScreenOverlay() {
         </button>
         <button type="button" onClick={() => setActiveAiId(null)} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-fill-surface ds-blur`} title="閉じる"><IconClose /></button>
       </div>
-      {zoom.scale > 1 && <div style={aiOverlayZoomHud}>{zoom.scale.toFixed(1)}×</div>}
+      {zoom.scale > 1 && <div className="ds-hud" style={aiOverlayZoomHud}>{zoom.scale.toFixed(1)}×</div>}
     </div>
   );
 }
 
+/** The AI result viewer is a stage: the generated image is judged on its own,
+ *  so nothing of the app sits behind it. */
 const aiOverlayStyle: React.CSSProperties = {
   position: 'absolute',
   inset: 0,
-  background: '#000',
   zIndex: 50,
   pointerEvents: 'auto',
   overflow: 'hidden',
@@ -848,15 +850,6 @@ const aiOverlayZoomHud: React.CSSProperties = {
   position: 'absolute',
   bottom: 12,
   right: 12,
-  padding: '4px 10px',
-  background: 'rgba(0,0,0,0.55)',
-  color: '#fff',
-  borderRadius: 12,
-  fontSize: 10.5,
-  fontWeight: tokens.font.weight.strong,
-  fontFamily: tokens.font.mono,
-  letterSpacing: 0.5,
-  pointerEvents: 'none',
 };
 
 /**
@@ -869,52 +862,16 @@ export function AiGeneratingOverlay() {
   const aiBusy = useUIStore((s) => s.aiBusy);
   if (!aiBusy) return null;
   return (
-    <div style={aiBusyOverlay}>
-      <div style={aiBusySpinner} />
-      <div style={aiBusyText}>AI 画像を生成中…</div>
-      <div style={aiBusySubText}>10〜30 秒ほどかかります</div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div className="ds-veil" style={aiBusyOverlay}>
+      <div className="ds-spinner" />
+      <div className="ds-title" style={{ marginTop: 14 }}>AI 画像を生成中…</div>
+      <div className="ds-sub">10〜30 秒ほどかかります</div>
     </div>
   );
 }
 
-const aiBusyOverlay: React.CSSProperties = {
-  position: 'absolute',
-  inset: 0,
-  background: tokens.glass.surfaceStrong,
-  zIndex: 80,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 14,
-  pointerEvents: 'auto',
-  backdropFilter: 'blur(8px)',
-  WebkitBackdropFilter: 'blur(8px)',
-};
-const aiBusySpinner: React.CSSProperties = {
-  width: 44,
-  height: 44,
-  border: `3px solid ${tokens.color.border}`,
-  borderTopColor: tokens.color.accent,
-  borderRadius: '50%',
-  animation: 'spin 0.9s linear infinite',
-};
-const aiBusyText: React.CSSProperties = {
-  fontSize: 12.5,
-  fontWeight: tokens.font.weight.strong,
-  color: tokens.color.text,
-  letterSpacing: 0.6,
-  fontFamily: tokens.font.family,
-};
-const aiBusySubText: React.CSSProperties = {
-  fontSize: 10.5,
-  color: tokens.color.textMute,
-  letterSpacing: 0.4,
-  fontFamily: tokens.font.family,
-  marginTop: -6,
-  fontWeight: tokens.font.weight.medium,
-};
+/** Layout only — the veil, spinner and type are design-system classes. */
+const aiBusyOverlay: React.CSSProperties = { zIndex: 80, gap: 4, pointerEvents: 'auto' };
 
 
 
@@ -1179,7 +1136,7 @@ function AiImageGenBlock() {
           style={{ height: 40 }}
           title="参照画像を追加 (最大 3 枚)"
         >
-          <span style={{ fontSize: 14, lineHeight: 1 }}>＋</span>
+          <IconPlus />
           <span>参照画像</span>
         </button>
         <input
@@ -1192,7 +1149,7 @@ function AiImageGenBlock() {
         />
       </div>
       <div style={aiOptRow}>
-        <label style={aiOptLabel}><span style={aiOptCap}>プロバイダ</span>
+        <label style={aiOptLabel}><span className="ds-label">プロバイダ</span>
           <select value={curProvider} onChange={(e) => onPickProvider(e.target.value as AiProvider)} disabled={aiBusy} style={aiOptSelect}>
             {PROVIDERS.map((pv) => (
               <option key={pv.id} value={pv.id} disabled={!hasKey[pv.id]}>
@@ -1201,7 +1158,7 @@ function AiImageGenBlock() {
             ))}
           </select>
         </label>
-        <label style={{ ...aiOptLabel, flex: 1.6 }}><span style={aiOptCap}>モデル</span>
+        <label style={{ ...aiOptLabel, flex: 1.6 }}><span className="ds-label">モデル</span>
           <select value={selModelId} onChange={(e) => setSelectedModelId(e.target.value)} disabled={aiBusy} style={aiOptSelect}>
             {modelsForProvider(curProvider).map((m) => (
               <option key={m.id} value={m.id}>{m.label}</option>
@@ -1210,14 +1167,14 @@ function AiImageGenBlock() {
         </label>
       </div>
       {!hasKey[curProvider] && (
-        <div style={aiKeyHint}>
-          <span>{curProvider === 'gemini' ? 'Gemini' : 'ChatGPT'} の API キーが未設定です。</span>
+        <div className={AI_KEY_HINT} style={aiKeyHint}>
+          <span className="ds-sub">{curProvider === 'gemini' ? 'Gemini' : 'ChatGPT'} の API キーが未設定です。</span>
           <button type="button" onClick={() => window.dispatchEvent(new Event('open-ai-settings'))} className={`${surfaceClass('plain')} ds-pill ds-pill--xs ds-fill-surface`}><IconSettings />API を設定</button>
         </div>
       )}
       <div style={aiOptRow}>
         <label style={aiOptLabel} title={curProvider === 'openai' ? 'OpenAI (gpt-image) は解像度指定に非対応です。サイズは比率から自動選択されます。' : undefined}>
-          <span style={aiOptCap}>解像度</span>
+          <span className="ds-label">解像度</span>
           {/* OpenAI (gpt-image) は 1024/1536 の固定 3 サイズのみで 1K/2K/4K の概念が無い —
               誤解を生まないようセレクタごと無効化 (A4)。Gemini 3.x のみ有効。 */}
           <select value={imageSize} onChange={(e) => setImageSize(e.target.value as '1K' | '2K' | '4K')} disabled={aiBusy || curProvider === 'openai'} style={aiOptSelect}>
@@ -1226,13 +1183,13 @@ function AiImageGenBlock() {
             <option value="4K">4K</option>
           </select>
         </label>
-        <label style={aiOptLabel}><span style={aiOptCap}>枚数</span>
+        <label style={aiOptLabel}><span className="ds-label">枚数</span>
           <select value={genCount} onChange={(e) => setGenCount(Number(e.target.value) as 1 | 2)} disabled={aiBusy} style={aiOptSelect}>
             <option value={1}>1枚</option>
             <option value={2}>2枚</option>
           </select>
         </label>
-        <label style={aiOptLabel}><span style={aiOptCap}>比率</span>
+        <label style={aiOptLabel}><span className="ds-label">比率</span>
           <select value={aspect} onChange={(e) => setAspect(e.target.value as 'screen' | 'pano')} disabled={aiBusy} style={aiOptSelect}>
             <option value="screen">画面</option>
             <option value="pano">360°(2:1)</option>
@@ -1243,7 +1200,8 @@ function AiImageGenBlock() {
         type="button"
         onClick={onGenerate}
         disabled={aiBusy || prompt.trim().length === 0}
-        style={aiGenerateBtn(aiBusy || prompt.trim().length === 0)}
+        className={AI_GENERATE_BTN(aiBusy || prompt.trim().length === 0)}
+        style={aiGenerateBtn}
       >
         {aiBusy ? '生成中…' : '生成'}
       </button>
@@ -1287,9 +1245,7 @@ const aiRefThumb: React.CSSProperties = {
   position: 'relative',
   width: 40,
   height: 40,
-  borderRadius: 4,
   overflow: 'hidden',
-  border: '1px solid rgba(0,0,0,0.15)',
 };
 const aiRefImg: React.CSSProperties = {
   width: '100%',
@@ -1298,13 +1254,11 @@ const aiRefImg: React.CSSProperties = {
   display: 'block',
 };
 
+/** Warning strip above the generate button — a warn-variant surface. */
+const AI_KEY_HINT = `${surfaceClass('warn')} ds-panel`;
 const aiKeyHint: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
   marginTop: 6, padding: '6px 10px',
-  fontSize: 10.5, color: tokens.color.warn,
-  background: tokens.gradient.warn,
-  border: `1px solid ${tokens.color.warnBorder}`,
-  borderRadius: tokens.radius.sm,
 };
 const aiOptRow: React.CSSProperties = {
   display: 'flex', gap: 6, marginTop: 8,
@@ -1312,65 +1266,16 @@ const aiOptRow: React.CSSProperties = {
 const aiOptLabel: React.CSSProperties = {
   flex: 1, display: 'flex', flexDirection: 'column', gap: 3,
 };
-const aiOptCap: React.CSSProperties = {
-  fontSize: 9.5, fontWeight: tokens.font.weight.strong, color: tokens.color.textMute, letterSpacing: 0.3, paddingLeft: 2,
-};
-/* Native selects keep the OS chrome unless `appearance` is taken over, which
- * is why these five stayed square-cornered and hard-outlined while the panel
- * around them changed. Chevron is drawn as a background image since the
- * built-in one disappears with the appearance. */
-const aiOptSelect: React.CSSProperties = {
-  width: '100%', padding: '7px 26px 7px 12px',
-  appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
-  backgroundImage:
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236e7076' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\"), " + tokens.gradient.track,
-  backgroundRepeat: 'no-repeat, no-repeat',
-  backgroundPosition: 'right 10px center, 0 0',
-  borderWidth: 0,
-  borderStyle: 'solid',
-  borderColor: 'transparent',
-  borderRadius: tokens.radius.pill,
-  color: tokens.color.text,
-  fontSize: tokens.font.size.sm,
-  fontWeight: tokens.font.weight.medium,
-  outline: 'none', fontFamily: tokens.font.family,
-  boxSizing: 'border-box', cursor: 'pointer',
-  boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
-};
-const aiPromptStyle: React.CSSProperties = {
-  width: '100%',
-  resize: 'vertical',
-  fontSize: tokens.font.size.sm,
-  padding: '10px 14px',
-  borderWidth: 0,
-  borderStyle: 'solid',
-  borderColor: 'transparent',
-  borderRadius: tokens.radius.md,
-  fontFamily: tokens.font.family,
-  color: tokens.color.text,
-  background: tokens.gradient.track,
-  boxSizing: 'border-box',
-  minHeight: 56,
-  outline: 'none',
-  boxShadow: 'inset 0 2px 3px rgba(118,130,154,0.20), inset 0 -1.5px 1px rgba(255,255,255,0.90)',
-};
+/* The five native selects and the prompt textarea are styled at ELEMENT level
+ * in design-system.css — an unclassed `<select>` keeps OS chrome, so taking it
+ * over globally is what stops new markup falling out of the language. Nothing
+ * is left here but size. */
+const aiOptSelect: React.CSSProperties = { padding: '7px 26px 7px 12px' };
+const aiPromptStyle: React.CSSProperties = { minHeight: 56 };
 
-const aiGenerateBtn = (disabled: boolean): React.CSSProperties => ({
-  marginTop: 6,
-  width: '100%',
-  padding: '10px 14px',
-  fontSize: 11.5,
-  fontWeight: tokens.font.weight.strong,
-  background: disabled ? tokens.gradient.neutral : tokens.gradient.accent,
-  color: tokens.color.text,
-  border: `1px solid ${disabled ? tokens.color.border : tokens.color.accentBorder}`,
-  borderRadius: tokens.radius.pill,
-  boxShadow: disabled ? tokens.shadow.glass : tokens.shadow.glassAccent,
-  cursor: disabled ? 'not-allowed' : 'pointer',
-  fontFamily: tokens.font.family,
-  letterSpacing: 0.4,
-  outline: 'none',
-});
+const AI_GENERATE_BTN = (disabled: boolean) =>
+  `${surfaceClass(disabled ? 'neutral' : 'accent')} ds-pill${disabled ? ' ds-fill-neutral' : ''}`;
+const aiGenerateBtn: React.CSSProperties = { marginTop: 6, width: '100%' };
 
 const aiCardActions: React.CSSProperties = {
   position: 'absolute',
@@ -1471,7 +1376,7 @@ function MobileToolsBlock({ onClose }: { onClose: () => void }) {
         <button onClick={onClose} className={`${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--xs ds-fill-surface`} title="閉じる"><IconClose /></button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-        <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>遅</span>
+        <span className="ds-hint">遅</span>
         <input
           type="range"
           min={MOBILE_SPEED_MIN}
@@ -1479,13 +1384,13 @@ function MobileToolsBlock({ onClose }: { onClose: () => void }) {
           step={0.5}
           value={speed}
           onChange={(e) => apply(parseFloat(e.target.value))}
-          style={{ flex: 1, accentColor: tokens.color.accent }}
+          style={{ flex: 1 }}
         />
-        <span style={{ fontSize: 9.5, color: tokens.color.textMute }}>速</span>
+        <span className="ds-hint">速</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, fontSize: 10.5, color: tokens.color.textMute, fontFamily: 'monospace' }}>
+      <div className="ds-mono ds-sub" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
         <span>{MOBILE_SPEED_MIN.toFixed(1)} m/s</span>
-        <span style={{ fontWeight: tokens.font.weight.strong, color: tokens.color.accent }}>{speed.toFixed(1)} m/s</span>
+        <span className="ds-accent">{speed.toFixed(1)} m/s</span>
         <span>{MOBILE_SPEED_MAX.toFixed(1)} m/s</span>
       </div>
     </div>
@@ -1507,14 +1412,14 @@ function DemoModeBlock() {
   const setSectionHidden = useUIStore((s) => s.setSectionHidden);
   const connected = useTrackingStore((s) => s.connected);
   const status: string = !enabled ? 'OFF' : connected ? '取得中 (face)' : 'カメラ準備中…';
-  const statusColor = !enabled ? 'rgba(0,0,0,0.4)' : connected ? '#15803d' : '#b45309';
+  const statusTone = !enabled ? 'ds-faint' : connected ? 'ds-ok' : 'ds-warn';
   return (
     <div className={`${surfaceClass('plain')} ds-block ds-fill-surface`} style={sidebarBlock}>
       <div style={overviewHeaderRow}>
         <span className="ds-label">ヘッドトラッキング</span>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 9.5, color: statusColor, fontWeight: tokens.font.weight.strong }}>{status}</span>
-        <button onClick={() => setSectionHidden('tracking', true)} style={{ ...overviewCloseBtn, marginLeft: 6 }} title="ヘッドトラッキングを閉じる">×</button>
+        <span className={`ds-sub ${statusTone}`}>{status}</span>
+        <button onClick={() => setSectionHidden('tracking', true)} className={TITLE_ICON_BTN} style={{ marginLeft: 6 }} title="ヘッドトラッキングを閉じる"><IconClose /></button>
       </div>
       <SegmentedToggle
         value={enabled ? 'on' : 'off'}
@@ -1529,26 +1434,15 @@ function DemoModeBlock() {
           type="button"
           onClick={() => calibrateHeadTracker()}
           disabled={!connected}
-          style={{
-            marginTop: 6,
-            width: '100%',
-            padding: '6px 10px',
-            fontSize: 10.5,
-            fontWeight: tokens.font.weight.strong,
-            background: connected ? '#ffffff' : 'rgba(0,0,0,0.04)',
-            border: `1px solid ${connected ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.08)'}`,
-            color: connected ? '#1f2937' : 'rgba(0,0,0,0.35)',
-            borderRadius: 6,
-            cursor: connected ? 'pointer' : 'not-allowed',
-            fontFamily: 'inherit',
-          }}
+          className={`${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`}
+          style={{ marginTop: 6, width: '100%' }}
           title="今の頭の向きを基準にゼロ点を取り直す"
         >
           ↻ 中央リセット
         </button>
       )}
       {enabled && (
-        <div style={{ fontSize: 9.5, color: 'rgba(0,0,0,0.55)', marginTop: 6, lineHeight: 1.5 }}>
+        <div className="ds-hint" style={{ marginTop: 6 }}>
           ブラウザ内蔵 (MediaPipe)。初回 ON でカメラ許可。ずれたら「中央リセット」で今の向きを正面として取り直し。
         </div>
       )}
@@ -1597,8 +1491,7 @@ function AmbientAudioToggle() {
   return (
     <button
       onClick={() => setMuted(!muted)}
-      className="glass-edge"
-      style={titleIconBtn}
+      className={TITLE_ICON_BTN}
       title={muted ? '環境音を再生' : '環境音をミュート'}
     >
       <span style={titleIconGlyph}>
@@ -1627,8 +1520,8 @@ function PinsVisibilityToggle() {
   return (
     <button
       onClick={() => setShowPins(!showPins)}
-      className="glass-edge"
-      style={{ ...titleIconBtn, ...(showPins ? null : { opacity: 0.45 }) }}
+      className={TITLE_ICON_BTN}
+      style={showPins ? undefined : { opacity: 0.45 }}
       title={showPins ? 'タグを非表示にする' : 'タグを表示する'}
     >
       <span style={titleIconGlyph}>
@@ -1663,7 +1556,7 @@ function FullscreenButton({ compact = false, iconOnly = false }: { compact?: boo
   );
   if (iconOnly) {
     return (
-      <button onClick={toggle} title={isFs ? 'フルスクリーン解除' : '拡大 (フルスクリーン)'} className="glass-edge" style={titleIconBtn}>
+      <button onClick={toggle} title={isFs ? 'フルスクリーン解除' : '拡大 (フルスクリーン)'} className={TITLE_ICON_BTN}>
         <span style={titleIconGlyph}>{Icon}</span>
       </button>
     );
@@ -1672,7 +1565,8 @@ function FullscreenButton({ compact = false, iconOnly = false }: { compact?: boo
     <button
       onClick={toggle}
       title={isFs ? 'フルスクリーン解除' : '拡大 (フルスクリーン)'}
-      style={compact ? miniIconBtn : iconBtn}
+      className={compact ? 'ds-navitem' : 'ds-navitem ds-navitem--stacked'}
+      style={compact ? miniIconBtn : undefined}
     >
       <span style={iconGlyph}>{Icon}</span>
       <span className={compact ? "ds-title" : "ds-label"}>拡大</span>
@@ -1694,6 +1588,13 @@ import type { SidebarSize } from '../core/types';
  */
 type SidebarPlacement = 'left' | 'right' | 'portrait';
 
+/** Edge classes for the sidebar — the divider goes on the one edge that meets
+ *  the canvas; `small` floats clear of the bottom and needs its own. */
+function sidebarClass(size: SidebarSize, placement: SidebarPlacement): string {
+  const edge = placement === 'portrait' ? 'top' : placement === 'right' ? 'right' : 'left';
+  return `ds-sidebar ds-sidebar--${edge}${size === 'small' ? ' ds-sidebar--floating' : ''}`;
+}
+
 function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'left') {
   const isSmall = size === 'small';
   // placement ごとのアンカー / 幅 / 縁取り。
@@ -1712,74 +1613,29 @@ function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'lef
   // 縦向きはトップバーなので `auto` で left/right に吸い付かせる。
   // 横向き / デスクトップは 320 固定。
   const width: React.CSSProperties['width'] = isPortrait ? 'auto' : 320;
-  // 縁取り: 区切り線は「キャンバスと接する辺」だけに引く。
-  //   left → 右辺、right → 左辺、portrait → 下辺 (トップバー)。
-  const borderEdge: React.CSSProperties = isPortrait
-    ? { borderBottom: `1px solid ${tokens.color.hairline}` }
-    : isRight
-      ? { borderLeft: `1px solid ${tokens.color.hairline}` }
-      : { borderRight: `1px solid ${tokens.color.hairline}` };
+  // 縁取り (キャンバスと接する 1 辺だけの区切り線) は `sidebarClass` 側。
   // スマホはセクションが多いと画面いっぱいになるので、上限を画面の約半分にして
   // 下部 (キャンバス / 操作領域) を必ず見えるようにする。残りはスクロール。
   // PC は従来通り 100dvh まで許容。
   const isMobile = isPortrait || isRight;
   return {
+    /** Layout only — material and dividers come from `sidebarClass`. */
     sidebar: {
-      position: 'absolute',
       // 横向きスマホ等で viewport 高が低い時に下部が見切れないよう、必ず viewport 内に収め
-      // 中身は `sidebarScrollArea` 側でスクロールさせる。`100dvh` は iOS Safari のアドレスバー
-      // 出入りに追従する viewport 単位 (fallback で 100vh)。
+      // 中身は `.ds-sidebar__scroll` 側でスクロールさせる。`100dvh` は iOS Safari の
+      // アドレスバー出入りに追従する viewport 単位 (fallback で 100vh)。
       maxHeight: isMobile ? '50dvh' : '100dvh',
       ...anchors,
       width,
-      background: tokens.glass.surfaceStrong,
-      backdropFilter: tokens.backdrop,
-      WebkitBackdropFilter: tokens.backdrop,
-      ...borderEdge,
-      // `small` は浮いた下端の見切りに `borderBottom` を入れる。
-      ...(isSmall ? { borderBottom: `1px solid ${tokens.color.hairline}` } : {}),
-      boxShadow: tokens.shadow.glass,
-      display: 'flex',
-      flexDirection: 'column',
       zIndex: 6,
-      fontFamily: tokens.font.family,
     } as React.CSSProperties,
   };
 }
 
-/** タイトルは固定したまま、下のブロック群だけスクロールさせるラッパー。
- *  `minHeight: 0` がないと flex 子要素は内容分まで膨らんで `overflow` が効かない。 */
-const sidebarScrollArea: React.CSSProperties = {
-  flex: '1 1 auto',
-  minHeight: 0,
-  overflowY: 'auto',
-  overscrollBehavior: 'contain',
-  WebkitOverflowScrolling: 'touch',
-};
-
-const sidebarTitleBlock: React.CSSProperties = {
-  padding: '12px 14px 12px 16px',
-  borderBottom: `1px solid ${tokens.color.hairline}`,
-  flexShrink: 0,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-};
-
-
-const titleIconBtn: React.CSSProperties = {
-  width: 28,
-  height: 28,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  ...shellSurface('plain', { fill: 'surface' }),
-  color: tokens.color.textMute,
-  cursor: 'pointer',
-  padding: 0,
-  flexShrink: 0,
-  outline: 'none',
-};
+/** Icon button beside the sidebar title. */
+const TITLE_ICON_BTN = `${surfaceClass('plain')} ds-pill ds-pill--icon ds-pill--sm ds-fill-surface`;
+/** The button the collapsed sidebar leaves behind — floats over the canvas. */
+const COLLAPSED_HANDLE = `${surfaceClass('plain')} ds-overlay ds-overlay--pill ds-pill ds-pill--icon`;
 
 const titleIconGlyph: React.CSSProperties = {
   width: 16,
@@ -1787,21 +1643,12 @@ const titleIconGlyph: React.CSSProperties = {
   display: 'inline-flex',
 };
 
+/** Layout only. */
 const collapsedHandle: React.CSSProperties = {
   position: 'absolute',
   top: 16, left: 16,
   width: 36, height: 36,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: tokens.glass.surfaceStrong,
-  backdropFilter: tokens.backdrop,
-  WebkitBackdropFilter: tokens.backdrop,
-  ...shellSurface('plain'),
-  cursor: 'pointer',
-  padding: 0,
   zIndex: 6,
-  outline: 'none',
 };
 
 /** placement に応じて閉じハンドルの上下左右を切り替える。
@@ -1853,56 +1700,11 @@ const inlineToggleRow: React.CSSProperties = {
   gap: 10,
 };
 
-const inlineToggleLabel: React.CSSProperties = {
-  fontSize: 10.5,
-  fontWeight: tokens.font.weight.strong,
-  letterSpacing: 0.6,
-  color: tokens.color.textMute,
-  width: 32,
-  flexShrink: 0,
-};
+const inlineToggleLabel: React.CSSProperties = { width: 32, flexShrink: 0 };
 
-const miniIconBtn: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 10,
-  padding: '10px 12px',
-  background: 'transparent',
-  color: tokens.color.text,
-  border: '1px solid transparent',
-  borderRadius: tokens.radius.md,
-  cursor: 'pointer',
-  fontFamily: tokens.font.family,
-  transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}`,
-  textAlign: 'left',
-  width: '100%',
-  // Each button takes an equal share of the toolbar's flexed height — together
-  // they fully cover the toolbar with no leftover blank space.
-  flex: 1,
-  minHeight: 0,
-  outline: 'none',
-};
-
-
-
-// Legacy iconBtn styles kept for any consumer that still uses the original full-size buttons.
-const iconBtn: React.CSSProperties = {
-  width: 56,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 3,
-  padding: '8px 4px',
-  background: 'transparent',
-  color: tokens.color.text,
-  border: '1px solid transparent',
-  borderRadius: tokens.radius.md,
-  cursor: 'pointer',
-  fontFamily: tokens.font.family,
-  transition: `background ${tokens.transition}, color ${tokens.transition}, border-color ${tokens.transition}`,
-  outline: 'none',
-};
+/** Each row takes an equal share of the toolbar's flexed height, so together
+ *  they cover it with no leftover blank space. */
+const miniIconBtn: React.CSSProperties = { flex: 1, minHeight: 0 };
 
 const iconGlyph: React.CSSProperties = {
   width: 22,
@@ -1926,11 +1728,7 @@ const vpGrid: React.CSSProperties = {
 const infoSummary: React.CSSProperties = {
   marginLeft: 10,
   paddingLeft: 10,
-  borderLeft: `1px solid ${tokens.color.hairline}`,
-  fontSize: 10.5,
-  fontWeight: tokens.font.weight.medium,
-  color: tokens.color.textMute,
-  letterSpacing: 0.3,
+  borderLeft: `1px solid var(--ds-hairline)`,
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -1946,14 +1744,6 @@ const overviewWrap: React.CSSProperties = {
 };
 
 
-const overviewBadgeChar: React.CSSProperties = {
-  fontSize: 28,
-  fontWeight: tokens.font.weight.strong,
-  lineHeight: 1,
-  fontFamily: 'Georgia, "Times New Roman", serif',
-};
-
-
 const overviewBody: React.CSSProperties = {
   flex: 1,
   minWidth: 0,
@@ -1962,29 +1752,12 @@ const overviewBody: React.CSSProperties = {
   gap: 4,
 };
 
-const overviewHeading: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: tokens.font.weight.strong,
-  letterSpacing: 0.3,
-  color: tokens.color.text,
-  lineHeight: 1.3,
-};
-
 const overviewArea: React.CSSProperties = {
   display: 'flex',
   alignItems: 'baseline',
   flexWrap: 'wrap',
   gap: 4,
-  fontSize: 11.5,
-  color: tokens.color.text,
-  lineHeight: 1.4,
 };
-
-
-const overviewAreaSep: React.CSSProperties = {
-  color: tokens.color.textMute,
-};
-
 
 
 const overviewBullets: React.CSSProperties = {
@@ -2004,49 +1777,9 @@ const overviewHeaderRow: React.CSSProperties = {
   gap: 8,
 };
 
-const overviewCloseBtn: React.CSSProperties = {
-  width: 24,
-  height: 24,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: tokens.gradient.surface,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.pill,
-  color: tokens.color.textMute,
-  cursor: 'pointer',
-  fontSize: 11.5,
-  lineHeight: 1,
-  padding: 0,
-  fontFamily: tokens.font.family,
-  boxShadow: tokens.shadow.glass,
-  outline: 'none',
-};
-
-
-// Closed (master-off) state — a slim handle that re-opens the block.
-const overviewClosedBar: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '8px 16px',
-  borderBottom: `1px solid ${tokens.color.hairline}`,
-  background: 'transparent',
-  border: 'none',
-  borderRadius: 0,
-  width: '100%',
-  textAlign: 'left',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  color: tokens.color.text,
-  flexShrink: 0,
-};
-
-const overviewClosedChevron: React.CSSProperties = {
-  fontSize: 9.5,
-  color: tokens.color.textMute,
-  width: 10,
-};
+/* The block's close button, the closed handle bar and its chevron were three
+ * style objects here; they are `TITLE_ICON_BTN`, `.ds-rowbtn` and
+ * `.ds-section__chevron` now. */
 
 const chipRow: React.CSSProperties = {
   display: 'flex',
@@ -2058,13 +1791,6 @@ const chipRow: React.CSSProperties = {
  * two near-identical pairs whose only real difference was a colour swatch.
  * They are now one `.ds-chip`, with the swatch as a modifier. */
 
-const colorSwatch: React.CSSProperties = {
-  display: 'inline-block',
-  width: 16,
-  height: 16,
-  borderRadius: '50%',
-  border: '1px solid rgba(0,0,0,0.15)',
-};
 
 
 
