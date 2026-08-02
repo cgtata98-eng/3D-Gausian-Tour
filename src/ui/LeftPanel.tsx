@@ -1152,8 +1152,12 @@ function AiImageGenBlock() {
         <label style={aiOptLabel}><span className="ds-label">プロバイダ</span>
           <select value={curProvider} onChange={(e) => onPickProvider(e.target.value as AiProvider)} disabled={aiBusy} style={aiOptSelect}>
             {PROVIDERS.map((pv) => (
+              /* Name only. The "（API未設定）" suffix pushed the label past the
+                 column and rendered as "Gemini（AP", and it said nothing the
+                 UI was not already saying twice: the option is disabled, and
+                 the strip below names the provider and offers the fix. */
               <option key={pv.id} value={pv.id} disabled={!hasKey[pv.id]}>
-                {pv.label}{hasKey[pv.id] ? '' : '（API未設定）'}
+                {pv.label}
               </option>
             ))}
           </select>

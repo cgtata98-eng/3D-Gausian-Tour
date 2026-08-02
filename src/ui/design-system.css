@@ -149,6 +149,21 @@
     inset 0 0 0 1px rgba(176, 190, 210, 0.18),
     inset 0 1.5px 0 0 rgba(142, 151, 170, 0.12),
     inset 0 -1.5px 0 0 rgba(255, 255, 255, 0.96);
+
+  /* The shell ring, rebuilt out of insets for elements that cannot have a
+     pseudo-element. Same three colours and the same order as `.ds-surface`'s
+     ring — sides, top, bottom — so a field and a pill standing next to each
+     other are edged in literally the same material.
+
+     The side alpha is NOT `--ds-edge-side` (0.40) even though that is the
+     ring's value: the ring only reaches it at the vertical midpoint and fades
+     toward the top and bottom stops, while a single inset applies it all the
+     way round. Matched by measurement against the pill it sits beside — the
+     darkest pixel down each control's left edge. */
+  --ds-rim-shell:
+    inset 0 0 0 1px rgba(190, 204, 224, 0.26),
+    inset 0 1.2px 0 0 var(--ds-edge-top),
+    inset 0 -1.2px 0 0 var(--ds-edge-bot);
   /* THE white. One value, used by every white surface in the app.
      ─────────────────────────────────────────────────────────────────────
      There were five fills in circulation: this one, a "neutral" at #fcfcfc,
@@ -1252,7 +1267,12 @@ textarea,
   border-radius: var(--ds-r-pill);
   background-color: transparent;
   background-image: var(--ds-field-fill);
-  box-shadow: var(--ds-rim-field), var(--ds-inner-sunken);
+  /* RAISED, like a pill — not the sunken recipe a field would normally take.
+     With every surface on the same white, the only thing left telling a
+     select apart from the button above it was that one floated and one lay
+     flat, and side by side the flat one read as a duller white. Same ring,
+     same inner pair, same drop stack: one material. */
+  box-shadow: var(--ds-rim-shell), var(--ds-inner), var(--ds-lift);
   color: var(--ds-text);
   font-family: var(--ds-font);
   font-size: var(--ds-fs-lg);
@@ -1262,19 +1282,19 @@ textarea,
 }
 input::placeholder, textarea::placeholder { color: var(--ds-text-faint); }
 
-/* Hover brightens the material rather than moving it: a field does not lift,
-   because it is a hole. Everything else in the language answers the pointer,
-   and a field that did not was the last dead surface left. */
+/* Hover brightens the material but does NOT move it. A pill lifts 1px; an
+   input that shifted under the pointer while you were aiming at a character
+   would be worse than inconsistent. */
 input:not([type='range']):not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']):hover:not(:disabled),
 select:hover:not(:disabled),
 textarea:hover:not(:disabled) {
-  filter: brightness(1.015);
+  filter: brightness(1.02);
 }
 
 input:not([type='range']):not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']):focus,
 select:focus,
 textarea:focus {
-  box-shadow: var(--ds-rim-field), var(--ds-inner-sunken), 0 0 0 3px rgba(112, 180, 222, 0.30);
+  box-shadow: var(--ds-rim-shell), var(--ds-inner), var(--ds-lift), 0 0 0 3px rgba(112, 180, 222, 0.30);
 }
 
 textarea, .ds-textarea { border-radius: var(--ds-r-md); resize: vertical; line-height: 1.6; }

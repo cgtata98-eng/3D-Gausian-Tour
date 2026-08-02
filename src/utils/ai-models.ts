@@ -25,13 +25,19 @@ export interface AiModel {
   recommended: boolean;
 }
 
+/* Labels are the model NAME only. The parenthetical notes ("高速・推奨",
+ * "要・組織認証", …) were being truncated by the select anyway — the column is
+ * ~140px, so what the user actually read was "Nano Banana 2（高速・:" — a name
+ * cut mid-qualifier, which is worse than no qualifier at all. The org-
+ * verification requirement for OpenAI is stated in full in the API-key dialog,
+ * where it is actionable. */
 export const AI_MODELS: AiModel[] = [
-  { id: 'gemini:gemini-3.1-flash-image', label: 'Nano Banana 2（高速・推奨）', provider: 'gemini', apiModelId: 'gemini-3.1-flash-image', recommended: true },
-  { id: 'gemini:gemini-3-pro-image', label: 'Nano Banana Pro（高品質・最大4K）', provider: 'gemini', apiModelId: 'gemini-3-pro-image', recommended: false },
-  { id: 'gemini:gemini-2.5-flash-image', label: 'Nano Banana（旧・低コスト）', provider: 'gemini', apiModelId: 'gemini-2.5-flash-image', recommended: false },
-  { id: 'openai:gpt-image-2', label: 'gpt-image-2（要・組織認証）', provider: 'openai', apiModelId: 'gpt-image-2', recommended: false },
-  { id: 'openai:gpt-image-1', label: 'gpt-image-1（要・組織認証）', provider: 'openai', apiModelId: 'gpt-image-1', recommended: false },
-  { id: 'openai:gpt-image-1-mini', label: 'gpt-image-1-mini（低コスト・要・組織認証）', provider: 'openai', apiModelId: 'gpt-image-1-mini', recommended: false },
+  { id: 'gemini:gemini-3.1-flash-image', label: 'Nano Banana 2', provider: 'gemini', apiModelId: 'gemini-3.1-flash-image', recommended: true },
+  { id: 'gemini:gemini-3-pro-image', label: 'Nano Banana Pro', provider: 'gemini', apiModelId: 'gemini-3-pro-image', recommended: false },
+  { id: 'gemini:gemini-2.5-flash-image', label: 'Nano Banana', provider: 'gemini', apiModelId: 'gemini-2.5-flash-image', recommended: false },
+  { id: 'openai:gpt-image-2', label: 'gpt-image-2', provider: 'openai', apiModelId: 'gpt-image-2', recommended: false },
+  { id: 'openai:gpt-image-1', label: 'gpt-image-1', provider: 'openai', apiModelId: 'gpt-image-1', recommended: false },
+  { id: 'openai:gpt-image-1-mini', label: 'gpt-image-1-mini', provider: 'openai', apiModelId: 'gpt-image-1-mini', recommended: false },
 ];
 
 export const DEFAULT_MODEL_ID = 'gemini:gemini-3.1-flash-image';
