@@ -139,10 +139,15 @@
      groove and no rim, which on a white panel reads as a flat grey slab
      rather than as glass. These layered insets stand in for the ring, in the
      same order: one hue hairline all the way round for the sides, the darkest
-     line on top, the caustic along the bottom. */
+     line on top, the caustic along the bottom.
+
+     Weight matters as much as colour here. At 0.44 the side hairline made a
+     field's darkest edge pixel 17 levels darker than a pill's, and once both
+     carried the same fill, that outline WAS the whole of "these are different
+     whites". Measured against the pill it sits beside, not picked by eye. */
   --ds-rim-field:
-    inset 0 0 0 1px rgba(176, 190, 210, 0.44),
-    inset 0 1.5px 0 0 rgba(142, 151, 170, 0.22),
+    inset 0 0 0 1px rgba(176, 190, 210, 0.18),
+    inset 0 1.5px 0 0 rgba(142, 151, 170, 0.12),
     inset 0 -1.5px 0 0 rgba(255, 255, 255, 0.96);
   /* THE white. One value, used by every white surface in the app.
      ─────────────────────────────────────────────────────────────────────
