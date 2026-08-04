@@ -81,6 +81,79 @@ export const IconPhoto = svg(
     <path d="M3.2 16.2l4.6-4.2 3.7 3.3 3.1-2.6 6.2 5.1" />
   </>,
 );
+/* ── Viewer rail ──────────────────────────────────────────────────────────
+   One per sidebar block. Drawn at the same 1.35px stroke as the rest of the
+   set so a rail of nine reads as one row of marks rather than nine borrowed
+   glyphs. Each says what its block IS, not what it does: layers for the plan
+   switch, a palette for the colour variants, a floor outline for the map. */
+/** Plan / type switch — stacked floors. */
+export const IconLayers = svg(
+  <>
+    <path d="M12 3.4L3.4 8.2 12 13l8.6-4.8z" />
+    <path d="M3.4 12.4L12 17.2l8.6-4.8" />
+    <path d="M3.4 16.4L12 21.2l8.6-4.8" />
+  </>,
+);
+/** Overview — the plan seen as rooms. */
+export const IconFloorPlan = svg(
+  <>
+    <rect x="3.4" y="3.4" width="17.2" height="17.2" rx="1.8" />
+    <path d="M3.4 10.6h6.2V3.4M9.6 10.6h11M14.8 10.6v10" />
+  </>,
+);
+/** Colour / material variants. */
+export const IconPalette = svg(
+  <>
+    <path d="M12 3.4a8.6 8.6 0 0 0 0 17.2c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2a1.7 1.7 0 0 1 1.2-2.9h2A4.2 4.2 0 0 0 20.6 10c0-3.7-3.9-6.6-8.6-6.6z" />
+    <circle cx="7.6" cy="11.4" r="1.2" />
+    <circle cx="11" cy="7.4" r="1.2" />
+    <circle cx="15.6" cy="8.6" r="1.2" />
+  </>,
+);
+/** AI generation — a spark, not a wand: the output is an image, not a tool. */
+export const IconSparkle = svg(
+  <>
+    <path d="M12 3.2l1.9 5.1 5.1 1.9-5.1 1.9L12 17.2l-1.9-5.1L5 10.2l5.1-1.9z" />
+    <path d="M18.4 15.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z" />
+  </>,
+);
+/** Floor map. */
+export const IconMap = svg(
+  <>
+    <path d="M9 4.2L3.4 6.4v13.4L9 17.6l6 2.2 5.6-2.2V4.2L15 6.4z" />
+    <path d="M9 4.2v13.4M15 6.4v13.4" />
+  </>,
+);
+/** Movement mode — walk / fly. */
+export const IconWalk = svg(
+  <>
+    <circle cx="13.4" cy="4.6" r="1.8" />
+    <path d="M11.6 20.8l1.4-5.2-2.4-2.2.8-4.6 3.4 1.6 2.4 2.4" />
+    <path d="M10.2 9.4L7 11.2l-.8 3.4M13 15.6l2 5.2" />
+  </>,
+);
+/** Head tracking — a face turning. */
+export const IconHead = svg(
+  <>
+    <path d="M15.4 4.6a5.6 5.6 0 0 0-7.2 5.4v2.4l-1.4 2.2 1.4.6v2a2.4 2.4 0 0 0 2.4 2.4h2.4" />
+    <path d="M17.6 7.4a6.2 6.2 0 0 1 0 9.2" />
+  </>,
+);
+/** Movement speed — a gauge, the same family as quality. */
+export const IconSpeed = svg(
+  <>
+    <path d="M4 17.4a8.6 8.6 0 1 1 16 0" />
+    <path d="M12 17.4l4-5" />
+    <circle cx="12" cy="17.4" r="1.2" />
+  </>,
+);
+/** Render quality — signal steps. */
+export const IconQuality = svg(
+  <>
+    <path d="M4.4 19.6v-4.2M9.6 19.6v-7.8M14.8 19.6v-11M20 19.6V4.4" />
+  </>,
+);
+
 export const IconSettings = svg(
   <>
     <circle cx="12" cy="12" r="3.1" />

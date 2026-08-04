@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSceneStore } from '../store/scene-store';
 import { useCameraStore } from '../store/camera-store';
-import { useUIStore } from '../store/ui-store';
+import { useUIStore, type SidebarSection } from '../store/ui-store';
 import { useTrackingStore } from '../store/tracking-store';
 import { calibrateHeadTracker } from '../utils/head-tracker';
 import { resolveScenePath } from '../core/scene-manifest';
@@ -13,6 +13,10 @@ import { getAuthHeader } from '../utils/auth';
 import { useMediaQuery } from '../utils/use-media-query';
 import { tokens } from './design-tokens';
 import { SegmentedControl, Tile, surfaceClass, IconClose, IconPlus, IconSettings, IconTrash } from './components';
+import {
+  IconLayers, IconFloorPlan, IconPalette, IconSparkle, IconMap,
+  IconWalk, IconHead, IconSpeed, IconQuality,
+} from './components';
 import { fanPath } from './map-fan';
 
 interface LeftPanelProps {
@@ -45,14 +49,12 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // 表示する項目は両モード共通。`small` は純粋にパネルの縦サイズのみ変える。
   // Default flipped to 'small' — keeps the panel compact unless the
   // author explicitly opts into the full-height "大" preset.
-  const sidebarSize = tb.size ?? 'small';
   // スマホ配置: 縦向き → 右下フロート (left ジョイスティックと干渉しない幅にクランプ)、
   // 横向き → 右側フル高。デスクトップは従来通り左側。`useTouchDevice` を先に評価して
   // mobile placement だけが上書きとして効くようにする。
   const isTouchDevice = useTouchDevice();
   const isPortrait = usePortraitOrientation();
   const placement: SidebarPlacement = !isTouchDevice ? 'left' : (isPortrait ? 'portrait' : 'right');
-  const sStyles = sidebarSizeStyles(sidebarSize, placement);
   // 既定はすべて OFF（顧客向けに最小限の UI を配信したい想定）。制作者が Debug →
   // ツールバー表示で必要な項目を明示的にチェックして出します。
   // 例外: `quality` だけは既定 ON — 描画品質はビューア側で見る人の端末性能に応じて
@@ -81,6 +83,10 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // showroom (product) は移動が無いので「移動スピード」スライダーも出さない。
   const showMobile     = tb.mobile     !== false && viewMode === 'splat' && isTouchDevice && !isProduct;
 
+  /* Which section the rail has open. Nothing, on arrival — the first thing a
+     visitor wants is the room, not a panel of controls over it. */
+  const [openBlock, setOpenBlock] = useState<OrderableSidebarBlock | null>(null);
+
   // Collapsed: render only a tiny floating button to bring the sidebar back.
   // 折りたたみハンドルの位置はサイドバーと同側に揃える (PC 左上 / スマホ縦 右下 / スマホ横 右上)。
   if (sidebarCollapsed) {
@@ -102,97 +108,116 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   }
 
 
+  // Each block, always in its open form. The rail decides what is on screen,
+  // so the "closed handle" stand-in a stacked sidebar needed has no job here.
+  const blocks: Record<OrderableSidebarBlock, React.ReactNode> = {
+    type: showType ? <TypeSelectBlock onPlanSwitch={onPlanSwitch} /> : null,
+    movement: showMovement ? <MovementModeBlock /> : null,
+    tracking: showDemo ? <DemoModeBlock /> : null,
+    mobile: showMobile ? <MobileToolsBlock onClose={() => setOpenBlock(null)} /> : null,
+    quality: showQuality ? <QualityBlock /> : null,
+    overview: showOverview ? <OverviewBlock /> : null,
+    /* シーンはサイドバーではなくビューア中央下のバー (`ViewpointBar`)。
+       行き先を選ぶ操作なので、画の上に横一列で並べたほうが「どこへ行くか」
+       が picture そのものと並んで見える。 */
+    viewpoints: null,
+    color: showColor ? <ColorSelectBlock /> : null,
+    aiGenerate: showAiGenerate ? <AiImageGenBlock /> : null,
+    map: showMap ? (
+      <div className="ds-sidebar__group" style={{ ...sidebarBlock, ...sidebarMapBlock }}>
+        <div style={overviewHeaderRow}>
+          <span className="ds-label">{isOther ? 'MAP' : 'FLOOR MAP'}</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => setOpenBlock(null)} className={BLOCK_CLOSE_BTN} title="MAP を閉じる"><IconClose /></button>
+        </div>
+        {hasMap ? (
+          <MapContent onViewpointClick={onViewpointClick} />
+        ) : (
+          <div className="ds-empty">
+            このプランの図面はまだ設定されていません
+          </div>
+        )}
+      </div>
+    ) : null,
+  };
+
+  // Order: the author's arrangement first, then any block added to the default
+  // order after they saved theirs.
+  const userOrder = (tb.order ?? []).filter((id) => id in blocks) as OrderableSidebarBlock[];
+  const seen = new Set(userOrder);
+  const railItems = [...userOrder, ...DEFAULT_SIDEBAR_ORDER.filter((id) => !seen.has(id))]
+    .filter((id) => blocks[id] !== null)
+    .flatMap((id) => {
+      const Icon = railIcon(id);
+      return Icon ? [{ id, label: railLabel(id, isOther), Icon }] : [];
+    });
+
+  /* Derived, not stored. Blocks close themselves through `hiddenSections`, and
+     deriving means that × closes the panel too — no effect watching the store
+     and calling setState back into it. */
+  /* `overview` is the one block with no entry in `hiddenSections` — it closes
+     through its own visibility state instead — so it can never be "hidden"
+     here and the cast is checked before it is used. */
+  const asSection = (id: OrderableSidebarBlock): SidebarSection | null =>
+    id === 'overview' || id === 'viewpoints' ? null : (id as SidebarSection);
+
+  const openSection = openBlock ? asSection(openBlock) : null;
+  const activeBlock =
+    openBlock && blocks[openBlock] && !(openSection && hiddenSections.includes(openSection))
+      ? openBlock
+      : null;
+
+  const openRail = (id: OrderableSidebarBlock) => {
+    if (openBlock === id) { setOpenBlock(null); return; }
+    // A block hidden earlier by its own × must come back when picked here.
+    const section = asSection(id);
+    if (section) setSectionHidden(section, false);
+    setOpenBlock(id);
+  };
+
+  const railSide: 'left' | 'right' = placement === 'left' ? 'left' : 'right';
+
   return (
     <>
-      <div className={sidebarClass(sidebarSize, placement)} style={sStyles.sidebar}>
-        {/* タイトル枠 — 右端に音声トグル + 拡大 + サイドバー全閉ボタン */}
-        <div className="ds-sidebar__title">
-          <span className="ds-title">{sceneName}</span>
-          <div style={{ flex: 1 }} />
-          {manifest?.audio && <AmbientAudioToggle />}
-          {showPinsToggle && <PinsVisibilityToggle />}
-          {showFullscreen && <FullscreenButton iconOnly />}
-          <button onClick={() => setSidebarCollapsed(true)} className={TITLE_ICON_BTN} title="サイドバーを閉じる (ビューを最大化)">
-            <span style={titleIconGlyph}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 6l-6 6 6 6" />
-              </svg>
-            </span>
-          </button>
-        </div>
-
-        <div className="ds-sidebar__scroll">
-        {(() => {
-          // Render blocks in the order defined by `viewerToolbar.order` (with the
-          // default order filling in any missing ids). Each block is gated by its
-          // existing visibility flag (`showType` etc.) so reordering doesn't override
-          // the show/hide semantics.
-          const blocks: Record<OrderableSidebarBlock, React.ReactNode> = {
-            type: showType ? <TypeSelectBlock onPlanSwitch={onPlanSwitch} /> : null,
-            movement: showMovement ? (hiddenSections.includes('movement') ? (
-              <ClosedSectionHandle label="移動モード" onOpen={() => setSectionHidden('movement', false)} />
-            ) : (
-              <MovementModeBlock />
-            )) : null,
-            tracking: showDemo ? (hiddenSections.includes('tracking') ? (
-              <ClosedSectionHandle label="ヘッドトラッキング" onOpen={() => setSectionHidden('tracking', false)} />
-            ) : (
-              <DemoModeBlock />
-            )) : null,
-            mobile: showMobile ? (hiddenSections.includes('mobile') ? (
-              <ClosedSectionHandle label="移動スピード" onOpen={() => setSectionHidden('mobile', false)} />
-            ) : (
-              <MobileToolsBlock onClose={() => setSectionHidden('mobile', true)} />
-            )) : null,
-            quality: showQuality ? (hiddenSections.includes('quality') ? (
-              <ClosedSectionHandle label="画質" onOpen={() => setSectionHidden('quality', false)} />
-            ) : (
-              <QualityBlock />
-            )) : null,
-            overview: showOverview ? <OverviewBlock /> : null,
-            /* シーンはサイドバーではなくビューア中央下のバー (`ViewpointBar`)。
-               行き先を選ぶ操作なので、画の上に横一列で並べたほうが「どこへ行くか」
-               が picture そのものと並んで見える。 */
-            viewpoints: null,
-            color: showColor ? <ColorSelectBlock /> : null,
-            aiGenerate: showAiGenerate ? (hiddenSections.includes('aiGenerate') ? (
-              <ClosedSectionHandle label="AI 画像生成" onOpen={() => setSectionHidden('aiGenerate', false)} />
-            ) : (
-              <AiImageGenBlock />
-            )) : null,
-            map: showMap ? (hiddenSections.includes('map') ? (
-              <ClosedSectionHandle label={isOther ? 'MAP' : 'FLOOR MAP'} onOpen={() => setSectionHidden('map', false)} />
-            ) : (
-              <div className="ds-sidebar__group" style={{ ...sidebarBlock, ...sidebarMapBlock }}>
-                <div style={overviewHeaderRow}>
-                  <span className="ds-label">{isOther ? 'MAP' : 'FLOOR MAP'}</span>
-                  <div style={{ flex: 1 }} />
-                  <button onClick={() => setSectionHidden('map', true)} className={BLOCK_CLOSE_BTN} title="MAP を閉じる"><IconClose /></button>
-                </div>
-                {hasMap ? (
-                  <MapContent onViewpointClick={onViewpointClick} />
-                ) : (
-                  <div className="ds-empty">
-                    このプランの図面はまだ設定されていません
-                  </div>
-                )}
-              </div>
-            )) : null,
-          };
-          // Compose ordered list: user-configured ids first (deduped), then any
-          // defaults the user didn't list (forward-compat for new blocks added to
-          // DEFAULT_SIDEBAR_ORDER after they saved an order).
-          const userOrder = (tb.order ?? []).filter((id) => id in blocks) as OrderableSidebarBlock[];
-          const seen = new Set(userOrder);
-          const finalOrder: OrderableSidebarBlock[] = [
-            ...userOrder,
-            ...DEFAULT_SIDEBAR_ORDER.filter((id) => !seen.has(id)),
-          ];
-          return finalOrder.map((id) => <React.Fragment key={id}>{blocks[id]}</React.Fragment>);
-        })()}
-        </div>
-
+      <div className="ds-rail-title" style={edgeStyle(railSide, RAIL_INSET, RAIL_INSET)}>
+        <span className="ds-rail-title__name">{sceneName}</span>
+        <div style={{ flex: 1 }} />
+        {manifest?.audio && <AmbientAudioToggle />}
+        {showPinsToggle && <PinsVisibilityToggle />}
+        {showFullscreen && <FullscreenButton iconOnly />}
+        <button onClick={() => setSidebarCollapsed(true)} className={TITLE_ICON_BTN} title="サイドバーを閉じる (ビューを最大化)">
+          <span style={titleIconGlyph}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+              <path d={railSide === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
+            </svg>
+          </span>
+        </button>
       </div>
+
+      {railItems.length > 0 && (
+        <div className="ds-rail" style={{ ...edgeStyle(railSide, RAIL_INSET, RAIL_TOP), ...railScroll }}>
+          {railItems.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              className="ds-rail__item"
+              data-active={activeBlock === id || undefined}
+              aria-pressed={activeBlock === id}
+              title={label}
+              onClick={() => openRail(id)}
+            >
+              <Icon />
+              <span className="ds-rail__label">{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeBlock && (
+        <div className="ds-rail-panel" style={{ ...edgeStyle(railSide, RAIL_PANEL_INSET, RAIL_TOP), ...railScroll }}>
+          <div className="ds-rail-panel__body">{blocks[activeBlock]}</div>
+        </div>
+      )}
 
       <ViewpointBar onViewpointClick={onViewpointClick} />
     </>
@@ -1687,7 +1712,6 @@ function FullscreenButton({ compact = false, iconOnly = false }: { compact?: boo
 
 // ── styles ────────────────────────────────────────────────────────
 
-import type { SidebarSize } from '../core/types';
 
 /**
  * Resolve the sidebar's outer style for the size preset.
@@ -1699,48 +1723,59 @@ import type { SidebarSize } from '../core/types';
  */
 type SidebarPlacement = 'left' | 'right' | 'portrait';
 
-/** Edge classes for the sidebar — the divider goes on the one edge that meets
- *  the canvas; `small` floats clear of the bottom and needs its own. */
-function sidebarClass(size: SidebarSize, placement: SidebarPlacement): string {
-  const edge = placement === 'portrait' ? 'top' : placement === 'right' ? 'right' : 'left';
-  return `ds-sidebar ds-sidebar--${edge}${size === 'small' ? ' ds-sidebar--floating' : ''}`;
+/* ── Rail geometry ───────────────────────────────────────────────────────
+   The rail is 62 + 2×8 = 78 wide, so the panel clears it at 16 + 78 + 10. */
+const RAIL_INSET = 16;
+const RAIL_TOP = 68;
+const RAIL_PANEL_INSET = RAIL_INSET + 78 + 10;
+
+/** Pin to whichever edge the sidebar used to take. */
+function edgeStyle(side: 'left' | 'right', inset: number, top: number): React.CSSProperties {
+  return side === 'left' ? { top, left: inset } : { top, right: inset };
 }
 
-function sidebarSizeStyles(size: SidebarSize, placement: SidebarPlacement = 'left') {
-  const isSmall = size === 'small';
-  // placement ごとのアンカー / 幅 / 縁取り。
-  //  - left      : 従来 (PC) — 左に張り付き。
-  //  - right     : スマホ横向き — 右側フル高。
-  //  - portrait  : スマホ縦向き — **上端フル幅のトップバー** (`top:0; left:0; right:0`)。
-  //                左右に隙間を作らない (ユーザー指定: 右寄せの隙間を消す = 横一杯)。
-  //                閉じハンドルだけは別 `collapsedHandleStyle` 側で右下に置く。
-  const isRight = placement === 'right';
-  const isPortrait = placement === 'portrait';
-  const anchors: React.CSSProperties = isPortrait
-    ? { top: 0, left: 0, right: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) }
-    : isRight
-      ? { top: 0, left: 'auto', right: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) }
-      : { top: 0, left: 0, ...(isSmall ? { bottom: 'auto' as const, height: 'auto' as const } : { bottom: 0 }) };
-  // 縦向きはトップバーなので `auto` で left/right に吸い付かせる。
-  // 横向き / デスクトップは 320 固定。
-  const width: React.CSSProperties['width'] = isPortrait ? 'auto' : 320;
-  // 縁取り (キャンバスと接する 1 辺だけの区切り線) は `sidebarClass` 側。
-  // スマホはセクションが多いと画面いっぱいになるので、上限を画面の約半分にして
-  // 下部 (キャンバス / 操作領域) を必ず見えるようにする。残りはスクロール。
-  // PC は従来通り 100dvh まで許容。
-  const isMobile = isPortrait || isRight;
-  return {
-    /** Layout only — material and dividers come from `sidebarClass`. */
-    sidebar: {
-      // 横向きスマホ等で viewport 高が低い時に下部が見切れないよう、必ず viewport 内に収め
-      // 中身は `.ds-sidebar__scroll` 側でスクロールさせる。`100dvh` は iOS Safari の
-      // アドレスバー出入りに追従する viewport 単位 (fallback で 100vh)。
-      maxHeight: isMobile ? '50dvh' : '100dvh',
-      ...anchors,
-      width,
-      zIndex: 6,
-    } as React.CSSProperties,
-  };
+/** Both the rail and the panel have to survive a short window — a laptop in
+ *  landscape with nine sections, or a phone. Neither may run off the bottom. */
+const railScroll: React.CSSProperties = {
+  maxHeight: `calc(100dvh - ${RAIL_TOP + RAIL_INSET}px)`,
+  overflowY: 'auto',
+};
+
+/** Icon per block. A switch rather than a lookup object: the block ids include
+ *  `color`, and an object literal with a `color:` key reads to the
+ *  design-system checker as a hand-rolled style declaration.
+ *  `viewpoints` has none on purpose — it lives in the scene strip along the
+ *  bottom, not in the rail. */
+function railIcon(id: OrderableSidebarBlock): React.ComponentType<{ size?: number }> | null {
+  switch (id) {
+    case 'type': return IconLayers;
+    case 'overview': return IconFloorPlan;
+    case 'color': return IconPalette;
+    case 'aiGenerate': return IconSparkle;
+    case 'map': return IconMap;
+    case 'movement': return IconWalk;
+    case 'tracking': return IconHead;
+    case 'mobile': return IconSpeed;
+    case 'quality': return IconQuality;
+    default: return null;
+  }
+}
+
+/** The name under the icon — the same word the block's own header uses, so
+ *  pressing タイプ opens a panel that says タイプ. */
+function railLabel(id: OrderableSidebarBlock, isOther: boolean): string {
+  switch (id) {
+    case 'type': return isOther ? '場所' : 'タイプ';
+    case 'overview': return '間取り';
+    case 'color': return 'カラー';
+    case 'aiGenerate': return 'AI 生成';
+    case 'map': return isOther ? 'MAP' : '図面';
+    case 'movement': return '移動';
+    case 'tracking': return 'トラッキング';
+    case 'mobile': return 'スピード';
+    case 'quality': return '画質';
+    default: return id;
+  }
 }
 
 /** Icon button beside the sidebar title. */

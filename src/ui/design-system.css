@@ -1232,6 +1232,123 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   max-width: min(980px, calc(100vw - 48px));
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Viewer rail — the vertical sibling of the scene strip
+   ─────────────────────────────────────────────────────────────────────────
+   Same material as `.ds-scene-bar`, and for the same reason: it floats over
+   the room, not over a UI background. The white sidebar it replaces was a
+   320px slab cut out of the photograph, and everything in it was visible at
+   once whether or not it was wanted. Here the bar carries only the names, and
+   one panel at a time carries the content.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ds-rail {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.22);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+          backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14), 0 12px 32px rgba(0, 0, 0, 0.18);
+  z-index: 6;
+}
+/* Icon over label. A row would make the bar as wide as its longest name and
+   put the whole thing back to being a panel. */
+.ds-rail__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 62px;
+  padding: 8px 3px 7px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+  outline: none;
+  transition: background-color var(--ds-dur) var(--ds-ease);
+}
+.ds-rail__item:hover { background-color: rgba(255, 255, 255, 0.18); }
+.ds-rail__item[data-active='true'] { background-color: rgba(255, 255, 255, 0.34); }
+/* The icons ride over a photograph that can be any brightness, so they carry
+   their own shadow rather than relying on the bar's haze. */
+.ds-rail__item .ds-icon {
+  width: 21px;
+  height: 21px;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+/* `--ds-fs-xs`, not a literal: the coarse block already raises that token to
+   11px, which is the floor a caption has to clear in the hand. A hardcoded
+   9.5 here would have been the one label in the app that stayed unreadable on
+   a phone. The item widens to match, or トラッキング stops fitting. */
+.ds-rail__label {
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-xs);
+  font-weight: var(--ds-fw);
+  line-height: 1.25;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  word-break: keep-all;
+}
+@media (pointer: coarse) {
+  .ds-rail__item { width: 76px; }
+}
+/* The project name. Not iconised — it is the one label that names the whole
+   thing rather than a section of it, so it keeps its words. */
+.ds-rail-title {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(420px, calc(100vw - 48px));
+  padding: 8px 10px 8px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.22);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+          backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14), 0 12px 32px rgba(0, 0, 0, 0.18);
+  color: #fff;
+  z-index: 6;
+}
+.ds-rail-title__name {
+  font-family: var(--ds-font);
+  font-size: var(--ds-fs-lg);
+  font-weight: var(--ds-fw);
+  letter-spacing: var(--ds-tracking);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The open section. White again on purpose: this holds real controls —
+   sliders, swatches, a floor plan — and those are drawn for a light ground.
+   The glass is the chrome; the content still needs paper. */
+.ds-rail-panel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-width: calc(100vw - 110px);
+  border-radius: 18px;
+  overflow: hidden;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.94) 100%);
+  -webkit-backdrop-filter: var(--ds-backdrop-scene);
+          backdrop-filter: var(--ds-backdrop-scene);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14), 0 16px 40px rgba(0, 0, 0, 0.22);
+  color: var(--ds-text);
+  font-family: var(--ds-font);
+  z-index: 6;
+}
+/* No head of its own: every block already draws its name and its ×, and a
+   second title bar above them would say the same word twice. The block's ×
+   closes the panel, because the rail reads the same hidden-section state. */
+.ds-rail-panel__body { overflow-y: auto; overscroll-behavior: contain; }
+
 .ds-scene {
   position: relative;
   flex: 0 0 auto;
