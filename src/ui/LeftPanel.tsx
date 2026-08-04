@@ -183,8 +183,6 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
         <span className="ds-rail-title__name">{sceneName}</span>
         <div style={{ flex: 1 }} />
         {manifest?.audio && <AmbientAudioToggle />}
-        {showPinsToggle && <PinsVisibilityToggle />}
-        {showFullscreen && <FullscreenButton iconOnly />}
         <button onClick={() => setSidebarCollapsed(true)} className={TITLE_ICON_BTN} title="サイドバーを閉じる (ビューを最大化)">
           <span style={titleIconGlyph}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
@@ -220,6 +218,16 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
       )}
 
       <ViewpointBar onViewpointClick={onViewpointClick} />
+
+      {/* Bottom right, level with the scene strip — view-wide switches belong
+          with the picture they act on, not up in the title chip beside the
+          project's name. */}
+      {(showPinsToggle || showFullscreen) && (
+        <div className="ds-action-bar" style={{ bottom: isPortrait ? 12 : 24 }}>
+          {showPinsToggle && <PinsVisibilityToggle />}
+          {showFullscreen && <FullscreenButton iconOnly />}
+        </div>
+      )}
     </>
   );
 }
