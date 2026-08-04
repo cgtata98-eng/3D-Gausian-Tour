@@ -147,6 +147,12 @@ export const IconSpeed = svg(
     <circle cx="12" cy="17.4" r="1.2" />
   </>,
 );
+/** Fill the screen. */
+export const IconFullscreen = svg(<path d="M3.4 8.6V3.4h5.2M20.6 8.6V3.4h-5.2M3.4 15.4v5.2h5.2M20.6 15.4v5.2h-5.2" />);
+/** Give it back. */
+export const IconFullscreenExit = svg(
+  <path d="M8.6 3.4v5.2H3.4M15.4 3.4v5.2h5.2M8.6 20.6v-5.2H3.4M15.4 20.6v-5.2h5.2" />,
+);
 /** Render quality — signal steps. */
 export const IconQuality = svg(
   <>

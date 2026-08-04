@@ -16,7 +16,7 @@ export type { PillVariant, TagVariant } from './Pill';
 export { Card, Panel } from './Card';
 export { Block, Chip, Tile } from './Block';
 export { IconClose, IconEdit, IconLink, IconCheck, IconTrash, IconPlus, IconSettings, IconPin, IconTarget, IconCamera, IconPhoto } from './Icon';
-export { IconLayers, IconFloorPlan, IconPalette, IconSparkle, IconMap, IconWalk, IconHead, IconSpeed, IconQuality } from './Icon';
+export { IconLayers, IconFloorPlan, IconPalette, IconSparkle, IconMap, IconWalk, IconHead, IconSpeed, IconQuality, IconFullscreen, IconFullscreenExit } from './Icon';
 export { PillInput } from './Input';
 
 /**

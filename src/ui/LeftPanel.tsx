@@ -15,7 +15,8 @@ import { tokens } from './design-tokens';
 import { SegmentedControl, Tile, surfaceClass, IconClose, IconPlus, IconSettings, IconTrash } from './components';
 import {
   IconLayers, IconFloorPlan, IconPalette, IconSparkle, IconMap,
-  IconWalk, IconHead, IconSpeed, IconQuality,
+  IconWalk, IconHead, IconSpeed, IconQuality, IconFullscreen, IconFullscreenExit,
+  IconPin,
 } from './components';
 import { fanPath } from './map-fan';
 
@@ -192,7 +193,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
         </button>
       </div>
 
-      {railItems.length > 0 && (
+      {(railItems.length > 0 || showPinsToggle || showFullscreen) && (
         <div className="ds-rail" style={{ ...edgeStyle(railSide, RAIL_INSET, RAIL_TOP), ...railScroll }}>
           {railItems.map(({ id, label, Icon }) => (
             <button
@@ -208,6 +209,14 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
               <span className="ds-rail__label">{label}</span>
             </button>
           ))}
+
+          {/* Switches, not sections: they act on the view rather than opening
+              anything, so they sit below a rule at the foot of the rail. */}
+          {(showPinsToggle || showFullscreen) && railItems.length > 0 && (
+            <div className="ds-rail__sep" />
+          )}
+          {showPinsToggle && <PinsRailItem />}
+          {showFullscreen && <FullscreenRailItem />}
         </div>
       )}
 
@@ -218,16 +227,6 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
       )}
 
       <ViewpointBar onViewpointClick={onViewpointClick} />
-
-      {/* Bottom right, level with the scene strip — view-wide switches belong
-          with the picture they act on, not up in the title chip beside the
-          project's name. */}
-      {(showPinsToggle || showFullscreen) && (
-        <div className="ds-action-bar" style={{ bottom: isPortrait ? 12 : 24 }}>
-          {showPinsToggle && <PinsVisibilityToggle />}
-          {showFullscreen && <FullscreenButton iconOnly />}
-        </div>
-      )}
     </>
   );
 }
@@ -1658,27 +1657,25 @@ function AmbientAudioToggle() {
  * 制作者が `viewerToolbar.pins === true` で opt-in したときだけ親側で render
  * される。タップで `useUIStore.showPins` をトグル → ScenePinsOverlay の出し分け。
  */
-function PinsVisibilityToggle() {
+function PinsRailItem() {
   const showPins = useUIStore((s) => s.showPins);
   const setShowPins = useUIStore((s) => s.setShowPins);
   return (
     <button
+      type="button"
       onClick={() => setShowPins(!showPins)}
-      className={TITLE_ICON_BTN}
-      style={showPins ? undefined : { opacity: 0.45 }}
+      className="ds-rail__item"
+      data-active={showPins || undefined}
+      aria-pressed={showPins}
       title={showPins ? 'タグを非表示にする' : 'タグを表示する'}
     >
-      <span style={titleIconGlyph}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
-          <circle cx="12" cy="9" r="2.5" />
-        </svg>
-      </span>
+      <IconPin />
+      <span className="ds-rail__label">タグ</span>
     </button>
   );
 }
 
-function FullscreenButton({ compact = false, iconOnly = false }: { compact?: boolean; iconOnly?: boolean } = {}) {
+function FullscreenRailItem() {
   const [isFs, setIsFs] = useState<boolean>(typeof document !== 'undefined' && !!document.fullscreenElement);
   useEffect(() => {
     const onChange = () => setIsFs(!!document.fullscreenElement);
@@ -1689,31 +1686,17 @@ function FullscreenButton({ compact = false, iconOnly = false }: { compact?: boo
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen().catch(() => {});
   };
-  const Icon = isFs ? (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 3v4a1 1 0 0 1-1 1H3M21 8h-4a1 1 0 0 1-1-1V3M3 16h4a1 1 0 0 1 1 1v4M16 21v-4a1 1 0 0 1 1-1h4"/>
-    </svg>
-  ) : (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 8V3h5M21 8V3h-5M3 16v5h5M21 16v5h-5"/>
-    </svg>
-  );
-  if (iconOnly) {
-    return (
-      <button onClick={toggle} title={isFs ? 'フルスクリーン解除' : '拡大 (フルスクリーン)'} className={TITLE_ICON_BTN}>
-        <span style={titleIconGlyph}>{Icon}</span>
-      </button>
-    );
-  }
   return (
     <button
+      type="button"
       onClick={toggle}
+      className="ds-rail__item"
+      data-active={isFs || undefined}
+      aria-pressed={isFs}
       title={isFs ? 'フルスクリーン解除' : '拡大 (フルスクリーン)'}
-      className={compact ? 'ds-navitem' : 'ds-navitem ds-navitem--stacked'}
-      style={compact ? miniIconBtn : undefined}
     >
-      <span style={iconGlyph}>{Icon}</span>
-      <span className={compact ? "ds-title" : "ds-label"}>拡大</span>
+      {isFs ? <IconFullscreenExit /> : <IconFullscreen />}
+      <span className="ds-rail__label">{isFs ? '解除' : '全画面'}</span>
     </button>
   );
 }
@@ -1849,15 +1832,6 @@ const inlineToggleRow: React.CSSProperties = {
 
 const inlineToggleLabel: React.CSSProperties = { width: 32, flexShrink: 0 };
 
-/** Each row takes an equal share of the toolbar's flexed height, so together
- *  they cover it with no leftover blank space. */
-const miniIconBtn: React.CSSProperties = { flex: 1, minHeight: 0 };
-
-const iconGlyph: React.CSSProperties = {
-  width: 22,
-  height: 22,
-  display: 'inline-flex',
-};
 
 
 // 3-column grid: thumbnail on top, room name below.

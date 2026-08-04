@@ -1297,6 +1297,15 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
 @media (pointer: coarse) {
   .ds-rail__item { width: 76px; }
 }
+/* Divides the sections from the switches. Inset, so it reads as a rule inside
+   the bar rather than a seam splitting it into two bars. */
+.ds-rail__sep {
+  flex-shrink: 0;
+  height: 1px;
+  margin: 4px 8px;
+  background: rgba(255, 255, 255, 0.38);
+}
+
 /* The project name. Not iconised — it is the one label that names the whole
    thing rather than a section of it, so it keeps its words. */
 .ds-rail-title {
@@ -1348,27 +1357,6 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
    second title bar above them would say the same word twice. The block's ×
    closes the panel, because the rail reads the same hidden-section state. */
 .ds-rail-panel__body { overflow-y: auto; overscroll-behavior: contain; }
-
-/* View actions — tags, fullscreen. Same glass, bottom right.
-   Its own bar rather than icons tacked onto the end of the scene strip: the
-   strip is centred and pages horizontally, so anything parked in it competes
-   with the thumbnails for width on a phone AND disappears the moment the
-   strip is folded away or scenes are turned off. These two are always
-   available, so they get somewhere that is always there. */
-.ds-action-bar {
-  position: absolute;
-  right: 16px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.22);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-          backdrop-filter: blur(18px) saturate(150%);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14), 0 12px 32px rgba(0, 0, 0, 0.18);
-  z-index: 5;
-}
 
 .ds-scene {
   position: relative;
