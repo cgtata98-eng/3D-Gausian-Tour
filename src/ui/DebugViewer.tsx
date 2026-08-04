@@ -3449,52 +3449,64 @@ function ViewerToolbarSection({
       </div>
 
       <div className="ds-label" style={S.toolbarGroupHead}>サイドバー</div>
-      <ToolbarRow tb={tb} keyName="type"       label={isOtherProject && !isVRMode ? '場所 (プラン切替)' : 'タイプ (プラン切替)'} hint="— 既定 OFF" defaultOff onChange={onChange} />
-      {/* 間取り / カラーは「その他」プロジェクトでは概念的に存在しないので
-          DOM ごと出さない (grayed out で残しておくと UI のノイズ)。 */}
-      {!isOtherProject && (
-        <ToolbarRow tb={tb} keyName="overview"   label="間取り概要" hint="— 既定 OFF" defaultOff onChange={onChange} />
-      )}
-      <ToolbarRow tb={tb} keyName="viewpoints" label="シーン" hint="— 既定 OFF" defaultOff onChange={onChange} />
-      {!isOtherProject && (
-        <ToolbarRow tb={tb} keyName="color"      label="カラー (素材バリエーション)" hint="— 既定 OFF" defaultOff onChange={onChange} />
-      )}
-      <ToolbarRow tb={tb} keyName="aiGenerate" label="AI 画像生成" hint="— 既定 OFF" defaultOff onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="map"        label={isOtherProject ? 'MAP' : 'FLOOR MAP'} hint="— 既定 OFF" defaultOff onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="pins"       label="タグ (3D ピン / リンク付き)" hint="— 既定 OFF" defaultOff onChange={onChange} />
+      {/* A grid, because `.ds-check` is inline-flex: written one per line in
+          JSX, the rows still flowed as inline boxes and wrapped wherever the
+          text ran out, so no two checkboxes lined up. The cells hold a column
+          each — one column in the 320px sidebar, more when the panel is wide. */}
+      <div style={S.toolbarGrid}>
+        <ToolbarRow tb={tb} keyName="type"       label={isOtherProject && !isVRMode ? '場所 (プラン切替)' : 'タイプ (プラン切替)'} hint="— 既定 OFF" defaultOff onChange={onChange} />
+        {/* 間取り / カラーは「その他」プロジェクトでは概念的に存在しないので
+            DOM ごと出さない (grayed out で残しておくと UI のノイズ)。 */}
+        {!isOtherProject && (
+          <ToolbarRow tb={tb} keyName="overview"   label="間取り概要" hint="— 既定 OFF" defaultOff onChange={onChange} />
+        )}
+        <ToolbarRow tb={tb} keyName="viewpoints" label="シーン" hint="— 既定 OFF" defaultOff onChange={onChange} />
+        {!isOtherProject && (
+          <ToolbarRow tb={tb} keyName="color"      label="カラー (素材バリエーション)" hint="— 既定 OFF" defaultOff onChange={onChange} />
+        )}
+        <ToolbarRow tb={tb} keyName="aiGenerate" label="AI 画像生成" hint="— 既定 OFF" defaultOff onChange={onChange} />
+        <ToolbarRow tb={tb} keyName="map"        label={isOtherProject ? 'MAP' : 'FLOOR MAP'} hint="— 既定 OFF" defaultOff onChange={onChange} />
+        <ToolbarRow tb={tb} keyName="pins"       label="タグ (3D ピン / リンク付き)" hint="— 既定 OFF" defaultOff onChange={onChange} />
+      </div>
 
       <div className="ds-label" style={S.toolbarGroupHead}>オーバーレイ / アイコン</div>
       {/* 環境音 (BGM) と ヘッドトラッキングはパノラマでも使える ─ enable 状態のままにする。
           移動モード切替・画質プリセットは 3DGS 専用なので VR モードでは行ごと非表示。 */}
-      <ToolbarRow tb={tb} keyName="audio"      label="環境音アイコン (タイトル右)" hint="— 既定 OFF" defaultOff onChange={onChange} />
-      <ToolbarRow tb={tb} keyName="fullscreen" label="フルスクリーンアイコン" hint="— 既定 OFF" defaultOff onChange={onChange} />
-      {!isVRMode && (
-        <ToolbarRow tb={tb} keyName="movement"   label="移動モード切替 (歩く / フライ)" hint="— 既定 OFF" defaultOff onChange={onChange} />
-      )}
-      {!isVRMode && (
-        <ToolbarRow tb={tb} keyName="quality"    label="画質 (LOW / MID / HIGH)" hint="— 既定 ON" onChange={onChange} />
-      )}
-      <ToolbarRow tb={tb} keyName="demo"       label="ヘッドトラッキング" hint="— 既定 OFF" defaultOff onChange={onChange} />
+      <div style={S.toolbarGrid}>
+        <ToolbarRow tb={tb} keyName="audio"      label="環境音アイコン (タイトル右)" hint="— 既定 OFF" defaultOff onChange={onChange} />
+        <ToolbarRow tb={tb} keyName="fullscreen" label="フルスクリーンアイコン" hint="— 既定 OFF" defaultOff onChange={onChange} />
+        {!isVRMode && (
+          <ToolbarRow tb={tb} keyName="movement"   label="移動モード切替 (歩く / フライ)" hint="— 既定 OFF" defaultOff onChange={onChange} />
+        )}
+        {!isVRMode && (
+          <ToolbarRow tb={tb} keyName="quality"    label="画質 (LOW / MID / HIGH)" hint="— 既定 ON" onChange={onChange} />
+        )}
+        <ToolbarRow tb={tb} keyName="demo"       label="ヘッドトラッキング" hint="— 既定 OFF" defaultOff onChange={onChange} />
+      </div>
 
       {!isOtherProject && (
         <>
           <div className="ds-label" style={S.toolbarGroupHead}>カラー内のサブ操作 (mansion)</div>
-          <label className="ds-check" style={S.toggle}>
-            <input
-              type="checkbox"
-              checked={!!variants?.furniture}
-              onChange={() => onToggleVariant('furniture')}
-            />
-            <span>家具切替を表示 <span className="ds-hint" style={S.toolbarHint}>(家具あり / なし)</span></span>
-          </label>
-          <label className="ds-check" style={S.toggle}>
-            <input
-              type="checkbox"
-              checked={!!variants?.lighting}
-              onChange={() => onToggleVariant('lighting')}
-            />
-            <span>情景切替を表示 <span className="ds-hint" style={S.toolbarHint}>(昼 / 夜)</span></span>
-          </label>
+          <div style={S.toolbarGrid}>
+            <label className="ds-check" style={S.toolbarRow}>
+              <input
+                type="checkbox"
+                checked={!!variants?.furniture}
+                onChange={() => onToggleVariant('furniture')}
+              />
+              <span style={S.toolbarRowLabel}>家具切替を表示</span>
+              <span className="ds-hint" style={S.toolbarRowHint}>(家具あり / なし)</span>
+            </label>
+            <label className="ds-check" style={S.toolbarRow}>
+              <input
+                type="checkbox"
+                checked={!!variants?.lighting}
+                onChange={() => onToggleVariant('lighting')}
+              />
+              <span style={S.toolbarRowLabel}>情景切替を表示</span>
+              <span className="ds-hint" style={S.toolbarRowHint}>(昼 / 夜)</span>
+            </label>
+          </div>
         </>
       )}
 
@@ -3685,7 +3697,7 @@ function ToolbarRow({
   return (
     <label
       className="ds-check"
-      style={{ ...S.toggle, opacity: disabled ? 0.45 : 1 }}
+      style={{ ...S.toolbarRow, opacity: disabled ? 0.45 : 1 }}
       title={disabled ? '現在のプロジェクト種別 / モードでは無効' : undefined}
     >
       <input
@@ -3694,10 +3706,11 @@ function ToolbarRow({
         disabled={disabled}
         onChange={(e) => onChange({ [keyName]: e.target.checked })}
       />
-      <span>
-        {label}
-        {hint && <span className="ds-hint" style={S.toolbarHint}>{hint}</span>}
-      </span>
+      {/* Label and default sit in separate cells so every "— 既定 …" lands on
+          the same right edge. Inside one span they tracked the label's length
+          and the column read as noise. */}
+      <span style={S.toolbarRowLabel}>{label}</span>
+      {hint && <span className="ds-hint" style={S.toolbarRowHint}>{hint}</span>}
     </label>
   );
 }
@@ -5281,6 +5294,23 @@ const S: Record<string, React.CSSProperties> = {
   modeHint: { marginTop: 8 },
   toolbarGroupHead: { marginTop: 12 },
   toolbarHint: { marginLeft: 6 },
+  /* One toggle per cell. `auto-fill` rather than a fixed count: the same panel
+     is 320px docked and ~520px in the authoring layout.
+     340px is the width of the longest row that must not wrap — 移動モード切替
+     (歩く / フライ) plus its 既定 — so a second column can only appear once
+     there is honest room for one. At 248px the panel landed within 2px of the
+     1/2-column boundary, where a hair more width silently starts wrapping. */
+  toolbarGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+    columnGap: 18,
+    rowGap: 2,
+    marginTop: 2,
+  },
+  toolbarRow: { userSelect: 'none' as const, padding: '4px 0', width: '100%' },
+  /* Takes the slack so the hint is pushed to the cell's right edge. */
+  toolbarRowLabel: { flex: 1, minWidth: 0 },
+  toolbarRowHint: { flexShrink: 0, marginLeft: 8 },
   sliderHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 },
   sliderValInput: { width: 64 },
   slider: { width: '100%' },

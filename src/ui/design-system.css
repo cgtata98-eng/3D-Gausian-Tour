@@ -1927,6 +1927,49 @@ input[type='range']::-moz-range-thumb {
   input:not([type='range']), select, textarea { font-size: 16px; }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Field affordance — a round button living inside a pill field's end cap
+   ─────────────────────────────────────────────────────────────────────────
+   A show/hide eye was placed with `right: 8px` at 34px in a 39px field. It
+   never overflowed the field's BOX — it sat 8px inside — but a pill's right
+   end is a semicircle of radius 19.5, and a 17px-radius circle whose centre
+   is 25px from the edge needs 22.5px of room there. So it broke out through
+   the curve by ~3px, top and bottom, which reads as a button that slipped
+   its socket.
+   The fix is to make the circle CONCENTRIC with the cap: centre it at exactly
+   one field-radius from the edge, and keep its own radius under that. Then
+   the gap is even the whole way round, at any field height.
+   ══════════════════════════════════════════════════════════════════════════ */
+/* Qualified with `.ds-pill` on purpose. The coarse-pointer block above sends
+   every `.ds-pill--icon` to 44px, and a 44px circle in a 39px field hangs 9px
+   out of the cap — measured, not guessed. One class each would leave the two
+   rules tied on specificity and decided by source order, which is not a thing
+   to rely on. */
+.ds-pill.ds-field-affordance {
+  position: absolute;
+  top: 50%;
+  /* 39px field → cap radius 19.5 → the centre must sit 19.5 from the edge.
+     right(5) + half of 29 = 19.5, so the ring is an even 5px all round. */
+  right: 5px;
+  width: 29px;
+  height: 29px;
+  /* Both are floors that would otherwise raise the size past the cap: the
+     coarse block gives `.ds-pill` a 44px min-height and 20px of side padding,
+     and under border-box that padding becomes the width's lower bound — a
+     33px button measured 44px wide with the width honoured but ignored. */
+  min-height: 0;
+  padding: 0;
+  transform: translateY(-50%);
+}
+@media (pointer: coarse) {
+  /* The field does NOT grow here: the 16px rule is an element selector and
+     `.ds-input` outranks it, so the cap radius is still 19.5 and 44px will
+     not fit. 33px is the most that nests with a visible ring. Under the 44px
+     touch minimum, knowingly — the field itself is the large target, and an
+     eye that covers the text it reveals is not an improvement. */
+  .ds-pill.ds-field-affordance { right: 3px; width: 33px; height: 33px; }
+}
+
 /* ── The authoring screen ──────────────────────────────────────────────
    A workbench: a column of controls beside a live preview. The split was
    `minmax(440px, 560px) 1fr` written inline, and a minimum of 440px on a

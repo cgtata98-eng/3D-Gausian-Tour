@@ -119,7 +119,7 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
                 className="ds-mono"
                 style={{ paddingRight: 48 }}
               />
-              <button type="button" onClick={() => setShowGem((v) => !v)} title={showGem ? '隠す' : '表示'} aria-label={showGem ? '隠す' : '表示'} className="ds-pill ds-pill--icon ds-pill--sm" style={eyeBtn}>
+              <button type="button" onClick={() => setShowGem((v) => !v)} title={showGem ? '隠す' : '表示'} aria-label={showGem ? '隠す' : '表示'} className="ds-pill ds-pill--icon ds-field-affordance">
                 {showGem ? '🙈' : '👁'}
               </button>
             </div>
@@ -142,7 +142,7 @@ export function ApiKeySettings({ gearStyle }: { gearStyle?: React.CSSProperties 
                 className="ds-mono"
                 style={{ paddingRight: 48 }}
               />
-              <button type="button" onClick={() => setShowOa((v) => !v)} title={showOa ? '隠す' : '表示'} aria-label={showOa ? '隠す' : '表示'} className="ds-pill ds-pill--icon ds-pill--sm" style={eyeBtn}>
+              <button type="button" onClick={() => setShowOa((v) => !v)} title={showOa ? '隠す' : '表示'} aria-label={showOa ? '隠す' : '表示'} className="ds-pill ds-pill--icon ds-field-affordance">
                 {showOa ? '🙈' : '👁'}
               </button>
             </div>
@@ -194,12 +194,6 @@ const titleRow: React.CSSProperties = {
 };
 
 const fieldLabel: React.CSSProperties = { marginBottom: 6 };
-
-const eyeBtn: React.CSSProperties = {
-  position: 'absolute',
-  top: '50%', right: 8, transform: 'translateY(-50%)',
-  width: 34, height: 34,
-};
 
 const primaryBtn: React.CSSProperties = {
   flex: 1,
