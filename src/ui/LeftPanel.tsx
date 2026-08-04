@@ -87,6 +87,9 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   /* Which section the rail has open. Nothing, on arrival — the first thing a
      visitor wants is the room, not a panel of controls over it. */
   const [openBlock, setOpenBlock] = useState<OrderableSidebarBlock | null>(null);
+  /* 図面は独立。節を切り替えても出したままにできる。既定は閉 — 最初に見たい
+     のは部屋そのもので、図面は「今どこか」を確かめたくなってから出す。 */
+  const [mapOpen, setMapOpen] = useState(false);
 
   // Collapsed: render only a tiny floating button to bring the sidebar back.
   // 折りたたみハンドルの位置はサイドバーと同側に揃える (PC 左上 / スマホ縦 右下 / スマホ横 右上)。
@@ -124,22 +127,9 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
     viewpoints: null,
     color: showColor ? <ColorSelectBlock /> : null,
     aiGenerate: showAiGenerate ? <AiImageGenBlock /> : null,
-    map: showMap ? (
-      <div className="ds-sidebar__group" style={{ ...sidebarBlock, ...sidebarMapBlock }}>
-        <div style={overviewHeaderRow}>
-          <span className="ds-label">{isOther ? 'MAP' : 'FLOOR MAP'}</span>
-          <div style={{ flex: 1 }} />
-          <button onClick={() => setOpenBlock(null)} className={BLOCK_CLOSE_BTN} title="MAP を閉じる"><IconClose /></button>
-        </div>
-        {hasMap ? (
-          <MapContent onViewpointClick={onViewpointClick} />
-        ) : (
-          <div className="ds-empty">
-            このプランの図面はまだ設定されていません
-          </div>
-        )}
-      </div>
-    ) : null,
+    /* 図面はパネルではなく画面に据え置く常設オーバーレイ。開いたまま部屋を
+       歩けることが要るので、他の節と排他にする one-at-a-time には乗らない。 */
+    map: null,
   };
 
   // Order: the author's arrangement first, then any block added to the default
@@ -202,7 +192,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
         </button>
       </div>
 
-      {(railItems.length > 0 || showPinsToggle || showFullscreen) && (
+      {(railItems.length > 0 || showMap || showPinsToggle || showFullscreen) && (
         <div className="ds-rail" style={{ ...edgeStyle(railSide, RAIL_INSET, RAIL_TOP), ...railScroll }}>
           {railItems.map(({ id, label, Icon }) => (
             <button
@@ -221,8 +211,21 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
 
           {/* Switches, not sections: they act on the view rather than opening
               anything, so they sit below a rule at the foot of the rail. */}
-          {(showPinsToggle || showFullscreen) && railItems.length > 0 && (
+          {(showMap || showPinsToggle || showFullscreen) && railItems.length > 0 && (
             <div className="ds-rail__sep" />
+          )}
+          {showMap && (
+            <button
+              type="button"
+              className="ds-rail__item"
+              data-active={mapOpen || undefined}
+              aria-pressed={mapOpen}
+              title={mapOpen ? '図面を閉じる' : '図面を表示する'}
+              onClick={() => setMapOpen((v) => !v)}
+            >
+              <IconMap />
+              <span className="ds-rail__label">{isOther ? 'MAP' : '図面'}</span>
+            </button>
           )}
           {showPinsToggle && <PinsRailItem />}
           {showFullscreen && <FullscreenRailItem />}
@@ -236,6 +239,29 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
       )}
 
       <ViewpointBar onViewpointClick={onViewpointClick} />
+
+      {/* 左下。レールの幅ぶん内側に寄せてあるので、レールが左にある構成でも
+          下に潜り込まない。 */}
+      {showMap && mapOpen && (
+        <div
+          className="ds-map-overlay"
+          style={{
+            left: railSide === 'left' ? RAIL_PANEL_INSET : RAIL_INSET,
+            bottom: isPortrait ? 12 : 24,
+          }}
+        >
+          <div className="ds-map-overlay__head">
+            <span className="ds-label">{isOther ? 'MAP' : 'FLOOR MAP'}</span>
+            <div style={{ flex: 1 }} />
+            <button onClick={() => setMapOpen(false)} className={BLOCK_CLOSE_BTN} title="図面を閉じる"><IconClose /></button>
+          </div>
+          {hasMap ? (
+            <MapContent onViewpointClick={onViewpointClick} />
+          ) : (
+            <div className="ds-empty">このプランの図面はまだ設定されていません</div>
+          )}
+        </div>
+      )}
     </>
   );
 }
@@ -1965,7 +1991,6 @@ function collapsedHandleStyle(placement: SidebarPlacement): React.CSSProperties 
    ended up with `padding: 0` silently beating the component's own spacing. */
 const sidebarBlock: React.CSSProperties = {};
 
-const sidebarMapBlock: React.CSSProperties = { overflow: 'hidden' };
 
 
 const colorInlineToggles: React.CSSProperties = {
