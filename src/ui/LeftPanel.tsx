@@ -90,6 +90,34 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   /* 図面は独立。節を切り替えても出したままにできる。既定は閉 — 最初に見たい
      のは部屋そのもので、図面は「今どこか」を確かめたくなってから出す。 */
   const [mapOpen, setMapOpen] = useState(false);
+  /* 図面をレールの真下まで寄せられるか。レールが短くて図面の高さに届いて
+     いなければ左端まで寄せる。DOM を測って決めるので state で持つ。 */
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [mapHugsEdge, setMapHugsEdge] = useState(false);
+
+  /* Slide the plan out to the edge when the rail stops short of it.
+     Measured, not assumed: the rail's height is however many sections the
+     author turned on, and on a tall window a short rail leaves the whole
+     bottom left corner free.
+     A ResizeObserver rather than a measurement in the effect body — it fires
+     once on observe, which covers the first paint, and again whenever the rail
+     grows or the plan changes size. `left` does not affect either element's
+     height, so moving cannot feed back into the measurement. */
+  useEffect(() => {
+    const el = mapRef.current;
+    if (!el || placement !== 'left') return;
+    const measure = () => {
+      const rail = document.querySelector('.ds-rail')?.getBoundingClientRect();
+      const ov = el.getBoundingClientRect();
+      setMapHugsEdge(!rail || rail.bottom < ov.top - 8);
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const rail = document.querySelector('.ds-rail');
+    if (rail) ro.observe(rail);
+    window.addEventListener('resize', measure);
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure); };
+  }, [placement, mapOpen, showMap]);
 
   // Collapsed: render only a tiny floating button to bring the sidebar back.
   // 折りたたみハンドルの位置はサイドバーと同側に揃える (PC 左上 / スマホ縦 右下 / スマホ横 右上)。
@@ -168,6 +196,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
 
   const railSide: 'left' | 'right' = placement === 'left' ? 'left' : 'right';
 
+
   return (
     <>
       <div
@@ -245,8 +274,9 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
       {showMap && mapOpen && (
         <div
           className="ds-map-overlay"
+          ref={mapRef}
           style={{
-            left: railSide === 'left' ? RAIL_PANEL_INSET : RAIL_INSET,
+            left: railSide === 'left' && !mapHugsEdge ? RAIL_PANEL_INSET : RAIL_INSET,
             bottom: isPortrait ? 12 : 24,
           }}
         >
