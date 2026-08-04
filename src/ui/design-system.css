@@ -1147,6 +1147,17 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   padding: 10px 12px;
   border-radius: var(--ds-r-md);
 }
+/* Dense variant, for rows whose content is a single line. The standard 10px
+   is drawn for a two-line row, where it balances the block; on one line it
+   reads as a gap rather than as breathing room. Vertical only — the 12px
+   inset stays, so a tight row still lines up with the rows above it.
+   On a coarse pointer this is overridden back: the buttons inside are 44px
+   there and the padding is what keeps them from touching. */
+.ds-row--tight { padding-top: 5px; padding-bottom: 5px; }
+@media (pointer: coarse) {
+  .ds-row--tight { padding-top: 10px; padding-bottom: 10px; }
+}
+
 /* Receiving a file. Same family as the active state so the row says "I'll
    take this" without pretending to be selected. */
 .ds-row[data-drop='true'] {

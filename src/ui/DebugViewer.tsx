@@ -1368,7 +1368,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                     return (
                       <div
                         key={p.id}
-                        className={rowClass(isActive)}
+                        className={`${rowClass(isActive)} ds-row--tight`}
                         data-drop={isPlanDragOver || undefined}
                         onDragOver={(e) => handlePlanRowDragOver(e, p.id)}
                         onDragLeave={handlePlanRowDragLeave}
@@ -1383,7 +1383,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           title={isActive ? '使用中' : 'このプランに切替'}
                           disabled={isBusy}
                         />
-                        <div style={{ flex: 1, minWidth: 0 }}>
+                        {/* Name and counts share one line. A plan row is scanned
+                            for "which plan am I on", not read, so the second
+                            line was costing height without earning it. The meta
+                            gives up its width first — the label is the
+                            identity, the counts are a glance. */}
+                        <div style={S.planMain}>
                           {isEditing ? (
                             <input
                               type="text" value={editPlanLabel}
@@ -1393,27 +1398,29 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                               autoFocus style={S.inputInline}
                             />
                           ) : (
-                            <div onClick={() => switchPlan(p.id)} className="ds-title" style={S.vpLabel}>
-                              {p.label}
-                            </div>
+                            <>
+                              <div onClick={() => switchPlan(p.id)} className="ds-title" style={S.planLabel}>
+                                {p.label}
+                              </div>
+                              <div style={S.planMeta}>
+                                {isVRMode ? (
+                                  <>
+                                    <span>VR視点 {planVpCount}</span>
+                                    <span style={S.vpMetaSep}>·</span>
+                                    <span>画像 {panoCount}/{planVpCount}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>splat {splatLabel}</span>
+                                    <span style={S.vpMetaSep}>·</span>
+                                    <span>視点 {planVpCount}</span>
+                                    <span style={S.vpMetaSep}>·</span>
+                                    <span>360 {panoCount}/{planVpCount}</span>
+                                  </>
+                                )}
+                              </div>
+                            </>
                           )}
-                          <div style={S.vpMeta}>
-                            {isVRMode ? (
-                              <>
-                                <span>VR視点 {planVpCount}</span>
-                                <span style={S.vpMetaSep}>·</span>
-                                <span>画像 {panoCount}/{planVpCount}</span>
-                              </>
-                            ) : (
-                              <>
-                                <span>splat {splatLabel}</span>
-                                <span style={S.vpMetaSep}>·</span>
-                                <span>視点 {planVpCount}</span>
-                                <span style={S.vpMetaSep}>·</span>
-                                <span>360 {panoCount}/{planVpCount}</span>
-                              </>
-                            )}
-                          </div>
                         </div>
                         <div style={S.vpActions}>
                           {!isVRMode && (
@@ -5065,6 +5072,23 @@ const S: Record<string, React.CSSProperties> = {
   },
   vpMetaSep: { opacity: 0.4 },
   vpActions: { display: 'flex', gap: 2, flexShrink: 0 },
+
+  /* Plan rows only — the viewpoint list keeps its two-line form, where the
+     second line carries coordinates you actually read. */
+  planMain: {
+    flex: 1, minWidth: 0,
+    display: 'flex', alignItems: 'baseline', gap: 8,
+  },
+  planLabel: {
+    flex: '0 1 auto', minWidth: 0,
+    cursor: 'pointer',
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  planMeta: {
+    flex: '1 1 auto', minWidth: 0,
+    display: 'flex', alignItems: 'baseline', gap: 6,
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
 
   toggle: { userSelect: 'none', padding: '4px 0' },
   subTitle: {
