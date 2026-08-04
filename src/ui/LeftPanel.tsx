@@ -450,6 +450,9 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
   const liveYaw = useCameraStore((s) => s.yaw);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [imgFailed, setImgFailed] = useState(false);
+  /* 図面は「今どこか」を読むものなので、部屋名が読める大きさが要る。狭い画面
+     では画面幅に負けるので一段落とす — オーバーレイは左右に固定余白を持つ。 */
+  const narrow = useMediaQuery('(max-width: 560px)');
 
   const activePlan = manifest?.plans?.find((p) => p.id === activePlanId);
   const floorPlan = activePlan?.floorPlan;
@@ -488,7 +491,7 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
     );
   }
 
-  const size = 280;
+  const size = narrow ? 268 : 364;
   const worldW = floorPlan.bounds.max[0] - floorPlan.bounds.min[0];
   const worldH = floorPlan.bounds.max[1] - floorPlan.bounds.min[1];
   const aspect = imgSize ? imgSize.w / imgSize.h : worldW / worldH;
