@@ -1399,10 +1399,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                             />
                           ) : (
                             <>
-                              <div onClick={() => switchPlan(p.id)} className="ds-title" style={S.planLabel}>
+                              <div onClick={() => switchPlan(p.id)} className="ds-body" style={S.planLabel}>
                                 {p.label}
                               </div>
-                              <div style={S.planMeta}>
+                              <div className="ds-hint" style={S.planMeta}>
                                 {isVRMode ? (
                                   <>
                                     <span>VR視点 {planVpCount}</span>
@@ -5092,13 +5092,17 @@ const S: Record<string, React.CSSProperties> = {
     flex: 1, minWidth: 0,
     display: 'flex', alignItems: 'baseline', gap: 8,
   },
+  /* Basis `auto` against the meta's `0`: the name is measured from its own
+     text and keeps that width, and the meta lives on whatever is left. With
+     both at `auto` a long SOG filename bid for the same space and squeezed the
+     name down to デフォ…, which is the one part of the row you cannot lose. */
   planLabel: {
-    flex: '0 1 auto', minWidth: 0,
+    flex: '0 1 auto', minWidth: '4.5em',
     cursor: 'pointer',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   planMeta: {
-    flex: '1 1 auto', minWidth: 0,
+    flex: '1 1 0', minWidth: 0,
     display: 'flex', alignItems: 'baseline', gap: 6,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
