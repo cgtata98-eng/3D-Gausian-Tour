@@ -1393,7 +1393,7 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   -webkit-backdrop-filter: blur(18px) saturate(150%);
           backdrop-filter: blur(18px) saturate(150%);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14), 0 16px 40px rgba(0, 0, 0, 0.22);
-  color: var(--ds-text);
+  color: #fff;
   font-family: var(--ds-font);
   z-index: 6;
 }
@@ -1401,6 +1401,35 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
    second title bar above them would say the same word twice. The block's ×
    closes the panel, because the rail reads the same hidden-section state. */
 .ds-rail-panel__body { overflow-y: auto; overscroll-behavior: contain; }
+
+/* ── Ink on the glass ────────────────────────────────────────────────────
+   Anything lying directly on the panel goes white. The muted text classes
+   carry their own `color`, so inheriting from the panel is not enough — they
+   have to be named. The shadow is what keeps them off a bright wall.
+   ──────────────────────────────────────────────────────────────────────── */
+.ds-rail-panel .ds-label,
+.ds-rail-panel .ds-sub,
+.ds-rail-panel .ds-hint,
+.ds-rail-panel .ds-body,
+.ds-rail-panel .ds-title,
+.ds-rail-panel .ds-field-label,
+.ds-rail-panel .ds-empty {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+/* Controls are the exception, and they have to be, because they paint their
+   own light ground: a pill, a select and a field are all white slabs, and
+   white ink on them is an invisible control. Everything INSIDE one goes back
+   to the normal text colour — including the labels nested in a button, which
+   is where a blanket rule would have gone wrong. `.ds-surface` is in the list
+   for the same reason and was found the same way: the amber "API キーが未設定"
+   strip is a light slab, and white text on it disappeared. */
+.ds-rail-panel :is(input, select, textarea, button, .ds-surface, .ds-well, .ds-card, .ds-tile, .ds-block),
+.ds-rail-panel :is(input, select, textarea, button, .ds-surface, .ds-well, .ds-card, .ds-tile, .ds-block)
+  :is(.ds-label, .ds-sub, .ds-hint, .ds-body, .ds-title, .ds-field-label, .ds-empty) {
+  color: var(--ds-text);
+  text-shadow: none;
+}
 
 .ds-scene {
   position: relative;
