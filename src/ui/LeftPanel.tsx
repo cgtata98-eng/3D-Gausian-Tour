@@ -180,16 +180,25 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
 
   return (
     <>
-      <div className="ds-rail-title" style={edgeStyle(railSide, RAIL_INSET, RAIL_INSET)}>
-        <span className="ds-rail-title__name">{sceneName}</span>
-        <div style={{ flex: 1 }} />
-        {manifest?.audio && <AmbientAudioToggle />}
-        <button onClick={() => setSidebarCollapsed(true)} className={TITLE_ICON_BTN} title="サイドバーを閉じる (ビューを最大化)">
-          <span style={titleIconGlyph}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
-              <path d={railSide === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
-            </svg>
-          </span>
+      <div
+        className="ds-rail-titlebar"
+        data-side={railSide}
+        style={edgeStyle(railSide, RAIL_INSET, RAIL_INSET)}
+      >
+        <div className="ds-rail-title">
+          <span className="ds-rail-title__name">{sceneName}</span>
+          {manifest?.audio && <AmbientAudioToggle />}
+        </div>
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed(true)}
+          className="ds-rail-fold"
+          title="サイドバーを閉じる (ビューを最大化)"
+          aria-label="サイドバーを閉じる"
+        >
+          <svg className="ds-icon" viewBox="0 0 24 24">
+            <path d={railSide === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
+          </svg>
         </button>
       </div>
 

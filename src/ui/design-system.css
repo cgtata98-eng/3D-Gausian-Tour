@@ -1306,32 +1306,72 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   background: rgba(255, 255, 255, 0.38);
 }
 
-/* The project name. Not iconised — it is the one label that names the whole
-   thing rather than a section of it, so it keeps its words. */
-.ds-rail-title {
+/* The project name, and beside it — not inside it — the fold control.
+   The chevron acts on the whole rail, not on the title, so sitting within the
+   name's own chip made it read as part of the name. */
+.ds-rail-titlebar {
   position: absolute;
   display: flex;
   align-items: center;
-  gap: 6px;
-  max-width: min(420px, calc(100vw - 48px));
-  padding: 8px 10px 8px 14px;
-  border-radius: 18px;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  z-index: 6;
+}
+.ds-rail-titlebar[data-side='right'] { flex-direction: row-reverse; }
+
+.ds-rail-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: min(420px, calc(100vw - 96px));
+  padding: 9px 16px;
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.22);
   -webkit-backdrop-filter: blur(18px) saturate(150%);
           backdrop-filter: blur(18px) saturate(150%);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14), 0 12px 32px rgba(0, 0, 0, 0.18);
   color: #fff;
-  z-index: 6;
 }
+/* Larger than `--ds-fs-lg`: this is the one piece of type on the viewer that
+   names the whole thing, and at 13px it was the same size as a section label
+   inside a panel. */
 .ds-rail-title__name {
   font-family: var(--ds-font);
-  font-size: var(--ds-fs-lg);
+  font-size: 17px;
   font-weight: var(--ds-fw);
   letter-spacing: var(--ds-tracking);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Its own glass disc, matching the bar it folds. */
+.ds-rail-fold {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+          backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14), 0 12px 32px rgba(0, 0, 0, 0.18);
+  color: #fff;
+  cursor: pointer;
+  outline: none;
+  transition: background-color var(--ds-dur) var(--ds-ease);
+}
+.ds-rail-fold:hover { background-color: rgba(255, 255, 255, 0.34); }
+.ds-rail-fold .ds-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.6;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 
 /* The open section. White again on purpose: this holds real controls —
@@ -1345,9 +1385,15 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   max-width: calc(100vw - 110px);
   border-radius: 18px;
   overflow: hidden;
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.94) 100%);
-  -webkit-backdrop-filter: var(--ds-backdrop-scene);
-          backdrop-filter: var(--ds-backdrop-scene);
+  /* Glass, like the rail. It was opaque white so the controls inside would sit
+     on the light ground they are drawn for, but a white slab beside a frosted
+     bar reads as a different material bolted on. Held at a heavier white than
+     the rail's 0.22 and given more blur: this panel carries fields and labels
+     in dark ink, and at the rail's alpha a bright room shows straight through
+     the text. */
+  background: rgba(255, 255, 255, 0.58);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+          backdrop-filter: blur(28px) saturate(160%);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14), 0 16px 40px rgba(0, 0, 0, 0.22);
   color: var(--ds-text);
   font-family: var(--ds-font);
