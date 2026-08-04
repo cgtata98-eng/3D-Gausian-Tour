@@ -1,4 +1,4 @@
-export type AppMode = 'viewer' | 'debug' | 'project';
+export type AppMode = 'viewer' | 'debug' | 'project' | 'migrate';
 
 interface ParsedRoute {
   mode: AppMode;
@@ -20,6 +20,10 @@ export function parseRoute(): ParsedRoute {
   // /scene/{sceneId} — debug authoring view
   const sceneMatch = path.match(/^\/scene\/([^/]+)/);
   if (sceneMatch) return { mode: 'debug', sceneId: sceneMatch[1] };
+
+  // /migrate — cross-origin transfer of the authoring data. `?source=1` marks
+  // the window that hands its data over; see `ui/MigrateScreen.tsx`.
+  if (/^\/migrate\/?$/.test(path)) return { mode: 'migrate', sceneId: '' };
 
   // Anything else falls back to the project list.
   return { mode: 'project', sceneId: '' };

@@ -71,6 +71,20 @@ export function deleteBlob(key: string): Promise<void> {
   return withStore<void>(STORE_BLOBS, 'readwrite', (s) => s.delete(key));
 }
 
+/** List every sceneId that has a stored manifest. Used by the cross-origin
+ *  migration to enumerate what needs copying. */
+export function listManifestKeys(): Promise<string[]> {
+  return openDb().then((db) =>
+    new Promise<string[]>((resolve, reject) => {
+      const tx = db.transaction(STORE_MANIFESTS, 'readonly');
+      const req = tx.objectStore(STORE_MANIFESTS).getAllKeys();
+      req.onsuccess = () =>
+        resolve((req.result as IDBValidKey[]).filter((k): k is string => typeof k === 'string'));
+      req.onerror = () => reject(req.error);
+    }),
+  );
+}
+
 /** List blob keys that start with the given prefix. Used by SOG load to find all
  *  files belonging to a plan (`splat:<scene>:<plan>:sog:<filename>`). */
 export function listBlobKeys(prefix?: string): Promise<string[]> {

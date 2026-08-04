@@ -3,6 +3,7 @@ import { Viewer } from './ui/Viewer';
 import { DebugViewer } from './ui/DebugViewer';
 import { ProjectScreen } from './ui/ProjectScreen';
 import { MirrorReceive } from './ui/MirrorReceive';
+import { MigrateScreen } from './ui/MigrateScreen';
 import { parseRoute, migrateHashToPath } from './utils/url';
 import { useUIStore } from './store/ui-store';
 import { AuthGate } from './ui/AuthGate';
@@ -38,6 +39,13 @@ function App() {
   // Public route: viewer is always reachable so customer URLs keep working.
   if (route.mode === 'viewer') {
     return <Viewer sceneId={route.sceneId} />;
+  }
+  // Migration. The source window is opened programmatically by the receiving
+  // origin, so it cannot sit behind AuthGate — a login prompt there would
+  // strand the handshake. It only ever posts to an allow-listed opener.
+  if (route.mode === 'migrate') {
+    const isSource = new URLSearchParams(window.location.search).get('source') === '1';
+    return isSource ? <MigrateScreen /> : <AuthGate><MigrateScreen /></AuthGate>;
   }
   // Admin / debug routes are gated by simple ID + password.
   if (route.mode === 'project') {
