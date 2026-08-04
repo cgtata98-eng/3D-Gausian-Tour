@@ -10,10 +10,19 @@
   // - `r2_buckets` exposes the existing `cg-gaussian-assets` bucket as the
   //   `BUCKET` binding so the Worker can `put` / `delete` directly without
   //   needing R2 API tokens.
+  //
+  // `workers_dev: false` retires `cg-gaussian.iucgs.workers.dev`. The site is
+  // served from the custom domain (cg-rooms.com), which is a separate route and
+  // is unaffected — the workers.dev subdomain was only ever the pre-domain URL,
+  // and leaving it up meant a second origin with its own localStorage /
+  // IndexedDB jar for authoring data to get stranded in. `preview_urls: false`
+  // closes the per-version `*.workers.dev` URLs for the same reason.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cg-gaussian",
   "compatibility_date": "2026-05-05",
   "main": "src/worker/index.ts",
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
