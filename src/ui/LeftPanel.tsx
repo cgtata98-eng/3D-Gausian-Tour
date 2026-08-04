@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSceneStore } from '../store/scene-store';
 import { useCameraStore } from '../store/camera-store';
 import { useUIStore, type SidebarSection } from '../store/ui-store';
@@ -446,6 +446,7 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
   const viewpoints = activePlan?.viewpoints ?? [];
 
   return (
+    <MapZoom width={dW} height={dH}>
     <div className="ds-mapframe" style={{ width: dW, height: dH }}>
       {hasImage && <img src={imageUrl} alt="" style={{ position: 'absolute', top: 0, left: 0, width: dW, height: dH, objectFit: 'fill', display: 'block' }} />}
       <svg width={dW} height={dH} viewBox={`0 0 ${dW} ${dH}`} style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible' }}>
@@ -497,6 +498,149 @@ function MapContent({ onViewpointClick }: { onViewpointClick: (id: string) => vo
           );
         })}
       </svg>
+    </div>
+    </MapZoom>
+  );
+}
+
+/**
+ * Pan / zoom wrapper for the floor plan.
+ *
+ * The map arrives sized to fit the panel, which is fine for "where am I" and
+ * useless for reading a room name. Wheel zooms about the cursor, drag pans,
+ * two fingers pinch, double click returns to fit.
+ *
+ * The wheel listener is attached by hand rather than through `onWheel`: React
+ * routes wheel through a passive root listener, so `preventDefault` there is
+ * ignored and the panel scrolls away underneath while you zoom.
+ */
+const MAP_ZOOM_MAX = 8;
+
+function MapZoom({ width, height, children }: {
+  width: number; height: number; children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [panning, setPanning] = useState(false);
+  // Live pointers, for the pinch. A ref because the gesture must not re-render
+  // per move event just to remember where the fingers are.
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ dist: number; zoom: number } | null>(null);
+  const dragRef = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null);
+
+  /** Keep the content covering the frame: at 1× there is nothing to pan.
+   *  Memoised because the wheel listener depends on it, and a fresh closure
+   *  every render would tear down and re-add that listener every render. */
+  const clamp = useCallback((z: number, p: { x: number; y: number }) => ({
+    x: Math.min(0, Math.max(-(z - 1) * width, p.x)),
+    y: Math.min(0, Math.max(-(z - 1) * height, p.y)),
+  }), [width, height]);
+
+  /** Zoom about a point in frame coordinates, holding that point still.
+   *  With `transform-origin: 0 0` and `translate(pan) scale(z)`, a content
+   *  point c lands at pan + c·z, so holding c means pan' = p − (p − pan)·z'/z. */
+  const zoomAbout = (nextZoomRaw: number, px: number, py: number) => {
+    setZoom((z) => {
+      const next = Math.min(MAP_ZOOM_MAX, Math.max(1, nextZoomRaw));
+      setPan((p) => (next === 1
+        ? { x: 0, y: 0 }
+        : clamp(next, { x: px - (px - p.x) * (next / z), y: py - (py - p.y) * (next / z) })));
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      // Exponential, so each notch feels the same at any magnification.
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      setZoom((z) => {
+        const next = Math.min(MAP_ZOOM_MAX, Math.max(1, z * factor));
+        const px = e.clientX - r.left, py = e.clientY - r.top;
+        setPan((p) => (next === 1
+          ? { x: 0, y: 0 }
+          : clamp(next, { x: px - (px - p.x) * (next / z), y: py - (py - p.y) * (next / z) })));
+        return next;
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [clamp]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinchRef.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom };
+      dragRef.current = null;
+      setPanning(false);
+      return;
+    }
+    if (zoom > 1) {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      dragRef.current = { x: e.clientX, y: e.clientY, pan };
+      setPanning(true);
+    }
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.current.size === 2 && pinchRef.current) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      const r = ref.current?.getBoundingClientRect();
+      if (!r || !pinchRef.current.dist) return;
+      zoomAbout(
+        pinchRef.current.zoom * (dist / pinchRef.current.dist),
+        (a.x + b.x) / 2 - r.left,
+        (a.y + b.y) / 2 - r.top,
+      );
+      return;
+    }
+    const d = dragRef.current;
+    if (!d) return;
+    setPan(clamp(zoom, { x: d.pan.x + (e.clientX - d.x), y: d.pan.y + (e.clientY - d.y) }));
+  };
+
+  const endPointer = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinchRef.current = null;
+    if (pointers.current.size === 0) { dragRef.current = null; setPanning(false); }
+  };
+
+  const reset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+
+  return (
+    <div
+      ref={ref}
+      className="ds-mapzoom"
+      data-panning={panning || undefined}
+      data-zoomed={zoom > 1 || undefined}
+      style={{ width, height }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endPointer}
+      onPointerCancel={endPointer}
+      onDoubleClick={reset}
+      title="ホイールで拡大 / ドラッグで移動 / ダブルクリックで戻す"
+    >
+      <div
+        className="ds-mapzoom__inner"
+        style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
+      >
+        {children}
+      </div>
+      {zoom > 1 && (
+        <button type="button" className="ds-mapzoom__reset" onClick={reset} title="等倍に戻す">
+          {zoom.toFixed(1)}× ↺
+        </button>
+      )}
     </div>
   );
 }
