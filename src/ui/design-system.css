@@ -1385,15 +1385,13 @@ span.ds-surface:hover, div.ds-surface:not(.ds-card--hoverable):hover { transform
   max-width: calc(100vw - 110px);
   border-radius: 18px;
   overflow: hidden;
-  /* Glass, like the rail. It was opaque white so the controls inside would sit
-     on the light ground they are drawn for, but a white slab beside a frosted
-     bar reads as a different material bolted on. Held at a heavier white than
-     the rail's 0.22 and given more blur: this panel carries fields and labels
-     in dark ink, and at the rail's alpha a bright room shows straight through
-     the text. */
-  background: rgba(255, 255, 255, 0.58);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-          backdrop-filter: blur(28px) saturate(160%);
+  /* Exactly the rail's glass — same white, same blur. The panel was held at a
+     heavier 0.58 so its dark-ink labels kept their contrast, but that made it
+     a second material sitting beside the bar. One glass throughout was the
+     call; the labels inside are the thing to watch on a bright room. */
+  background: rgba(255, 255, 255, 0.22);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+          backdrop-filter: blur(18px) saturate(150%);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14), 0 16px 40px rgba(0, 0, 0, 0.22);
   color: var(--ds-text);
   font-family: var(--ds-font);
