@@ -153,6 +153,23 @@ export const IconFullscreen = svg(<path d="M3.4 8.6V3.4h5.2M20.6 8.6V3.4h-5.2M3.
 export const IconFullscreenExit = svg(
   <path d="M8.6 3.4v5.2H3.4M15.4 3.4v5.2h5.2M8.6 20.6v-5.2H3.4M15.4 20.6v-5.2h5.2" />,
 );
+/** Ambient audio, playing. Drawn on the same 24-grid as the rest: the speaker
+ *  body reaches the same height as `IconMap`'s, so the two sit level in the
+ *  rail without either looking undersized. */
+export const IconVolumeOn = svg(
+  <>
+    <path d="M11.4 4.6L6.6 8.6H3.2v6.8h3.4l4.8 4z" />
+    <path d="M15.4 9a4.2 4.2 0 0 1 0 6M18.2 6a8.2 8.2 0 0 1 0 12" />
+  </>,
+);
+/** Muted. The cross rather than a struck-through speaker: at rail size a
+ *  diagonal over the whole mark reads as a disabled icon, not as "no sound". */
+export const IconVolumeOff = svg(
+  <>
+    <path d="M11.4 4.6L6.6 8.6H3.2v6.8h3.4l4.8 4z" />
+    <path d="M16 9.6l5 4.8M21 9.6l-5 4.8" />
+  </>,
+);
 /** Render quality — signal steps. */
 export const IconQuality = svg(
   <>
