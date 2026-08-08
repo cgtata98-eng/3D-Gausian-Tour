@@ -46,16 +46,14 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   // 制作者が Debug → ツールバー表示 で消した項目はそもそも DOM に出さない。
   // 既定 (= undefined) は表示扱い。
   const tb = manifest?.viewerToolbar ?? {};
-  // サイドバーサイズ — 'large' (既定: 全高表示) / 'small' (内容の高さ分だけに縮める。幅は同じ 320)。
-  // 表示する項目は両モード共通。`small` は純粋にパネルの縦サイズのみ変える。
-  // Default flipped to 'small' — keeps the panel compact unless the
-  // author explicitly opts into the full-height "大" preset.
   // スマホ配置: 縦向き → 右下フロート (left ジョイスティックと干渉しない幅にクランプ)、
   // 横向き → 右側フル高。デスクトップは従来通り左側。`useTouchDevice` を先に評価して
   // mobile placement だけが上書きとして効くようにする。
   const isTouchDevice = useTouchDevice();
   const isPortrait = usePortraitOrientation();
   const placement: SidebarPlacement = !isTouchDevice ? 'left' : (isPortrait ? 'portrait' : 'right');
+  // 環境音アイコンの居場所を決めるため、下のシーンバーが今出ているかを見る。
+  const sceneBarVisible = useSceneBarVisible();
   // 既定はすべて OFF（顧客向けに最小限の UI を配信したい想定）。制作者が Debug →
   // ツールバー表示で必要な項目を明示的にチェックして出します。
   // 例外: `quality` だけは既定 ON — 描画品質はビューア側で見る人の端末性能に応じて
@@ -206,7 +204,10 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
       >
         <div className="ds-rail-title">
           <span className="ds-rail-title__name">{sceneName}</span>
-          {manifest?.audio && <AmbientAudioToggle />}
+          {/* 環境音は本来シーンバー側 (画の下) に置く。バーが出ていない構成
+              — 視点なし / product / 畳んである — でだけ、ここに戻す。
+              両方に出すと同じスイッチが画面に二つ並ぶ。 */}
+          {!sceneBarVisible && <AmbientAudioToggle />}
         </div>
         <button
           type="button"
@@ -307,6 +308,25 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
  * rendered from two places (with the sidebar open and with it folded away),
  * and folding the sidebar must not take the scene picker with it.
  */
+/**
+ * Whether the bottom scene bar is on screen right now.
+ *
+ * Shared by the bar and by the title row, which hosts the ambient-audio icon
+ * only while the bar is absent. Written once so the two cannot disagree and
+ * leave the viewer with two speaker buttons — or none.
+ */
+function useSceneBarVisible(): boolean {
+  const tb = useSceneStore((s) => s.manifest?.viewerToolbar);
+  const projectType = useUIStore((s) => s.projectType);
+  const hiddenSections = useUIStore((s) => s.hiddenSections);
+  const manifest = useSceneStore((s) => s.manifest);
+  const activePlanId = useSceneStore((s) => s.activePlanId);
+  if (tb?.viewpoints !== true || projectType === 'product') return false;
+  if (hiddenSections.includes('viewpoints')) return false;
+  const plan = manifest?.plans?.find((p) => p.id === activePlanId);
+  return (plan?.viewpoints.length ?? 0) > 0;
+}
+
 function ViewpointBar({ onViewpointClick }: { onViewpointClick: (id: string) => void }) {
   const tb = useSceneStore((s) => s.manifest?.viewerToolbar);
   const projectType = useUIStore((s) => s.projectType);
@@ -374,6 +394,7 @@ function SceneStrip({ onViewpointClick, bottom }: {
   const activeVp = useCameraStore((s) => s.activeViewpoint);
   const railRef = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
+  const audioAvailable = useAmbientAudioAvailable();
 
   const activePlan = manifest?.plans?.find((p) => p.id === activePlanId);
   const viewpoints = activePlan?.viewpoints ?? [];
@@ -424,6 +445,14 @@ function SceneStrip({ onViewpointClick, bottom }: {
         <button type="button" className="ds-scene-nav" onClick={() => page(1)} title="次へ" aria-label="次へ">
           <svg className="ds-icon" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
         </button>
+      )}
+      {/* 環境音。行き先を選ぶボタン群とは種類が違う操作なので、細い罫で区切って
+          バーの端に置く。 */}
+      {audioAvailable && (
+        <>
+          <span className="ds-scene-bar__sep" />
+          <AmbientAudioToggle variant="bar" />
+        </>
       )}
     </div>
   );
@@ -1835,21 +1864,36 @@ function SegmentedToggle<T extends string>(props: { value: T; onChange: (v: T) =
 
 // ── Fullscreen ────────────────────────────────────────────────────
 
-/** Speaker icon button in the sidebar title row — toggles ambient audio mute.
- *  Available in both 3DGS and panorama modes (BGM is mode-independent). The
- *  author can still hide the icon via Debug → ツールバー表示 → 環境音アイコン. */
-function AmbientAudioToggle() {
+/** 環境音アイコンを出せるか — 音源があり、かつ制作者が
+ *  Debug → ツールバー表示 → 環境音アイコン で opt-in している。 */
+function useAmbientAudioAvailable(): boolean {
+  const hasAudio = useSceneStore((s) => !!s.manifest?.audio);
+  const allowed = useSceneStore((s) => s.manifest?.viewerToolbar?.audio) === true;
+  return hasAudio && allowed;
+}
+
+/** Speaker icon button — toggles ambient audio mute. Available in both 3DGS and
+ *  panorama modes (BGM is mode-independent).
+ *
+ *  Two dresses, one switch: `bar` is the bare white glyph the scene bar's own
+ *  arrows wear (the bar already supplies the glass), `title` the small filled
+ *  pill of the title row. */
+function AmbientAudioToggle({ variant = 'title' }: { variant?: 'title' | 'bar' }) {
   const muted = useUIStore((s) => s.audioMuted);
   const setMuted = useUIStore((s) => s.setAudioMuted);
-  const allowed = useSceneStore((s) => s.manifest?.viewerToolbar?.audio) === true;
-  if (!allowed) return null;
+  const available = useAmbientAudioAvailable();
+  if (!available) return null;
+  const isBar = variant === 'bar';
   return (
     <button
+      type="button"
       onClick={() => setMuted(!muted)}
-      className={TITLE_ICON_BTN}
+      className={isBar ? 'ds-scene-audio' : TITLE_ICON_BTN}
       title={muted ? '環境音を再生' : '環境音をミュート'}
+      aria-label={muted ? '環境音を再生' : '環境音をミュート'}
+      aria-pressed={muted}
     >
-      <span style={titleIconGlyph}>
+      <span style={isBar ? barIconGlyph : titleIconGlyph}>
         {muted ? (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
             <path d="M11 5L6 9H2v6h4l5 4z" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" />
@@ -1916,14 +1960,7 @@ function FullscreenRailItem() {
 // ── styles ────────────────────────────────────────────────────────
 
 
-/**
- * Resolve the sidebar's outer style for the size preset.
- *
- * - `large` — fills the viewport top-to-bottom (`top:0; bottom:0`). Default.
- * - `small` — same 320px width, but shrinks vertically to fit its content
- *   (no `bottom`, `height: auto`). The bottom edge floats with a soft shadow so
- *   the panel reads as a card rather than a full-height bar.
- */
+/** Which edge the rail and its panel sit against. */
 type SidebarPlacement = 'left' | 'right' | 'portrait';
 
 /* ── Rail geometry ───────────────────────────────────────────────────────
@@ -1994,6 +2031,14 @@ const COLLAPSED_HANDLE = `${surfaceClass('plain')} ds-overlay ds-overlay--pill d
 const titleIconGlyph: React.CSSProperties = {
   width: 16,
   height: 16,
+  display: 'inline-flex',
+};
+
+/** The same glyph on the scene bar, where it stands alone on the picture
+ *  rather than inside a pill and needs the size the paging arrows have. */
+const barIconGlyph: React.CSSProperties = {
+  width: 22,
+  height: 22,
   display: 'inline-flex',
 };
 

@@ -3400,8 +3400,7 @@ function VisRow({ label, checked, onChange, disabled = false }: { label: string;
  */
 type ToolbarKey = 'type' | 'overview' | 'viewpoints' | 'color' | 'map' | 'audio' | 'fullscreen' | 'movement' | 'demo' | 'quality' | 'aiGenerate' | 'pins';
 type ToolbarOrderPatch = { order?: OrderableSidebarBlock[] };
-type SidebarSizeOpt = 'large' | 'small';
-type ToolbarPatch = Partial<Record<ToolbarKey, boolean>> & { size?: SidebarSizeOpt } & ToolbarOrderPatch;
+type ToolbarPatch = Partial<Record<ToolbarKey, boolean>> & ToolbarOrderPatch;
 
 function ViewerToolbarSection({
   tb,
@@ -3412,7 +3411,7 @@ function ViewerToolbarSection({
   onReset,
   onToggleVariant,
 }: {
-  tb: Partial<Record<ToolbarKey, boolean>> & { size?: SidebarSizeOpt; order?: OrderableSidebarBlock[] };
+  tb: Partial<Record<ToolbarKey, boolean>> & { order?: OrderableSidebarBlock[] };
   isOtherProject: boolean;
   isVRMode: boolean;
   variants?: { furniture?: boolean; lighting?: boolean };
@@ -3432,21 +3431,9 @@ function ViewerToolbarSection({
         薄く表示されている項目は、現在のプロジェクト種別 / モードでは元から出ない項目です。
       </div>
 
-      <div className="ds-label" style={S.toolbarGroupHead}>サイドバーサイズ</div>
-      {/* Default is "small" — fits more content on the screen and avoids the
-          empty bottom that "large" leaves on short panels. */}
-      <PillToggle
-        value={tb.size ?? 'small'}
-        onChange={(size) => onChange({ size })}
-        options={[
-          { value: 'small', title: '小', sub: '内容の高さ分のみ (既定)' },
-          { value: 'large', title: '大', sub: '全高表示' },
-        ]}
-        style={{ marginTop: 4 }}
-      />
-      <div className="ds-hint" style={{ marginTop: 6 }}>
-        どちらも幅は 320px。「小」は表示中のセクション分だけ縦に伸びます。
-      </div>
+      {/* 「サイドバーサイズ (小 / 大)」はここにあったが削除。全高スラブだった頃の
+          設定で、レール + 一枚パネルになった今はどちらを選んでも同じ絵になる —
+          何も起きない選択肢を残しておくほうが害。 */}
 
       <div className="ds-label" style={S.toolbarGroupHead}>サイドバー</div>
       {/* A grid, because `.ds-check` is inline-flex: written one per line in
@@ -3986,13 +3973,16 @@ function VideoTabPanel(props: {
   const movementMode = useUIStore((s) => s.movementMode);
   const setMovementMode = useUIStore((s) => s.setMovementMode);
   const movementLocked = props.recState !== 'idle' || props.freeRecState === 'starting' || props.freeRecState === 'stopping';
+  /** 録画方式は撮り始めたら変えられない — 撮影の途中で経路と画面録画を入れ替える意味がない。 */
+  const modeLocked = props.recState !== 'idle' || props.freeRecState !== 'idle';
 
   return (
     <Section title="動画" subtitle="VIDEO" defaultOpen={true}>
-      {/* movement mode (walk / fly) — locked while a path recording / countdown is mid-flow.
-          Both of these rows were segmented controls rebuilt by hand: a glass tray,
-          transparent segments and an accent recipe on the active one. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+      {/* 移動モードと録画方式は同じ一行。どちらも「これから撮るものが何になるか」
+          を決める設定で、段に分けると無関係な設定が二つあるように見えていた。
+          録画方式が二段ピル (タイトル + 説明) のままでは横に並ぶ幅がないので、
+          説明はツールチップへ移して一段のセグメントに揃える。 */}
+      <div style={S.videoModeRow}>
         <span className="ds-label">移動モード</span>
         <SegmentedControl
           value={movementMode}
@@ -4002,18 +3992,18 @@ function VideoTabPanel(props: {
             { id: 'fly', label: 'フライ', disabled: movementLocked },
           ]}
         />
+        <SegmentedControl
+          value={props.mode}
+          onChange={props.setMode}
+          /* 撮影中は「今のモード」だけ押せるまま残す — 全部 disabled にすると
+             どちらで撮っているのかが薄くなって読めない。 */
+          options={[
+            { id: 'path', label: 'scene 補間', title: 'カメラ位置を補間して動画化', disabled: modeLocked && props.mode !== 'path' },
+            { id: 'free', label: '画面操作', title: '操作画面をそのまま録画', disabled: modeLocked && props.mode !== 'free' },
+          ]}
+          style={S.videoModeSeg}
+        />
       </div>
-
-      {/* mode tabs */}
-      <PillToggle
-        value={props.mode}
-        onChange={props.setMode}
-        options={[
-          { value: 'path', title: 'scene 補間', sub: 'カメラ位置を補間して動画化', disabled: props.recState !== 'idle' || props.freeRecState !== 'idle' },
-          { value: 'free', title: '画面操作', sub: '操作画面をそのまま録画', disabled: props.recState !== 'idle' || props.freeRecState !== 'idle' },
-        ]}
-        style={{ marginBottom: 10 }}
-      />
 
       {props.mode === 'path' ? <PathRecordingPanel {...props} /> : <FreeRecordingPanel {...props} />}
 
@@ -5296,6 +5286,18 @@ const S: Record<string, React.CSSProperties> = {
   planPillsLabel: { marginRight: 2, paddingLeft: 4 },
   modeRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
   modeHint: { marginTop: 8 },
+  /* 移動モード + 録画方式の一行。`wrap` は保険 — パネルが狭い構成では二段に
+     折り返して、はみ出したまま切れることがないようにする。 */
+  videoModeRow: {
+    display: 'flex' as const,
+    flexWrap: 'wrap' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    rowGap: 6,
+    marginBottom: 10,
+  },
+  /* 二つのセグメントが地続きに見えないよう、行の gap より少しだけ広く空ける。 */
+  videoModeSeg: { marginLeft: 6 },
   toolbarGroupHead: { marginTop: 12 },
   toolbarHint: { marginLeft: 6 },
   /* One toggle per cell. `auto-fill` rather than a fixed count: the same panel

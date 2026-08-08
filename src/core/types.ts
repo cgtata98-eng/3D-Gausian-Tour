@@ -549,15 +549,6 @@ export interface VariantConfig {
 }
 
 /**
- * Sidebar size preset.
- * - `large` — default. 320px wide, fills the full viewport height.
- * - `small` — same 320px width but **shrinks vertically to fit its content** (= タブの
- *   分だけ). Per-section visibility (`viewerToolbar.<key>`) still applies; this preset
- *   only affects the panel's geometry.
- */
-export type SidebarSize = 'large' | 'small';
-
-/**
  * Per-scene "what shows up in the viewer's left sidebar / overlays" configuration.
  *
  * **Defaults: every flag undefined = visible.** The author un-checks an item in the
@@ -580,7 +571,8 @@ export interface ViewerToolbarConfig {
   color?: boolean;
   /** Floor-plan map block (MAP / FLOOR MAP). */
   map?: boolean;
-  /** Speaker icon (BGM mute toggle) in the title bar — 3DGS only. */
+  /** Speaker icon (BGM mute toggle) at the end of the bottom scene bar — or in
+   *  the title bar when that bar is absent. 3DGS only. */
   audio?: boolean;
   /** Fullscreen icon in the title bar. */
   fullscreen?: boolean;
@@ -601,9 +593,6 @@ export interface ViewerToolbarConfig {
    *  HTML overlays anchored to 3D positions; sidebar gets a "タグ表示" toggle so
    *  the viewer can hide them. Default OFF — same convention as most blocks. */
   pins?: boolean;
-  /** Sidebar size preset. Default 'small' (compact). Set 'large' to make
-   *  the sidebar fill the viewport top-to-bottom. */
-  size?: SidebarSize;
   /**
    * Display order of sidebar blocks. Items not present fall back to their default
    * position. Unknown ids are ignored. Hidden items (`movement === false` etc.) are
@@ -658,7 +647,7 @@ export interface SceneManifest {
    * Optional ambient audio (BGM / 環境音) for this scene. May be a `data:` URL, a
    * relative path (resolved against `/assets/scenes/{id}/`), or an `idb:<key>` ref to
    * a blob saved in IndexedDB. Loops automatically; the viewer starts muted and the
-   * user toggles play via the title-bar speaker button.
+   * user toggles play via the speaker button on the bottom scene bar.
    */
   audio?: string;
 
