@@ -7,7 +7,7 @@ import { interpolatePath, totalPathDurationSec, resolveStartViewpoint } from '..
 import { downscaleCanvasToJpeg } from '../../utils/video-recorder';
 import { useSceneStore } from '../../store/scene-store';
 import { useCameraStore } from '../../store/camera-store';
-import { useUIStore } from '../../store/ui-store';
+import { useUIStore, type ViewMode } from '../../store/ui-store';
 import { resolveSplatUrl } from '../resolve-splat-url';
 import { loadSceneManifest } from '../../core/scene-manifest';
 import { ThreeCameraController, type MovementMode } from './three-camera-controller';
@@ -586,7 +586,7 @@ export class ThreeSceneManager {
     }
   }
   /** No-op placeholders — three engines don't yet implement these PlayCanvas-only flows. */
-  setViewMode(_mode: 'splat' | '360') { /* noop — 360 mode not yet implemented in three */ }
+  setViewMode(_mode: ViewMode) { /* noop — 360 / video360 は PlayCanvas 経路のみ */ }
   async applyActiveColor(): Promise<void> { /* noop — color variants not yet implemented */ }
   async setVariant(_f: 'on' | 'off', _l: 'day' | 'night'): Promise<void> { /* noop */ }
   setRenderMode(_m: 'default' | 'sharp' | 'highq') { /* preset is applied via applyRenderConfig */ }

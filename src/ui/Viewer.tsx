@@ -16,6 +16,7 @@ import { FootstepAudio } from './FootstepAudio';
 import { useDemoModeCamera } from './useDemoModeCamera';
 import { MobileJoystick } from './MobileJoystick';
 import { ScenePinsOverlay } from './ScenePinsOverlay';
+import { Video360Overlay } from './Video360Overlay';
 import { surfaceClass } from './components';
 
 /** Subset of methods Viewer needs, satisfied by both ThreeSceneManager and the
@@ -208,6 +209,11 @@ export function Viewer({ sceneId }: ViewerProps) {
             showDebugLink={false}
             onPlanSwitch={(planId) => { void sceneManagerRef.current?.setActivePlan(planId); }}
           />
+          {/* 360°動画モードの床ポイント。それ以外のモードでは何も描かない
+              (判定はコンポーネントの中なので、呼ぶ側が忘れられない)。 */}
+          {viewMode === 'video360' && (
+            <Video360Overlay getManager={() => (sceneManagerRef.current as SceneManager | null)} />
+          )}
           {/* Renders nothing while the walkthrough is authoring-only — the
               switch is inside the component, so no call site can forget it. */}
           <WalkthroughControls getManager={() => sceneManagerRef.current} />

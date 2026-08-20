@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SceneManifest, SceneInfo, SceneSettings, SplatTransform, ViewerToolbarConfig, Viewpoint, Plan, FloorPlanConfig, AiGenerationEntry, ScenePin, PinPlacement, CollisionWallData, CollisionTransform, WalkGraph } from '../core/types';
+import type { SceneManifest, SceneInfo, SceneSettings, SplatTransform, ViewerToolbarConfig, Viewpoint, Plan, FloorPlanConfig, AiGenerationEntry, ScenePin, PinPlacement, CollisionWallData, CollisionTransform, WalkGraph, Video360Walk } from '../core/types';
 import { getPinPlacements } from '../core/pin-placements';
 import { resolveStartViewpoint } from '../core/viewpoint';
 import { useCameraStore } from './camera-store';
@@ -142,6 +142,8 @@ interface SceneState {
    *  setter — nodes are plain data, so whole-graph replacement keeps the store
    *  API small. Never touches curated `viewpoints`. */
   setPlanWalk: (id: string, walk: WalkGraph | undefined) => void;
+  /** 360°動画ウォークスルー。undefined でまるごと外す。 */
+  setPlanVideo360: (id: string, video360: Video360Walk | undefined) => void;
   /** Whole-collision fit transform (offset / scale / Y-rotation) — the
    *  collision analogue of setPlanSplatTransform. Pass undefined to reset. */
   setPlanCollisionTransform: (id: string, transform: CollisionTransform | undefined) => void;
@@ -381,6 +383,21 @@ export const useSceneStore = create<SceneState>((set) => ({
           const next = { ...p };
           if (walk === undefined) delete next.walk;
           else next.walk = walk;
+          return next;
+        }),
+      },
+    };
+  }),
+  setPlanVideo360: (id, video360) => set((s) => {
+    if (!s.manifest?.plans) return s;
+    return {
+      manifest: {
+        ...s.manifest,
+        plans: s.manifest.plans.map((p) => {
+          if (p.id !== id) return p;
+          const next = { ...p };
+          if (video360 === undefined) delete next.video360;
+          else next.video360 = video360;
           return next;
         }),
       },

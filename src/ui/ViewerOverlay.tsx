@@ -44,7 +44,11 @@ export function ViewerOverlay({ sceneId, onViewpointClick, showDebugLink = true,
       if (e.repeat) return;
       if (e.code !== 'KeyA' && e.code !== 'KeyD') return;
       // 3DGS では A/D は移動 (strafe) なので視点サイクルさせない。
-      if (useUIStore.getState().viewMode !== '360') return;
+      // パノラマと動画モードは移動が無いので、A/D を視点送りに使える。
+      const ui = useUIStore.getState();
+      if (ui.viewMode === 'splat') return;
+      // 打ち込み中は D が「ドアを貼る」なので、視点送りに取られてはいけない。
+      if (ui.video360Authoring !== 'off') return;
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return;
@@ -72,7 +76,8 @@ export function ViewerOverlay({ sceneId, onViewpointClick, showDebugLink = true,
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return;
-      if (useUIStore.getState().viewMode !== '360') return;
+      // 移動モデルが無いモード (パノラマ / 動画) でだけ、移動キーを握りつぶす。
+      if (useUIStore.getState().viewMode === 'splat') return;
       const movementKeys = new Set([
         'KeyW', 'KeyA', 'KeyS', 'KeyD',
         'KeyQ', 'KeyE',
@@ -89,6 +94,10 @@ export function ViewerOverlay({ sceneId, onViewpointClick, showDebugLink = true,
       const walkLive = !WALKTHROUGH_AUTHORING_ONLY || useUIStore.getState().isDeveloper;
       if (walkLive && activePlan?.walk && activePlan.walk.nodes.length > 0) return;
       const ui = useUIStore.getState();
+      // 移動キーで 3DGS へ抜けるのは **静止パノラマのときだけ**。
+      // 360°動画モードには splat が無いので、抜けた先は真っ白の何も無い空間になる。
+      // ここを分けずに「3DGS ではない」で括ると、W を押した瞬間に画面が飛ぶ。
+      if (ui.viewMode !== '360') return;
       ui.setViewMode('splat');
       const sm = (window as unknown as { __sceneManager?: { setViewMode?: (v: 'splat' | '360') => void } }).__sceneManager;
       sm?.setViewMode?.('splat');
@@ -123,7 +132,7 @@ export function ViewerOverlay({ sceneId, onViewpointClick, showDebugLink = true,
       const tag = t?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return;
       const ui = useUIStore.getState();
-      if (ui.viewMode === '360') return;
+      if (ui.viewMode !== 'splat') return;   // 移動モデルがあるのは 3DGS だけ
       ui.setMovementMode(ui.movementMode === 'fly' ? 'walk' : 'fly');
     };
     window.addEventListener('keydown', onKey);
@@ -176,10 +185,10 @@ export function ViewerOverlay({ sceneId, onViewpointClick, showDebugLink = true,
         const ui = useUIStore.getState();
         ui.setDemoMode(!ui.demoMode);
       }
-      // ○ = walk/fly toggle (3DGS only — 360° has no movement model).
+      // ○ = walk/fly toggle (3DGS only — 360 / 動画 には移動モデルが無い)。
       if (circle && !prev.circle) {
         const ui = useUIStore.getState();
-        if (ui.viewMode !== '360') {
+        if (ui.viewMode === 'splat') {
           ui.setMovementMode(ui.movementMode === 'fly' ? 'walk' : 'fly');
         }
       }
