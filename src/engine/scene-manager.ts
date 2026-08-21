@@ -24,6 +24,8 @@ import { applyRenderConfig, getRenderPreset } from './render-presets';
 import { extractTrianglesFromEntity, raycastTriangles, type Triangle } from './mesh-raycaster';
 import { loadCollisionGlb, setCollisionOpacity as setColOp, setCollisionVisible as setColVis } from './collision-loader';
 import { applyHdri, applyHdriFromFile, crossfadeHdri, discardHdri, installHdri, prepareHdri, removeHdri } from './hdri-loader';
+import { applyEquirectVideoSky, type EquirectVideoSky } from './equirect-skybox';
+import { Video360Walker, type Video360State } from './video360-walk';
 import { setStudioColor } from './studio';
 import type { CollisionEntity } from './collision-loader';
 import { CameraController } from './camera-controller';
@@ -121,6 +123,11 @@ export class SceneManager {
    *  Debug "コリジョンを表示" toggle flips it. Applied to meshes as they finish loading. */
   private collisionVisible = false;
   private viewMode: ViewMode = 'splat';
+  /** 360°動画ウォークスルー。'video360' モードのときだけ生きている。 */
+  private video360: Video360Walker | null = null;
+  private video360Sky: EquirectVideoSky | null = null;
+  /** React に状態を渡す口。ViewerOverlay が差し込む。 */
+  private video360Listener: ((s: Video360State) => void) | null = null;
   /** Snapshot of skybox state captured when entering 360 mode, restored on exit. */
   private savedSkybox: SkyboxSnapshot | null = null;
   private playerMarker: Entity | null = null;
@@ -382,6 +389,12 @@ export class SceneManager {
 
   jumpToViewpoint(viewpoint: Viewpoint) {
     if (!this.cameraController) return;
+    if (this.viewMode === 'video360') {
+      // 動画モードでは「視点へ飛ぶ」= そこまで歩く。撮った道をつないで再生し、
+      // 着いてからカメラを置く (onArrive → applyViewpointPose)。
+      void this.video360?.navigate(viewpoint.id);
+      return;
+    }
     if (this.viewMode === '360') {
       // In 360 the panorama IS the scene, so the pose must not land before the
       // image does — see `enterViewpoint360`.
@@ -513,6 +526,23 @@ export class SceneManager {
    * Used by the "+ ピンを追加" button to drop a pin at a sensible default
    * location (~2 m ahead) the user can then drag in the 3D scene.
    */
+  /** カメラのワールド位置。床ポイントをカメラ基準で置くのに使う。 */
+  getCameraWorldPosition(): [number, number, number] {
+    const p = this.camera.getPosition();
+    return [p.x, p.y, p.z];
+  }
+
+  /** いまの画角 (度)。オーバーレイがクリック方向を組み立てるのに使う。 */
+  getCameraFov(): number {
+    return this.camera.camera?.fov ?? 75;
+  }
+
+  /** カメラの前方向 (単位ベクトル)。 */
+  getCameraForward(): [number, number, number] {
+    const f = this.camera.forward;
+    return [f.x, f.y, f.z];
+  }
+
   getCameraForwardPoint(distance = 2): [number, number, number] {
     const pos = this.camera.getPosition();
     const fwd = this.camera.forward;
@@ -752,7 +782,10 @@ export class SceneManager {
   }
 
   /** The host canvas. Used by the 動画タブ to attach a `MediaRecorder` via
-   *  `canvas.captureStream()`. Returns null if PlayCanvas hasn't initialised. */
+   *  `canvas.captureStream()`. Returns null if PlayCanvas hasn't initialised.
+   *
+   *  上に重ねるオーバーレイもこれを見る。`worldToScreen` の戻り値はこのキャンバス
+   *  基準なので、全画面前提で置くと Debug (プレビューが右半分) でズレる。 */
   getCanvas(): HTMLCanvasElement | null {
     return (this.app.graphicsDevice?.canvas as HTMLCanvasElement | undefined) ?? null;
   }
@@ -850,7 +883,25 @@ export class SceneManager {
    */
   async setViewMode(mode: ViewMode): Promise<void> {
     if (this.viewMode === mode) return;
+    const prev = this.viewMode;
     this.viewMode = mode;
+
+    // 動画モードから出るときは必ず畳む。畳まないと動画の復号が裏で回り続け、
+    // スカイボックスのメッシュも SKYBOX レイヤーに残って splat の背後に透ける。
+    if (prev === 'video360') this.teardownVideo360();
+
+    if (mode === 'video360') {
+      this.savedSkybox = {
+        skybox: this.app.scene.skybox,
+        envAtlas: this.app.scene.envAtlas,
+        intensity: this.app.scene.skyboxIntensity,
+      };
+      if (this.splatEntity) this.splatEntity.enabled = false;
+      // 動画がシーンそのものなので、カメラは向きだけ。移動させると絵が破綻する。
+      this.cameraController?.setMovementLocked(true);
+      await this.startVideo360();
+      return;
+    }
 
     if (mode === '360') {
       this.savedSkybox = {
@@ -875,6 +926,79 @@ export class SceneManager {
         this.app.scene.skyboxIntensity = this.savedSkybox.intensity;
         this.savedSkybox = null;
       }
+    }
+  }
+
+  // ── 360°動画ウォークスルー ──────────────────────────────────────────────
+
+  /** React 側が状態を受け取る口。ViewerOverlay / DebugViewer が差し込む。 */
+  setVideo360Listener(fn: ((s: Video360State) => void) | null): void {
+    this.video360Listener = fn;
+    if (fn && this.video360) fn(this.video360.getState());
+  }
+
+  /** 進行中のウォークスルー。UI からポイントを押すのに使う。 */
+  getVideo360(): Video360Walker | null { return this.video360; }
+
+  private async startVideo360(): Promise<void> {
+    const store = useSceneStore.getState();
+    const manifest = store.manifest ?? this.manifest;
+    const plan = manifest?.plans?.find((p) => p.id === store.activePlanId) ?? manifest?.plans?.[0];
+    const data = plan?.video360;
+    // ノードが 0 でも起動する。オーサリングは「見えている絵」に打つので、
+    // ノードが無いうちこそ動画が出ていないと 1 つ目が打てない。
+    if (!plan || !data?.src) {
+      console.warn('[video360] このプランに動画が入っていません');
+      return;
+    }
+    const sceneId = manifest!.id;
+    const walker = new Video360Walker({
+      data,
+      resolveUrl: (src) => resolveAssetUrl(src, sceneId),
+      labelOf: (id) => plan.viewpoints.find((v: Viewpoint) => v.id === id)?.label ?? id,
+      onArrive: (id) => {
+        const vp = plan.viewpoints.find((v: Viewpoint) => v.id === id);
+        // 到着したらカメラを置く。向きの持ち主は視点の `target` ひとつだけで、
+        // 通常の 360 モードとまったく同じ経路を通る。
+        if (vp) this.applyViewpointPose(vp);
+      },
+      onState: (st) => this.video360Listener?.(st),
+      // 新しいフレームが出たときだけテクスチャを上げ直す。描画ループ任せにすると
+      // 60Hz で転送し続けることになり、8K では 1 枚 96MB がそのまま効く。
+      onFrame: () => this.video360Sky?.upload(),
+    });
+    this.video360 = walker;
+    await walker.load();
+    if (this.viewMode !== 'video360' || this.video360 !== walker) {
+      walker.destroy();     // 読み込み中にモードが変わっていた
+      return;
+    }
+    this.video360Sky = applyEquirectVideoSky(this.app, walker.videoElement);
+
+    if (data.nodes.length === 0) {
+      // まだノードが無い。先頭のフレームを出して、打つ対象を見せる。
+      await walker.scrub(0);
+      return;
+    }
+    const startId = plan.startViewpointId && walker.hasNode(plan.startViewpointId)
+      ? plan.startViewpointId
+      : data.nodes[0].viewpointId;
+    await walker.settle(startId);
+  }
+
+  private teardownVideo360(): void {
+    this.video360?.destroy();
+    this.video360 = null;
+    this.video360Sky?.destroy();
+    this.video360Sky = null;
+    this.installedPanoPath = null;
+    if (this.splatEntity) this.splatEntity.enabled = true;
+    this.cameraController?.setMovementLocked(false);
+    if (this.savedSkybox) {
+      this.app.scene.skybox = this.savedSkybox.skybox;
+      this.app.scene.envAtlas = this.savedSkybox.envAtlas;
+      this.app.scene.skyboxIntensity = this.savedSkybox.intensity;
+      this.savedSkybox = null;
     }
   }
 

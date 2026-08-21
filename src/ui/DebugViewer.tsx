@@ -23,6 +23,8 @@ import { DEFAULT_STUDIO_COLOR } from '../engine/studio';
 /** Either renderer satisfies the methods DebugViewer calls. */
 type AnySceneManager = ThreeSceneManager | SceneManager;
 import { useSceneStore } from '../store/scene-store';
+import { Video360Panel } from './Video360Panel';
+import { Video360Overlay } from './Video360Overlay';
 import { useCameraStore } from '../store/camera-store';
 import { useUIStore } from '../store/ui-store';
 import { useProjectStore } from '../store/project-store';
@@ -161,6 +163,8 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const [planSplatTargetId, setPlanSplatTargetId] = useState<string | null>(null);
   const [planSplatBusy, setPlanSplatBusy] = useState<string | null>(null);
   const planSplatInputRef = useRef<HTMLInputElement>(null);
+  const planVideoInputRef = useRef<HTMLInputElement>(null);
+  const [planVideoTargetId, setPlanVideoTargetId] = useState<string | null>(null);
   // Drag-over highlight state for the plan / viewpoint rows. Tracked separately
   // so a row only lights up while the cursor is over IT, not its sibling rows.
   const [planDragOverId, setPlanDragOverId] = useState<string | null>(null);
@@ -183,6 +187,10 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const [addVpPanoName, setAddVpPanoName] = useState<string | null>(null);
   const addVpPanoInputRef = useRef<HTMLInputElement>(null);
   const isVRMode = viewMode === '360';
+  const isVideoMode = viewMode === 'video360';
+  /** 3DGS かどうか。splat 前提のノブ (エンジン選択 / 足音 / ファイル drop) の出し分けに使う。
+   *  `isVRMode` は「静止パノラマか」なので、動画モードを足した時点で別物になった。 */
+  const is3DGS = viewMode === 'splat';
   // True when at least one plan has actual 3DGS data (PLY or SOG). Drives the
   // visibility of splat-only UI (移動速度 / 初期高さ / 足音 / コリジョン) so a
   // project that only holds panoramas — even if its viewMode happens to be
@@ -790,7 +798,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     // thumbnail and the jump/start position are the same place ("サムネで決めた位置で
     // スタート"). VR/360: the thumbnail is regenerated from the panorama; the position
     // stays the panorama capture spot (don't move it from a non-existent walk position).
-    if (!isVRMode) {
+    if (is3DGS) {
       const live = sm.getLiveCameraPose?.();
       if (live) {
         const pos: [number, number, number] = [+live.position[0].toFixed(3), +live.position[1].toFixed(3), +live.position[2].toFixed(3)];
@@ -936,8 +944,60 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
   const isImageFile = (f: File) =>
     f.type.startsWith('image/') || /\.(jpg|jpeg|png|hdr|exr|webp|avif|bmp|tif|tiff)$/i.test(f.name);
 
+  /**
+   * プランに 360°動画を入れる。splat と同じ扱い ― 動画はそのプランの中身であって、
+   * どこか一箇所に置く「機能」ではない。プランを増やせば別の動画を持てる。
+   *
+   * blob は IDB。数百 MB になり得るので manifest に data URL では入れない。
+   */
+  const handlePlanVideoFile = async (file: File, planId: string) => {
+    setPlanSplatBusy(planId);
+    try {
+      const key = `video360-${sceneId}-${planId}-src`;
+      await idb.saveBlob(key, file);
+      const duration = await new Promise<number>((res) => {
+        const url = URL.createObjectURL(file);
+        const v = document.createElement('video');
+        v.preload = 'metadata';
+        v.onloadedmetadata = () => {
+          const d = v.duration;
+          URL.revokeObjectURL(url);
+          res(Number.isFinite(d) ? +d.toFixed(3) : 0);
+        };
+        v.onerror = () => { URL.revokeObjectURL(url); res(0); };
+        v.src = url;
+      });
+      const cur = useSceneStore.getState().manifest?.plans?.find((pp) => pp.id === planId)?.video360;
+      useSceneStore.getState().setPlanVideo360(planId, {
+        ...(cur ?? {}),
+        src: `${idb.IDB_REF_PREFIX}${key}`,
+        sourceName: file.name,
+        duration,
+        fps: cur?.fps ?? 30,
+        nodes: cur?.nodes ?? [],
+        edges: cur?.edges ?? [],
+      });
+    } finally {
+      setPlanSplatBusy(null);
+    }
+  };
+
+  /** プランから動画を外す。ノードもエッジも一緒に落とす ― 動画が無いのに時刻だけ
+   *  残っていても意味がないし、次の動画に流用すると位置が全部ズレる。 */
+  const handlePlanVideoClear = async (planId: string) => {
+    setPlanSplatBusy(planId);
+    try {
+      for (const slot of ['src', 'srcReverse']) {
+        await idb.deleteBlob(`video360-${sceneId}-${planId}-${slot}`).catch(() => {});
+      }
+      useSceneStore.getState().setPlanVideo360(planId, undefined);
+    } finally {
+      setPlanSplatBusy(null);
+    }
+  };
+
   const handlePlanRowDragOver = (e: React.DragEvent, planId: string) => {
-    if (isVRMode) return; // VR plans don't take a single drop; viewpoints do.
+    if (!is3DGS) return; // splat 以外は 1 ファイル drop を取らない (パノラマは視点、動画はプランの ⇪)
     if (e.dataTransfer.types.indexOf('Files') < 0) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
@@ -949,7 +1009,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
     setPlanDragOverId(null);
   };
   const handlePlanRowDrop = (e: React.DragEvent, planId: string) => {
-    if (isVRMode) return;
+    if (!is3DGS) return;
     e.preventDefault();
     setPlanDragOverId(null);
     const files = Array.from(e.dataTransfer.files ?? []);
@@ -1403,7 +1463,15 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                                 {p.label}
                               </div>
                               <div className="ds-hint" style={S.planMeta}>
-                                {isVRMode ? (
+                                {isVideoMode ? (
+                                  <>
+                                    <span>動画 {p.video360?.src ? (p.video360.sourceName ?? '設定済') : '(未設定)'}</span>
+                                    <span style={S.vpMetaSep}>·</span>
+                                    <span>ノード {p.video360?.nodes.length ?? 0}</span>
+                                    <span style={S.vpMetaSep}>·</span>
+                                    <span>視点 {planVpCount}</span>
+                                  </>
+                                ) : isVRMode ? (
                                   <>
                                     <span>VR視点 {planVpCount}</span>
                                     <span style={S.vpMetaSep}>·</span>
@@ -1423,7 +1491,27 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                           )}
                         </div>
                         <div style={S.vpActions}>
-                          {!isVRMode && (
+                          {isVideoMode && (
+                            <>
+                              <button
+                                title="このプランの 360°動画を入れる（順再生。equirect の mp4 / webm）"
+                                onClick={() => { setPlanVideoTargetId(p.id); planVideoInputRef.current?.click(); }}
+                                className="ds-iconbtn"
+                                disabled={isBusy}
+                              >
+                                {isBusy ? '⏳' : '⇪'}
+                              </button>
+                              {p.video360?.src && (
+                                <button
+                                  title="このプランの動画を削除（ノード・エッジも一緒に外れます）"
+                                  onClick={() => void handlePlanVideoClear(p.id)}
+                                  className={dangerIconClass}
+                                  disabled={isBusy}
+                                ><IconClose /></button>
+                              )}
+                            </>
+                          )}
+                          {is3DGS && (
                             <>
                               <button
                                 title="Splat ファイルをアップロード（PLY / SPLAT 単体、または SOG なら meta.json + .webp 全て選択）"
@@ -1484,7 +1572,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
               <ViewerToolbarSection
                 tb={manifest?.viewerToolbar ?? {}}
                 isOtherProject={isOtherProject}
-                isVRMode={isVRMode}
+                isVRMode={!is3DGS}
                 variants={manifest?.variants}
                 onChange={(patch) => {
                   const cur = manifest?.viewerToolbar ?? {};
@@ -1558,7 +1646,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
 
                   {/* 足音 (デフォルト固定 / ON-OFF + ボリューム、Shift で走行)
                       VR / パノラマモードや splat データ無しでは歩かないので非表示。 */}
-                  {!isVRMode && hasSplatData && (
+                  {is3DGS && hasSplatData && (
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
                     <div className="ds-label" style={S.subTitle}>足音</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
@@ -1609,7 +1697,7 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             {debugTab === 'global' && (
               <RenderQualitySection
                 cfg={manifest?.settings.render ?? {}}
-                isVRMode={isVRMode}
+                isVRMode={!is3DGS}
                 onPatch={(patch) => useSceneStore.getState().updateSettings({
                   render: { ...(manifest?.settings.render ?? {}), ...patch },
                 })}
@@ -2341,6 +2429,14 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
             </Section>
             )}
 
+            {/* ===== 360°動画ウォークスルー — プランタブ。
+                  素材もノードもエッジもプランデータ (Plan.video360) なのでここに置く。
+                  表示モードが 360動画 のときだけ。他モードでは触らせても意味がない。 */}
+            {debugTab === 'plan' && viewMode === 'video360' && activePlanId && (() => {
+              const p = manifest?.plans?.find((x) => x.id === activePlanId);
+              return p ? <Video360Panel plan={p} sceneId={sceneId} getManager={() => smRef.current as SceneManager | null} /> : null;
+            })()}
+
             {/* ===== ピン (商品リンクタグ) — プランタブ。
                   ピンはプランデータの一部 (Plan.pins[]) なのでプランタブに置く。
                   Viewer での表示有無は ツールバー表示 → 「タグ」で切替。 */}
@@ -2528,6 +2624,11 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                 hideLeftPanel={debugTab === 'video'}
                 onPlanSwitch={(planId) => { void smRef.current?.setActivePlan(planId); }}
               />
+              {/* 360°動画モードの床ポイント。Debug でも本番と同じものを踏めないと、
+                  ノードやエッジを直した結果が確かめられない。 */}
+              {viewMode === 'video360' && (
+                <Video360Overlay getManager={() => (smRef.current as SceneManager | null)} />
+              )}
               <WalkthroughControls getManager={() => smRef.current} />
             </>
           )}
@@ -2559,6 +2660,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
       {/* The "画像ファイルからサムネを設定" picker was removed along with its
           button. `setViewpointManualThumb` in the store is untouched, so
           restoring it is putting the button and this input back. */}
+      <input
+        ref={planVideoInputRef}
+        type="file"
+        accept="video/*"
+        style={{ display: 'none' }}
+        onChange={e => {
+          const f = e.target.files?.[0];
+          const id = planVideoTargetId;
+          if (f && id) void handlePlanVideoFile(f, id);
+          setPlanVideoTargetId(null);
+          e.target.value = '';
+        }}
+      />
       <input
         ref={planSplatInputRef}
         type="file"

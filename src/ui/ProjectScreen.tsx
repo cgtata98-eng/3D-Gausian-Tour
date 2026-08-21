@@ -230,7 +230,7 @@ function ProjectCard({ project, onOpen, onDelete, onEdit }: {
   onEdit: () => void;
 }) {
   const typeLabel = project.type === 'mansion' ? '住居・店舗' : project.type === 'product' ? 'showroom' : 'その他';
-  const modeLabel = project.viewMode === 'splat' ? '3DGS' : '360VR';
+  const modeLabel = project.viewMode === 'splat' ? '3DGS' : project.viewMode === 'video360' ? '360動画' : '360VR';
   const isMansion = project.type === 'mansion';
   const [copied, setCopied] = useState(false);
   // Hover state used to be tracked in React purely to swap a shadow. `:hover`
@@ -407,6 +407,13 @@ function ProjectDialog({ mode, initial, onCancel, onSubmit }: {
                   value: '360',
                   title: '360VR',
                   sub: '視点ごとのパノラマ',
+                  disabled: hasGsData,
+                  disabledReason: 'Splat が登録済のため切替不可',
+                },
+                {
+                  value: 'video360',
+                  title: '360動画',
+                  sub: '1 本の動画で歩く',
                   disabled: hasGsData,
                   disabledReason: 'Splat が登録済のため切替不可',
                 },

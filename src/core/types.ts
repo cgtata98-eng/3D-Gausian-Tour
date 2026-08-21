@@ -401,10 +401,115 @@ export interface Plan {
    * navigated by "face a direction and step forward". See `WalkGraph`.
    */
   walk?: WalkGraph;
+  /**
+   * 360°動画ウォークスルー。`walk` (静止パノラマのグリッド) とは別物で、
+   * こちらは 1 本の動画の区間再生で歩きを見せる。ノードは `viewpoints` を指すので、
+   * シーンバー・サムネ・図面ミニマップはそのまま効く。See `Video360Walk`.
+   */
+  video360?: Video360Walk;
 
   // ── Free-form ────────────────────────────────────────────────────
   /** Free-form note shown next to the plan switcher. */
   notes?: string;
+}
+
+/**
+ * 360°動画ウォークスルー (V1).
+ *
+ * 1 本の連続した 360°動画を「止める / 区間だけ再生する / 逆再生する」だけで、
+ * 自由に歩き回っているように見せる仕掛け。撮影者が足を止めた時刻をノードに、
+ * ノード間の歩きをエッジに割り当てる。
+ *
+ * ノードは **既存の `Viewpoint` を指す**。独自の場所リストを持たせない:
+ * そうすれば下のシーンバー・サムネイル・図面ミニマップ・ピンが全部そのまま効く。
+ * 動画のどのフレームで止めるかだけが、このモード固有の情報。
+ */
+export interface Video360Walk {
+  /** 順再生の動画。manifest パス / IDB 参照 / data URL。 */
+  src: string;
+  /**
+   * 逆走用の反転素材。動画は前にしか進まないので、来た道を戻る演出には
+   * 反転した素材を別に持つしかない。未設定なら「戻る」は瞬間移動に落ちる。
+   * 生成は `node scripts/video360/make-reverse.mjs`。
+   */
+  srcReverse?: string;
+  /** 秒。シークの clamp と逆走時刻の計算に使う。 */
+  duration: number;
+  /** フレームレート。1 フレーム送りと静止フレーム探索に使う。 */
+  fps: number;
+  /** 元ファイル名。Debug のカードで「どの素材が入っているか」を出すため。 */
+  sourceName?: string;
+
+  /** 目線の高さ (m)。床ポイントの遠近の付き方が変わる。既定 1.6。 */
+  eyeHeight?: number;
+  /** 歩行速度 (m/s)。再生秒数を床上の距離に読み替える係数。既定 1.05。 */
+  walkSpeed?: number;
+  /** 床ポイントの間隔 (m)。既定 2.4。 */
+  stepSpacing?: number;
+
+  nodes: Video360Node[];
+  edges: Video360Edge[];
+
+  /**
+   * `scripts/video360/analyze.mjs` が出した静止区間。ノードを置いてよい場所の候補で、
+   * Debug のタイムラインに帯として出す。オーサリング専用 — 実行時は読まない。
+   */
+  stills?: Video360Still[];
+  /**
+   * 「止まっても絵がブレない」時刻の一覧 (秒、昇順)。動きが局所的に最小のフレーム。
+   *
+   * 道の途中のポイントで足を止めるとき、狙った時刻の近くでここに寄せる。
+   * 歩行中のフレームで止めるとブレた絵が貼りっぱなしになって没入が切れるため。
+   * フレームごとの動き量をまるごと持つと 8K・数分で数千要素になるので、
+   * 極小値だけを抜いて持つ。
+   */
+  calmTimes?: number[];
+}
+
+export interface Video360Node {
+  /** このノードが指す `Plan.viewpoints[].id`。ラベルもサムネもそちらを見る。 */
+  viewpointId: string;
+  /**
+   * 停止中に見せる 1 フレームの時刻 (秒)。エッジの再生範囲とは **別に持つ**。
+   * 同じにすると、静止区間の「たまり」を毎回再生し直すことになる。
+   * 動きが一番小さいフレームを選ぶこと (歩行中のフレームで止めるとブレた絵が残る)。
+   */
+  t: number;
+  // 到着時にどちらを向くかは **ここに持たない**。視点の `target` が唯一の持ち主で、
+  // 通常の 360 モードと同じ `applyViewpointPose` がそのまま効く。
+  // 向きの持ち主を 2 つにすると、どちらが正なのか誰にも分からなくなる。
+}
+
+export interface Video360Edge {
+  id: string;
+  /** `Video360Node.viewpointId`。 */
+  from: string;
+  to: string;
+  /** 実際に再生する区間 [開始, 終了] (秒、順再生の時間軸)。 */
+  range: [number, number];
+  label?: string;
+  /**
+   * `door` は床のポイントにしない。壁の上にあって床の位置ではないので、
+   * 従来のホットスポットと同じ浮かぶマーカーで出す。
+   */
+  kind?: 'walk' | 'door';
+  /**
+   * ドア用のホットスポット方向 (ワールド yaw / pitch、度)。`kind: 'door'` のときだけ使う。
+   *
+   * 歩き (`kind: 'walk'`) は方向も距離も **視点同士の実座標から出す** ので、ここには持たない。
+   * 図面にドットを置けばポイントの向きと間隔が決まる ― 方位を別に打ち込む必要はないし、
+   * 打ち込めるようにすると図面とズレたときにどちらが正か分からなくなる。
+   */
+  doorYaw?: number;
+  doorPitch?: number;
+}
+
+/** 自動検出した静止区間 (オーサリング用)。 */
+export interface Video360Still {
+  start: number;
+  end: number;
+  /** 区間内で一番動きの小さいフレームの時刻。ノードの `t` の既定値。 */
+  rest: number;
 }
 
 /** Compass keys for explicit walk-node adjacency overrides. */

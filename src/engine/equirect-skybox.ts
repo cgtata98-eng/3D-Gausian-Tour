@@ -234,6 +234,60 @@ export async function applyEquirectSkyboxFromBlob(app: AppBase, blob: Blob, name
   installEquirectSky(app, loaded);
 }
 
+/**
+ * 360°動画をそのままスカイボックスにする。
+ *
+ * 画像版と違い、テクスチャは動画が新しいフレームを出すたびに上げ直す必要がある。
+ * ただし描画ループ任せで毎フレーム上げてはいけない: 表示は 60Hz、動画は 30fps なので
+ * 転送量が倍になる。1920x1080 なら誤差だが、8000x4000 だと 1 枚 96MB あるので
+ * そこが素直に効く。だから `upload()` を呼ぶ責任は呼び出し側に渡し、
+ * `requestVideoFrameCallback` (= 実際にフレームが出た瞬間) から叩いてもらう。
+ *
+ * 返り値を捨てる前に必ず `destroy()` すること。しないと GPU 側のテクスチャが残る。
+ */
+export function applyEquirectVideoSky(app: AppBase, video: HTMLVideoElement): EquirectVideoSky {
+  const tex = new Texture(app.graphicsDevice, {
+    name: 'equirect-video-skybox',
+    width: video.videoWidth || 2,
+    height: video.videoHeight || 1,
+    format: PIXELFORMAT_RGBA8,
+    type: TEXTURETYPE_DEFAULT,
+    // 経度方向は REPEAT。CLAMP にすると u=0/1 の継ぎ目に縦の筋が出る。
+    addressU: ADDRESS_REPEAT,
+    addressV: ADDRESS_CLAMP_TO_EDGE,
+    minFilter: FILTER_LINEAR,
+    magFilter: FILTER_LINEAR,
+    // ミップを作らせない。equirect の継ぎ目が dFdx/dFdy を混乱させ、
+    // ぼけたレベルを引いてしまう (画像版と同じ理由)。
+    mipmaps: false,
+  });
+  tex.setSource(video);
+  installEquirectSky(app, { texture: tex, isHdr: false });
+
+  let destroyed = false;
+  return {
+    texture: tex,
+    upload() {
+      if (destroyed || video.readyState < 2) return;
+      // setSource を毎回呼ぶと PlayCanvas 側で再確保が走ることがあるので、
+      // 2 回目以降は upload() だけ。
+      tex.upload();
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      removeEquirectSkybox(app);
+    },
+  };
+}
+
+export interface EquirectVideoSky {
+  texture: Texture;
+  /** 新しいフレームが出たときだけ呼ぶ。 */
+  upload(): void;
+  destroy(): void;
+}
+
 function installEquirectSky(app: AppBase, loaded: LoadedTexture): void {
   removeEquirectSkybox(app);
   // Hide the cubemap-based skybox if anything previously installed one.

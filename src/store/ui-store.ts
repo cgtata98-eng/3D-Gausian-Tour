@@ -5,7 +5,20 @@ export type LeftPanelId = 'map' | 'viewpoints' | 'furniture' | 'lighting' | null
 export type FurnitureMode = 'on' | 'off';
 export type LightingMode = 'day' | 'night';
 /** Renderer choice: 3D Gaussian Splat scene or 360° equirectangular panorama per-viewpoint */
-export type ViewMode = 'splat' | '360';
+/**
+ * 'splat'    = 3DGS
+ * '360'      = 視点ごとの静止パノラマ
+ * 'video360' = 1 本の 360°動画の区間再生で歩きを見せるモード (Video360Walk)
+ */
+export type ViewMode = 'splat' | '360' | 'video360';
+
+/**
+ * 360°動画モードの打ち込みモード (オーサリング).
+ *   'off'   … ふつうに見て回る
+ *   'point' … クリックした床にポイント (= 視点 + ノード) を打つ
+ *   'door'  … クリックした向きにドアのマークを貼る
+ */
+export type Video360Authoring = 'off' | 'point' | 'door';
 /**
  * Movement model:
  * - `walk` — gravity-locked: player follows the walkable collision floor (or stays at the
@@ -94,6 +107,7 @@ interface UIState {
   collisionOpacity: number;
   renderMode: RenderMode;
   viewMode: ViewMode;
+  video360Authoring: Video360Authoring;
   movementMode: MovementMode;
   projectType: ProjectType;
   fps: number;
@@ -110,6 +124,7 @@ interface UIState {
   setCollisionOpacity: (opacity: number) => void;
   setRenderMode: (mode: RenderMode) => void;
   setViewMode: (mode: ViewMode) => void;
+  setVideo360Authoring: (mode: Video360Authoring) => void;
   setMovementMode: (mode: MovementMode) => void;
   setProjectType: (t: ProjectType) => void;
   setFps: (fps: number) => void;
@@ -207,6 +222,7 @@ export const useUIStore = create<UIState>((set) => ({
   collisionOpacity: 0.4,
   renderMode: 'default',
   viewMode: 'splat',
+  video360Authoring: 'off',
   movementMode: 'walk',
   projectType: 'mansion',
   fps: 0,
@@ -223,6 +239,7 @@ export const useUIStore = create<UIState>((set) => ({
   setCollisionOpacity: (collisionOpacity) => set({ collisionOpacity }),
   setRenderMode: (renderMode) => set({ renderMode }),
   setViewMode: (viewMode) => set({ viewMode }),
+  setVideo360Authoring: (video360Authoring) => set({ video360Authoring }),
   setMovementMode: (movementMode) => set({ movementMode }),
   setProjectType: (projectType) => set({ projectType }),
   setFps: (fps) => set({ fps }),
