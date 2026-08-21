@@ -2434,7 +2434,12 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                   表示モードが 360動画 のときだけ。他モードでは触らせても意味がない。 */}
             {debugTab === 'plan' && viewMode === 'video360' && activePlanId && (() => {
               const p = manifest?.plans?.find((x) => x.id === activePlanId);
-              return p ? <Video360Panel plan={p} sceneId={sceneId} getManager={() => smRef.current as SceneManager | null} /> : null;
+              if (!p) return null;
+              return (
+                <Section title="360°動画ウォークスルー" subtitle="VIDEO WALKTHROUGH" defaultOpen={false}>
+                  <Video360Panel plan={p} sceneId={sceneId} getManager={() => smRef.current as SceneManager | null} />
+                </Section>
+              );
             })()}
 
             {/* ===== ピン (商品リンクタグ) — プランタブ。

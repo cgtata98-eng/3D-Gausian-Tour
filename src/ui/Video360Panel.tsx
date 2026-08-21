@@ -21,7 +21,18 @@ import { resolveScenePath } from '../core/scene-manifest';
 import { analyzeVideo360 } from '../utils/video360-analyze';
 import { useUIStore } from '../store/ui-store';
 import type { SceneManager } from '../engine/scene-manager';
-import { Block } from './components';
+import { surfaceClass } from './components';
+
+// Debug の他のセクションと同じボタン。見た目は design-system.css が持ち、
+// ここは「どの種類か」だけを言う。独自のボタンを足すと、この一角だけ様子が変わる。
+const BTN = `${surfaceClass('neutral')} ds-pill ds-pill--sm ds-fill-neutral`;
+const BTN_PRIMARY = `${surfaceClass('plain')} ds-pill ds-pill--sm ds-fill-surface`;
+
+/** レイアウトだけ。色や境界は design-system.css が持つ。 */
+const S = {
+  stack: { display: 'flex', flexDirection: 'column', gap: 10 } as React.CSSProperties,
+  sec: { marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)' } as React.CSSProperties,
+};
 
 interface Props {
   plan: Plan;
@@ -42,10 +53,82 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
   const [selNode, setSelNode] = useState<string | null>(null);
   const [selEdge, setSelEdge] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // ローカルの ffmpeg が使えるか。使えるときだけ「反転素材を作る」を出す。
+  // 本番 (Cloudflare) にこの経路は無いので、出しても押せないボタンになる。
+  const [canRunFfmpeg, setCanRunFfmpeg] = useState(false);
 
   const patch = (p: Partial<Video360Walk>) => {
     if (!data) return;
     setPlanVideo360(plan.id, { ...data, ...p });
+  };
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/dev/video360/ping')
+      .then((r) => (r.ok ? r.json() : { ffmpeg: false }))
+      .then((j) => { if (alive) setCanRunFfmpeg(!!j.ffmpeg); })
+      .catch(() => { /* 本番にはこの経路が無い。出さないだけ。 */ });
+    return () => { alive = false; };
+  }, []);
+
+  /**
+   * 反転素材をその場で作る。
+   *
+   * ブラウザ内では作れない (動画を後ろから作り直す処理なので ffmpeg が要る) ので、
+   * dev サーバに渡してローカルの ffmpeg を回す。元の動画と出来た反転素材は
+   * `r2-uploads/video360/<シーン>/<プラン>/` に実ファイルとして残るので、
+   * あとから R2 に上げるのも中身を確かめるのもそのままできる。
+   */
+  const buildReverse = async () => {
+    if (!data?.src || !previewUrl) return;
+    setBusy('反転素材を作成中…');
+    try {
+      const blob = await (await fetch(previewUrl)).blob();
+      const q = new URLSearchParams({
+        scene: sceneId,
+        plan: plan.id,
+        name: data.sourceName ?? 'tour.mp4',
+      });
+      const res = await fetch(`/api/dev/video360/reverse?${q}`, { method: 'POST', body: blob });
+      if (!res.ok || !res.body) throw new Error(`サーバが ${res.status} を返しました`);
+
+      // 進捗は NDJSON で流れてくる。8K だと数分かかるので、無反応にはしない。
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      let result: { name: string; path: string; bytes: number } | null = null;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line);
+          if (msg.error) throw new Error(msg.error);
+          if (msg.stage === 'result') result = msg;
+          else setBusy(`反転素材を作成中… ${msg.message ?? msg.stage}`);
+        }
+      }
+      if (!result) throw new Error('反転素材を受け取れませんでした');
+
+      // 中身は別口で取りに行く。作った素材を JSON に埋めて返すと、
+      // 8K・数分では base64 にした時点でメモリが持たない。
+      setBusy('反転素材を取り込み中…');
+      const fq = new URLSearchParams({ scene: sceneId, plan: plan.id, name: result.name });
+      const revBlob = await (await fetch(`/api/dev/video360/file?${fq}`)).blob();
+      const key = `video360-${sceneId}-${plan.id}-srcReverse`;
+      await saveBlob(key, revBlob);
+      patch({ srcReverse: `idb:${key}` });
+      setBusy(null);
+      alert(`反転素材を作りました。\n${result.path}`);
+    } catch (err) {
+      console.error('[video360] 反転素材の作成に失敗', err);
+      alert(`反転素材を作れませんでした: ${(err as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
   };
 
   // ── 逆走用の反転素材 ────────────────────────────────────────────────────
@@ -240,7 +323,7 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
 
   if (!data?.src) {
     return (
-      <Block title="ウォークスルーの組み立て">
+      <div style={S.stack}>
         <p className="ds-hint">
           このプランにまだ動画が入っていません。<b>全体タブ →「各プラン」</b>の ⇪ から、
           このプラン（{plan.label}）に 360°動画を入れてください。
@@ -248,7 +331,7 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
         <p className="ds-hint">
           動画はプランごとに持てます。プランを増やせば、間取り違い・時間帯違いを別の動画で出せます。
         </p>
-      </Block>
+      </div>
     );
   }
 
@@ -256,18 +339,23 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
   const edge = data.edges.find((e) => e.id === selEdge);
 
   return (
-    <Block title="ウォークスルーの組み立て">
+    <div style={S.stack}>
       {/* ── 素材 ── */}
       <div className="ds-row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        <span className="ds-label">素材</span>
+        <span className="ds-sub">素材</span>
         <span className="ds-mono ds-v360-meta">
           {data.sourceName ?? data.src} / {duration.toFixed(1)}s @ {data.fps}fps
         </span>
       </div>
       <div className="ds-row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-        <button type="button" className="ds-pill ds-pill--primary" onClick={runAnalysis} disabled={!!busy}>
+        <button type="button" className={BTN_PRIMARY} onClick={runAnalysis} disabled={!!busy}>
           {data.stills?.length ? '解析しなおす' : '動画を解析する'}
         </button>
+        {canRunFfmpeg && (
+          <button type="button" className={BTN} onClick={buildReverse} disabled={!!busy}>
+            {data.srcReverse ? '反転素材を作りなおす' : '反転素材を作る'}
+          </button>
+        )}
         <FilePick
           label={data.srcReverse ? '反転素材を差し替え' : '反転素材を入れる'}
           accept="video/*"
@@ -281,8 +369,11 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
       {!data.srcReverse && (
         <p className="ds-hint">
           反転素材なしでも動きます（「戻る」が逆歩きではなく瞬間移動になります）。
-          逆歩きも見せたいときは <code>bash scripts/video360/make-reverse.sh &lt;動画&gt;</code> で作って入れてください。
-          ブラウザ内では作れません — 動画を後ろから作り直す処理なので ffmpeg が要ります。
+          {canRunFfmpeg
+            ? <> 逆歩きも見せたいときは<b>「反転素材を作る」</b>を押してください。この端末の ffmpeg が動いて、
+              元の動画と一緒に <code>r2-uploads/video360/</code> に保存します。</>
+            : <> 逆歩きも見せたいときは <code>bash scripts/video360/make-reverse.sh &lt;動画&gt;</code> で作って入れてください
+              （この端末では ffmpeg が見つからないため、ボタンからは作れません）。</>}
         </p>
       )}
       {!data.stills?.length && (
@@ -302,29 +393,29 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
         onScrub={seek}
       />
       <div className="ds-row" style={{ gap: 6, marginTop: 6, alignItems: 'center' }}>
-        <button type="button" className="ds-pill" onClick={() => {
+        <button type="button" className={BTN} onClick={() => {
           const walker = getManager?.()?.getVideo360();
           if (!walker) return;
           if (walker.isPlaying) walker.previewPause(); else walker.previewPlay();
         }}>▶ / ⏸</button>
-        <button type="button" className="ds-pill" onClick={() => seek(playhead - 1 / data.fps)}>−1f</button>
-        <button type="button" className="ds-pill" onClick={() => seek(playhead + 1 / data.fps)}>+1f</button>
+        <button type="button" className={BTN} onClick={() => seek(playhead - 1 / data.fps)}>−1f</button>
+        <button type="button" className={BTN} onClick={() => seek(playhead + 1 / data.fps)}>+1f</button>
         <span className="ds-mono ds-v360-time">{playhead.toFixed(3)}s</span>
       </div>
 
       {/* ── 打ち込み ── */}
-      <div className="ds-sec">
+      <div style={S.sec}>
         <span className="ds-label">打ち込み</span>
         <div className="ds-row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
           <button
             type="button"
-            className="ds-pill"
+            className={BTN}
             data-active={authoring === 'point'}
             onClick={() => setAuthoring(authoring === 'point' ? 'off' : 'point')}
           >📍 ポイントを打つ (N)</button>
           <button
             type="button"
-            className="ds-pill"
+            className={BTN}
             data-active={authoring === 'door'}
             onClick={() => setAuthoring(authoring === 'door' ? 'off' : 'door')}
           >🚪 ドアを貼る (D)</button>
@@ -339,17 +430,17 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
       {/* ── 一括生成 ── */}
       {!!data.stills?.length && (
         <div className="ds-row" style={{ marginTop: 10 }}>
-          <button type="button" className="ds-pill ds-pill--primary" onClick={generate}>
+          <button type="button" className={BTN_PRIMARY} onClick={generate}>
             静止区間 {data.stills.length} 個からノードとエッジを起こす
           </button>
         </div>
       )}
 
       {/* ── ノード ── */}
-      <div className="ds-sec">
+      <div style={S.sec}>
         <span className="ds-label">ノード（{data.nodes.length}）</span>
         <div className="ds-row" style={{ marginTop: 6 }}>
-          <button type="button" className="ds-pill" disabled={!data.nodes.length} onClick={buildThumbs}>
+          <button type="button" className={BTN} disabled={!data.nodes.length} onClick={buildThumbs}>
             停止フレームから下のシーンバーのサムネを作る
           </button>
         </div>
@@ -358,7 +449,7 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
             <button
               key={n.viewpointId}
               type="button"
-              className="ds-pill"
+              className={BTN}
               data-active={selNode === n.viewpointId}
               onClick={() => { setSelNode(n.viewpointId); seek(n.t); }}
             >
@@ -368,10 +459,10 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
         </div>
         {node && (
           <div className="ds-row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-            <button type="button" className="ds-pill" onClick={() => {
+            <button type="button" className={BTN} onClick={() => {
               patch({ nodes: data.nodes.map((n) => n.viewpointId === node.viewpointId ? { ...n, t: +playhead.toFixed(3) } : n) });
             }}>停止フレーム ← 再生位置</button>
-            <button type="button" className="ds-pill" onClick={() => {
+            <button type="button" className={BTN} onClick={() => {
               patch({
                 nodes: data.nodes.filter((n) => n.viewpointId !== node.viewpointId),
                 edges: data.edges.filter((e) => e.from !== node.viewpointId && e.to !== node.viewpointId),
@@ -387,14 +478,14 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
       </div>
 
       {/* ── エッジ ── */}
-      <div className="ds-sec">
+      <div style={S.sec}>
         <span className="ds-label">エッジ（{data.edges.length}）</span>
         <div className="ds-row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
           {data.edges.map((e) => (
             <button
               key={e.id}
               type="button"
-              className="ds-pill"
+              className={BTN}
               data-active={selEdge === e.id}
               onClick={() => { setSelEdge(e.id); seek(e.range[0]); }}
             >
@@ -405,9 +496,9 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
         {edge && (
           <>
             <div className="ds-row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-              <button type="button" className="ds-pill" onClick={() => updEdge(edge.id, { range: [+playhead.toFixed(3), edge.range[1]] })}>開始 ← 再生位置</button>
-              <button type="button" className="ds-pill" onClick={() => updEdge(edge.id, { range: [edge.range[0], +playhead.toFixed(3)] })}>終了 ← 再生位置</button>
-              <button type="button" className="ds-pill" onClick={() => updEdge(edge.id, { kind: edge.kind === 'door' ? 'walk' : 'door' })}>
+              <button type="button" className={BTN} onClick={() => updEdge(edge.id, { range: [+playhead.toFixed(3), edge.range[1]] })}>開始 ← 再生位置</button>
+              <button type="button" className={BTN} onClick={() => updEdge(edge.id, { range: [edge.range[0], +playhead.toFixed(3)] })}>終了 ← 再生位置</button>
+              <button type="button" className={BTN} onClick={() => updEdge(edge.id, { kind: edge.kind === 'door' ? 'walk' : 'door' })}>
                 {edge.kind === 'door' ? 'ドア扱いをやめる' : 'ドアとして扱う'}
               </button>
             </div>
@@ -424,7 +515,7 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
       </div>
 
       {/* ── 細かい調整 ── */}
-      <div className="ds-sec">
+      <div style={S.sec}>
         <span className="ds-label">床ポイントの見え方</span>
         <Num label="目線の高さ (m)" value={data.eyeHeight ?? DEFAULTS.eyeHeight} step={0.05} min={0.8} max={2.4}
           onChange={(v) => patch({ eyeHeight: v })} hint="床ポイントの遠近の付き方が変わります" />
@@ -439,7 +530,7 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
       </div>
 
       {busy && <div className="ds-hint">{busy}</div>}
-    </Block>
+    </div>
   );
 
   function updEdge(id: string, p: Partial<Video360Edge>) {
@@ -498,7 +589,7 @@ function FilePick({ label, accept, onPick }: { label: string; accept: string; on
   const ref = useRef<HTMLInputElement>(null);
   return (
     <>
-      <button type="button" className="ds-pill" onClick={() => ref.current?.click()}>{label}</button>
+      <button type="button" className={BTN} onClick={() => ref.current?.click()}>{label}</button>
       <input
         ref={ref}
         type="file"
@@ -519,16 +610,16 @@ function Num({ label, value, step, min, max, onChange, hint }: {
   onChange: (v: number) => void; hint?: string;
 }) {
   return (
-    <div style={{ marginTop: 8 }}>
-      <div className="ds-row" style={{ gap: 8, alignItems: 'center' }}>
-        <span className="ds-v360-numlabel">{label}</span>
-        <input
-          type="range" min={min} max={max} step={step} value={value}
-          onChange={(e) => onChange(+e.target.value)}
-          style={{ flex: 1 }}
-        />
+    <div style={{ margin: '8px 0' }}>
+      <div className="ds-row" style={{ gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+        <span className="ds-sub">{label}</span>
         <span className="ds-mono ds-v360-num">{value.toFixed(2)}</span>
       </div>
+      <input
+        type="range" min={min} max={max} step={step} value={value}
+        onChange={(e) => onChange(+e.target.value)}
+        style={{ width: '100%' }}
+      />
       {hint && <div className="ds-hint" style={{ marginTop: 2 }}>{hint}</div>}
     </div>
   );

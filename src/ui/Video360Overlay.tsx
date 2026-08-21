@@ -157,6 +157,12 @@ export function Video360Overlay({ getManager }: Props) {
     return () => sm.setVideo360Listener(null);
   }, [getManager]);
 
+  // プランの動画データが変わったらエンジンに知らせる。動画を入れた直後・ポイントを
+  // 打った直後に「入れたのに動かない」となるのを防ぐ。
+  useEffect(() => {
+    void getManager()?.syncVideo360(walkData);
+  }, [getManager, walkData]);
+
   // ── ポイントの組み立て ──────────────────────────────────────────────────
   useEffect(() => {
     const sm = getManager();

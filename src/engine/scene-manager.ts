@@ -13,7 +13,7 @@ const QUALITY_PRESETS: Record<QualityMode, { shBands: number; renderScale: numbe
   mid:  { shBands: 2, renderScale: 0.85, radialSort: true  },
   high: { shBands: 3, renderScale: 1.0,  radialSort: true  },
 };
-import type { SceneManifest, Viewpoint, CameraPose, CameraKeyframe } from '../core/types';
+import type { SceneManifest, Viewpoint, CameraPose, CameraKeyframe, Video360Walk } from '../core/types';
 import { interpolatePath, totalPathDurationSec, resolveStartViewpoint } from '../core/viewpoint';
 import { downscaleCanvasToJpeg } from '../utils/video-recorder';
 import { loadSceneManifest, resolveScenePath } from '../core/scene-manifest';
@@ -899,6 +899,9 @@ export class SceneManager {
       if (this.splatEntity) this.splatEntity.enabled = false;
       // 動画がシーンそのものなので、カメラは向きだけ。移動させると絵が破綻する。
       this.cameraController?.setMovementLocked(true);
+      // 動画がまだ無くてもここで設置する。あとから作ったスカイは描画に乗らない
+      // (同じ状態でもリロードするまで映らない) ので、作るのはこの 1 回きりにする。
+      this.video360Sky = applyEquirectVideoSky(this.app);
       await this.startVideo360();
       return;
     }
@@ -940,6 +943,32 @@ export class SceneManager {
   /** 進行中のウォークスルー。UI からポイントを押すのに使う。 */
   getVideo360(): Video360Walker | null { return this.video360; }
 
+  /**
+   * プランの動画データを実行中のウォークスルーに合わせる。
+   *
+   * `setViewMode` は同じモードなら即 return するので、モードに入ったあとで動画を
+   * 入れても何も起きない ― 「動画を入れたのに再生されない」はこれ。
+   * 素材そのものが変わったときだけ張り直し、ノードやエッジの編集は差し替えで済ませる
+   * (8K を読み直すと数秒止まるので、編集のたびにやってはいけない)。
+   */
+  async syncVideo360(data: Video360Walk | undefined): Promise<void> {
+    if (this.viewMode !== 'video360') return;
+    if (!data?.src) {
+      if (this.video360) this.teardownVideo360();
+      return;
+    }
+    const cur = this.video360?.sourceRefs;
+    if (!this.video360 || cur?.src !== data.src || cur?.reverse !== data.srcReverse) {
+      // walker だけ作り直す。スカイのメッシュには触らない ―
+      // ここで作り直すと描画に乗らなくなる (上の applyEquirectVideoSky のコメント)。
+      this.video360?.destroy();
+      this.video360 = null;
+      await this.startVideo360();
+      return;
+    }
+    this.video360.setData(data);
+  }
+
   private async startVideo360(): Promise<void> {
     const store = useSceneStore.getState();
     const manifest = store.manifest ?? this.manifest;
@@ -965,7 +994,13 @@ export class SceneManager {
       onState: (st) => this.video360Listener?.(st),
       // 新しいフレームが出たときだけテクスチャを上げ直す。描画ループ任せにすると
       // 60Hz で転送し続けることになり、8K では 1 枚 96MB がそのまま効く。
-      onFrame: () => this.video360Sky?.upload(),
+      onFrame: () => {
+        // 順再生 / 逆走で <video> が入れ替わるので、毎回いまの元に合わせてから上げる。
+        const sky = this.video360Sky;
+        if (!sky) return;
+        sky.setSource(walker.videoElement);
+        sky.upload();
+      },
     });
     this.video360 = walker;
     await walker.load();
@@ -973,7 +1008,8 @@ export class SceneManager {
       walker.destroy();     // 読み込み中にモードが変わっていた
       return;
     }
-    this.video360Sky = applyEquirectVideoSky(this.app, walker.videoElement);
+    // スカイはモード開始時に設置済み。ここでは貼る元を渡すだけ。
+    this.video360Sky?.setSource(walker.videoElement);
 
     if (data.nodes.length === 0) {
       // まだノードが無い。先頭のフレームを出して、打つ対象を見せる。

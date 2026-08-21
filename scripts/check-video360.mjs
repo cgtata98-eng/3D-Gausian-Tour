@@ -54,7 +54,14 @@ const EDGES = [
 const browser = await puppeteer.launch({
   executablePath: EDGE,
   headless: 'new',
-  args: ['--no-sandbox', '--window-size=1440,900', '--autoplay-policy=no-user-gesture-required', '--mute-audio'],
+  // 自動再生の許可は --strict-autoplay で外せる。付けたまま検証すると、実ブラウザで
+  // 「動画が動かない」という一番よくある壊れ方を丸ごと見逃す。
+  args: [
+    '--no-sandbox',
+    '--window-size=1440,900',
+    ...(process.argv.includes('--strict-autoplay') ? [] : ['--autoplay-policy=no-user-gesture-required']),
+    '--mute-audio',
+  ],
 });
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
@@ -282,7 +289,7 @@ await sleep(4000);
 const openAll = () => page.evaluate(() => {
   for (const el of document.querySelectorAll('button, summary, [role="button"]')) {
     const t = (el.textContent || '').trim();
-    if (/各プラン|描画品質|ウォークスルーの組み立て/.test(t)) el.click();
+    if (/各プラン|描画品質|360°動画ウォークスルー/.test(t)) el.click();
   }
 });
 await openAll();
@@ -300,7 +307,7 @@ const dbg = await page.evaluate(() => {
     hasEngineSwitch: titles.includes('ビューアエンジン'),
     hasColorPipeline: titles.includes('カラーパイプライン'),
     hasRenderQuality: titles.includes('描画品質'),
-    hasAssembly: /ウォークスルーの組み立て/.test(text),
+    hasAssembly: /360°動画ウォークスルー/.test(text),
   };
 });
 await page.screenshot({ path: `${OUT}/07-debug.png`, fullPage: false });
@@ -346,7 +353,7 @@ await sleep(4500);
 await page.evaluate(() => {
   for (const el of document.querySelectorAll('button, summary, [role="button"]')) {
     const t = (el.textContent || '').trim();
-    if (/プラン$|ウォークスルーの組み立て/.test(t)) el.click();
+    if (/プラン$|360°動画ウォークスルー/.test(t)) el.click();
   }
 });
 await sleep(1200);
@@ -358,7 +365,7 @@ await page.evaluate(() => {
 await sleep(1200);
 await page.evaluate(() => {
   for (const el of document.querySelectorAll('button, summary, [role="button"]')) {
-    if (/ウォークスルーの組み立て/.test((el.textContent || '').trim())) el.click();
+    if (/360°動画ウォークスルー/.test((el.textContent || '').trim())) el.click();
   }
 });
 await sleep(800);
@@ -421,21 +428,144 @@ await page.evaluate(() => {
   b?.click();
 });
 await sleep(500);
-const doorState = await page.evaluate(() => ({
-  aim: document.querySelector('.ds-v360-aim__hint')?.textContent?.slice(0, 20) ?? null,
-  edgeText: (document.body.innerText.match(/エッジ（\d+）/) ?? [null])[0],
-  nodeText: (document.body.innerText.match(/ノード（\d+）/) ?? [null])[0],
-}));
 await page.keyboard.press('d');
 await sleep(1200);
 const doors = await page.evaluate(() => document.querySelectorAll('.ds-v360-door').length);
-const afterDoor = await page.evaluate(() => ({
-  edgeText: (document.body.innerText.match(/エッジ（\d+）/) ?? [null])[0],
-}));
-console.log('     診断:', JSON.stringify({ before: doorState, after: afterDoor }));
 await page.screenshot({ path: `${OUT}/10-door.png` });
 console.log('  📸 10-door  ドアのマーク');
 check('D キーでドアが貼れる', doors > 0, `${doors} 個`);
+
+// ── 9. 実フロー: 動画が無いプランに ⇪ で入れる ────────────────────────────
+// ここが今まで抜けていた。種を直接仕込む検証だと「入れた直後に動くか」を一度も
+// 通らないので、`setViewMode` が同じモードで即 return して起動しない不具合を見逃す。
+console.log('\n=== 9. 実フロー: ⇪ で動画を入れる ===');
+
+await page.evaluate(async (sceneId) => {
+  const db = await new Promise((res, rej) => {
+    const req = indexedDB.open('3droomtour', 1);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+  const m = await new Promise((res, rej) => {
+    const tx = db.transaction('manifests', 'readonly');
+    const r = tx.objectStore('manifests').get(sceneId);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  delete m.plans[0].video360;          // 動画ごと外して、入れるところからやる
+  await new Promise((res, rej) => {
+    const tx = db.transaction('manifests', 'readwrite');
+    tx.objectStore('manifests').put(m, sceneId);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}, SCENE_ID);
+
+await page.goto(`${BASE}/scene/${SCENE_ID}`, { waitUntil: 'networkidle2', timeout: 90000 });
+await sleep(4000);
+// 全体タブ →「各プラン」を開く
+await page.evaluate(() => {
+  for (const el of document.querySelectorAll('button, summary, [role="button"]')) {
+    if (/各プラン/.test((el.textContent || '').trim())) el.click();
+  }
+});
+await sleep(900);
+
+const upBtn = await page.$('button[title*="360°動画を入れる"]');
+check('プランカードに動画の ⇪ が出る', !!upBtn);
+if (upBtn) {
+  // ⇪ を実際に押す。input へ直接流し込むと、どのプランに入れるかを覚える
+  // state (planVideoTargetId) が立たず、ハンドラが何もせず抜ける。
+  const [chooser] = await Promise.all([
+    page.waitForFileChooser({ timeout: 15000 }),
+    upBtn.click(),
+  ]);
+  await chooser.accept([VIDEO]);
+  // 取り込み → manifest 反映 → syncVideo360 で起動、まで待つ
+  const started = await page.waitForFunction(
+    () => !!window.__sceneManager?.getVideo360?.(),
+    { timeout: 90000 },
+  ).then(() => true).catch(() => false);
+  await sleep(2500);
+  check('入れた直後にウォークスルーが起動する', started);
+
+  // 絵が出ているか。向きを変えて画が変わることで見る。
+  const bytes = [];
+  for (const yaw of [0, 120]) {
+    await page.evaluate((y) => {
+      const cc = window.__sceneManager?.cameraController;
+      cc?.setYaw?.(y);
+      cc?.setPitch?.(-10);
+    }, yaw);
+    await sleep(600);
+    bytes.push((await page.screenshot({ encoding: 'binary' })).length);
+  }
+  await page.screenshot({ path: `${OUT}/11-uploaded.png` });
+  console.log('  📸 11-uploaded  ⇪ で入れた直後');
+  check('入れた直後に動画が映る', Math.abs(bytes[0] - bytes[1]) > 2000, `${bytes[0]}B → ${bytes[1]}B`);
+
+  // 再生されるか。素の再生を回して時刻が進むことを見る。
+  const played = await page.evaluate(async () => {
+    const w = window.__sceneManager.getVideo360();
+    w.previewPlay();
+    const t0 = w.getState().time;
+    await new Promise((r) => setTimeout(r, 2000));
+    const t1 = w.getState().time;
+    w.previewPause();
+    return { t0, t1 };
+  });
+  check('動画が再生される（時刻が進む）', played.t1 - played.t0 > 0.5,
+    `${played.t0.toFixed(2)}s → ${played.t1.toFixed(2)}s`);
+}
+
+// ── 10. ワンクリックで反転素材を作る ──────────────────────────────────────
+console.log('\n=== 10. 反転素材をボタンで作る ===');
+const ping = await page.evaluate(() => fetch('/api/dev/video360/ping').then((r) => r.json()).catch(() => ({ ffmpeg: false })));
+check('この端末で ffmpeg が使える', !!ping.ffmpeg, JSON.stringify(ping));
+
+if (ping.ffmpeg) {
+  // パネルはプランタブの中の折りたたみセクション。開いてからでないと中身が無い。
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').trim().startsWith('プラン'));
+    b?.click();
+  });
+  await sleep(1200);
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll('button, summary, [role="button"]')) {
+      if (/360°動画ウォークスルー/.test((el.textContent || '').trim())) el.click();
+    }
+  });
+  await sleep(900);
+
+  const hasBtn = await page.evaluate(() =>
+    [...document.querySelectorAll('button')].some((b) => /反転素材を作/.test(b.textContent || '')));
+  check('反転素材を作るボタンが出る', hasBtn);
+
+  if (hasBtn) {
+    const t0 = Date.now();
+    // 確認ダイアログは自動で閉じる
+    page.on('dialog', (d) => { void d.accept(); });
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => /反転素材を作/.test(x.textContent || ''));
+      b?.click();
+    });
+    const made = await page.waitForFunction(
+      () => /反転素材を差し替え/.test(document.body.innerText),
+      { timeout: 600000, polling: 2000 },
+    ).then(() => true).catch(() => false);
+    check('ボタンだけで反転素材ができる', made, `${((Date.now() - t0) / 1000).toFixed(0)}s`);
+
+    // 出来た素材が実際にウォークスルーに入ったか。ノードの数はここでは問わない
+    // (この手順は動画を入れ直した直後なので、まだノードを打っていない)。
+    const back = await page.evaluate(() => {
+      const w = window.__sceneManager?.getVideo360?.();
+      if (!w) return { ok: false, why: 'walker なし' };
+      const refs = w.sourceRefs;
+      return { ok: !!refs.reverse, why: refs.reverse ?? '逆走の素材が入っていない' };
+    });
+    check('作った反転素材がウォークスルーに入る', back.ok, back.why);
+  }
+}
 
 await writeFile(`${OUT}/report.json`, JSON.stringify({ checks, logs }, null, 2));
 const failed = checks.filter((c) => !c.pass);
