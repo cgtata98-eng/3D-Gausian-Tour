@@ -235,21 +235,25 @@ export async function applyEquirectSkyboxFromBlob(app: AppBase, blob: Blob, name
 }
 
 /**
- * 360°動画をそのままスカイボックスにする。
+ * 360°動画用のスカイボックスを設置する。
  *
- * 画像版と違い、テクスチャは動画が新しいフレームを出すたびに上げ直す必要がある。
- * ただし描画ループ任せで毎フレーム上げてはいけない: 表示は 60Hz、動画は 30fps なので
- * 転送量が倍になる。1920x1080 なら誤差だが、8000x4000 だと 1 枚 96MB あるので
- * そこが素直に効く。だから `upload()` を呼ぶ責任は呼び出し側に渡し、
- * `requestVideoFrameCallback` (= 実際にフレームが出た瞬間) から叩いてもらう。
+ * 動画そのものは渡さない。**モードに入った時点で空のまま設置し**、動画が入ったら
+ * `setSource()` で元だけ差し替える。理由は 2 つある。
+ *
+ * 1. セッションの途中でスカイのメッシュを作り直すと描画に乗らない。読み込み時に
+ *    作ったものは映るのに、あとから作ったものは同じ状態でも映らない
+ *    (レイヤーもカメラもマテリアルも同一で、リロードすると直る)。
+ *    だから「作るのは 1 回だけ」に寄せる。
+ * 2. 順再生と逆走で <video> が入れ替わる。テクスチャを片方に固定したままだと、
+ *    逆走中に順再生側の止まった絵を貼り続けることになる。
  *
  * 返り値を捨てる前に必ず `destroy()` すること。しないと GPU 側のテクスチャが残る。
  */
-export function applyEquirectVideoSky(app: AppBase, video: HTMLVideoElement): EquirectVideoSky {
+export function applyEquirectVideoSky(app: AppBase): EquirectVideoSky {
   const tex = new Texture(app.graphicsDevice, {
     name: 'equirect-video-skybox',
-    width: video.videoWidth || 2,
-    height: video.videoHeight || 1,
+    width: 2,
+    height: 1,
     format: PIXELFORMAT_RGBA8,
     type: TEXTURETYPE_DEFAULT,
     // 経度方向は REPEAT。CLAMP にすると u=0/1 の継ぎ目に縦の筋が出る。
@@ -261,21 +265,26 @@ export function applyEquirectVideoSky(app: AppBase, video: HTMLVideoElement): Eq
     // ぼけたレベルを引いてしまう (画像版と同じ理由)。
     mipmaps: false,
   });
-  tex.setSource(video);
   installEquirectSky(app, { texture: tex, isHdr: false });
 
+  let bound: HTMLVideoElement | null = null;
   let destroyed = false;
   return {
     texture: tex,
+    setSource(video: HTMLVideoElement) {
+      if (destroyed || bound === video) return;
+      bound = video;
+      tex.setSource(video);
+    },
     upload() {
-      if (destroyed || video.readyState < 2) return;
-      // setSource を毎回呼ぶと PlayCanvas 側で再確保が走ることがあるので、
-      // 2 回目以降は upload() だけ。
+      if (destroyed || !bound || bound.readyState < 2) return;
+      // setSource を毎回呼ぶと再確保が走ることがあるので、2 回目以降は upload だけ。
       tex.upload();
     },
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      bound = null;
       removeEquirectSkybox(app);
     },
   };
@@ -283,6 +292,8 @@ export function applyEquirectVideoSky(app: AppBase, video: HTMLVideoElement): Eq
 
 export interface EquirectVideoSky {
   texture: Texture;
+  /** 貼る元の <video> を差し替える。順再生 / 逆走の切り替えで呼ぶ。 */
+  setSource(video: HTMLVideoElement): void;
   /** 新しいフレームが出たときだけ呼ぶ。 */
   upload(): void;
   destroy(): void;

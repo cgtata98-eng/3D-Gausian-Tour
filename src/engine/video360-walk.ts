@@ -58,7 +58,7 @@ export interface Video360WalkerOptions {
 }
 
 export class Video360Walker {
-  private readonly data: Video360Walk;
+  private data: Video360Walk;
   private readonly opts: Video360WalkerOptions;
 
   /** 順再生と反転素材。同じ絵なので、対応する時刻に両方を置いておけば
@@ -112,6 +112,21 @@ export class Video360Walker {
       if (!v) continue;
       try { await v.play(); v.pause(); } catch { /* muted なので基本通る */ }
     }
+  }
+
+  /**
+   * ノードやエッジの編集を反映する。動画そのものは読み直さない。
+   *
+   * これが無いと、オーサリングで打ったポイントが歩きに反映されない ―
+   * walker は構築時の data を握ったままで、ストアが作り直した新しいオブジェクトを
+   * 見に行かないため。「打ったのに動かない」の正体はここ。
+   */
+  setData(data: Video360Walk): void {
+    this.data = data;
+  }
+
+  get sourceRefs(): { src: string; reverse?: string } {
+    return { src: this.data.src, reverse: this.data.srcReverse };
   }
 
   /** スカイボックスに貼る動画要素。SceneManager が使う。 */

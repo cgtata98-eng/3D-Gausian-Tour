@@ -37,6 +37,10 @@ r2-uploads/**/splat.*
 r2-uploads/**/*.ply
 r2-uploads/**/*.spz
 r2-uploads/**/*.sog
+# 360°動画の素材 (Debug の「反転素材を作る」が原本と反転をここに置く)。
+# 1 本で数十 MB〜GB になるので git には載せない。
+r2-uploads/**/*.mp4
+r2-uploads/**/*.webm
 
 # OS / IDE noise
 Thumbs.db
