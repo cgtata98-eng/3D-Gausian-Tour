@@ -249,6 +249,33 @@ export function applySplatTransform(entity: Entity, transform: SplatTransform | 
 }
 
 /**
+ * 中身が本当に zip かを先に見る。
+ *
+ * fflate は zip でないものを渡されると「invalid zip data」としか言わない。実際に
+ * 起きるのはたいてい **404 ではなく 200 で zip 以外が返っている** ケースで
+ * (SPA のフォールバックが index.html を返す / R2 のエラーページ / 認証の入口への
+ * リダイレクト)、あのメッセージからは何が返ってきたのか一切分からない。
+ *
+ * 先頭 4 バイトを見れば zip かどうかは確定する。違うなら、何が返ってきたのかを
+ * 添えて落とす — 原因を突き止めるのに要るのはその 1 行だけ。
+ */
+function assertZip(buf: Uint8Array, url: string, contentType: string): void {
+  // ローカルファイルヘッダ "PK\x03\x04"。中身が空の zip ("PK\x05\x06") も通す。
+  const isZip = buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b
+    && ((buf[2] === 0x03 && buf[3] === 0x04) || (buf[2] === 0x05 && buf[3] === 0x06));
+  if (isZip) return;
+  const head = new TextDecoder().decode(buf.slice(0, 64)).replace(/\s+/g, ' ').trim();
+  const looksHtml = /^<!doctype|^<html/i.test(head);
+  throw new Error(
+    `SOG が zip ではありません (${url}) — ${buf.length} バイト / Content-Type: ${contentType || '不明'}`
+    + (looksHtml
+      ? '。HTML が返っています: そのファイルが R2 に無く、SPA のフォールバックか'
+        + 'エラーページを掴んでいます。公開しなおして .sog が上がっているか確認してください。'
+      : `。先頭: "${head.slice(0, 48)}"`),
+  );
+}
+
+/**
  * Load a SOG bundle from a single-file `.sog` URL (zip wrapping `meta.json` +
  * `*.webp` textures, the SuperSplat-export format). Used for R2-hosted assets
  * 窶・the customer's browser fetches one URL, we unzip in-memory with fflate,
@@ -264,6 +291,7 @@ export async function loadSogFromUrl(
 ): Promise<Entity> {
   const blob = await fetchWithProgress(sogUrl, onProgress);
   const buf = new Uint8Array(await blob.arrayBuffer());
+  assertZip(buf, sogUrl, blob.type);
   const entries = unzipSync(buf);
 
   const urlMap = new Map<string, string>();

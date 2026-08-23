@@ -145,10 +145,16 @@ async function handleListDebug(request: Request, env: Env): Promise<Response> {
   const auth = request.headers.get('Authorization') ?? '';
   const expected = 'Basic ' + btoa(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`);
   if (auth !== expected) return new Response('Unauthorized', { status: 401 });
-  const list = await env.BUCKET.list({ limit: 30 });
+  // 既定 30 件だと数シーンで打ち切られ、「どのファイルが上がっていないか」を
+  // 調べる用途に使えない。`?limit=` と `?cursor=` で最後まで辿れるようにする。
+  const url = new URL(request.url);
+  const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get('limit') ?? '30')));
+  const cursor = url.searchParams.get('cursor') ?? undefined;
+  const list = await env.BUCKET.list({ limit, cursor });
   return jsonResponse({
     bucket_keys: list.objects.map((o) => ({ key: o.key, size: o.size })),
     truncated: list.truncated,
+    cursor: list.truncated ? list.cursor : undefined,
   });
 }
 
