@@ -54,6 +54,9 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
   const [selNode, setSelNode] = useState<string | null>(null);
   const [selEdge, setSelEdge] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // 一括生成の入力。等分割はウォークスルーで一番よく使う 10 を既定に。
+  const [splitCount, setSplitCount] = useState('10');
+  const [timeList, setTimeList] = useState('');
   // ローカルの ffmpeg が使えるか。使えるときだけ「反転素材を作る」を出す。
   // 本番 (Cloudflare) にこの経路は無いので、出しても押せないボタンになる。
   const [canRunFfmpeg, setCanRunFfmpeg] = useState(false);
@@ -352,6 +355,111 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
     } finally {
       setBusy(null);
     }
+  };
+
+  /**
+   * 時刻の並びからノードとエッジを起こす。等分割・秒指定の共通の土台。
+   *
+   * 静止区間ベース (`generate`) はカメラが足を止める素材が前提で、CG の連続移動
+   * には効かない ― 止まる瞬間が無いので静止区間が 0 個になる。そういう素材では
+   * 「尺のどこで止めるか」を先に決めるほうが早い。
+   *
+   * 時刻はフレーム境界に丸める。丸めないと、シークが隣り合う 2 フレームの
+   * どちらに着地するかが再生ごとに揺れて、停止中の絵がちらついて見える。
+   */
+  const buildFromTimes = (times: number[], how: string) => {
+    if (!data) return;
+    const fps = data.fps > 0 ? data.fps : 30;
+    const dur = data.duration;
+    const snap = (t: number) => +(Math.round(Math.max(0, Math.min(t, dur - 1 / fps)) * fps) / fps).toFixed(4);
+    // 同じフレームに 2 つ置いても意味が無い (同じ絵で止まる 2 地点になる)。
+    const ts = [...new Set(times.map(snap))].sort((a, b) => a - b);
+    if (ts.length === 0) { alert('時刻がひとつも取れませんでした。'); return; }
+
+    const store = useSceneStore.getState();
+    const existing = [...plan.viewpoints];
+    const nodes: Video360Node[] = ts.map((t, i) => {
+      let vp = existing[i];
+      if (!vp) {
+        const id = `v360-${i + 1}`;
+        const label = `ポイント ${i + 1}`;
+        // 位置は仮。カメラ軌跡があればこの下で実座標に差し替える。
+        const pose = {
+          id, label,
+          position: [0, 1.6, -i * 2] as [number, number, number],
+          target: [0, 1.6, -i * 2 - 1] as [number, number, number],
+          fov: 75,
+        };
+        store.addViewpoint(pose);
+        vp = pose;
+        existing[i] = vp;
+      }
+      return { viewpointId: vp.id, t };
+    });
+
+    // 区間はノードとノードのあいだそのもの。連続移動の素材では「立ち止まっている
+    // ぶん」が無いので、静止区間ベースのような境目の取り分けは要らない。
+    const edges: Video360Edge[] = [];
+    for (let i = 0; i + 1 < nodes.length; i++) {
+      edges.push({
+        id: `e${i + 1}`,
+        from: nodes[i].viewpointId,
+        to: nodes[i + 1].viewpointId,
+        range: [nodes[i].t, nodes[i + 1].t],
+        label: `${existing[i + 1]?.label ?? ''}へ`,
+        kind: 'walk',
+      });
+    }
+
+    const next: Video360Walk = { ...data, nodes, edges };
+    // 軌跡が入っているなら、作った直後に実座標を入れる。あとで手で押させると
+    // 「打ったのに図面のドットが原点に固まっている」状態を経由することになる。
+    let placed = 0;
+    if (next.track) {
+      const r = applyTrackToViewpoints(next, existing);
+      placed = r.count;
+      useSceneStore.setState((st) => {
+        if (!st.manifest?.plans) return st;
+        return {
+          manifest: {
+            ...st.manifest,
+            plans: st.manifest.plans.map((pp) => (pp.id === plan.id ? { ...pp, viewpoints: r.updated } : pp)),
+          },
+        };
+      });
+    }
+    setPlanVideo360(plan.id, next);
+    setSelNode(nodes[0]?.viewpointId ?? null);
+    setSelEdge(edges[0]?.id ?? null);
+    alert([
+      `${how}でノード ${nodes.length} 個 / エッジ ${edges.length} 本を起こしました。`,
+      `時刻: ${ts.map((t) => t.toFixed(2)).join(', ')}`,
+      placed ? `カメラ軌跡から ${placed} 件の視点に実座標を入れました。` : 'カメラ軌跡が未設定なので、位置は仮のままです（図面で置くか、軌跡を読ませてください）。',
+    ].join('\n'));
+  };
+
+  /** 尺を N 等分する。両端を含むので **N+1 個**。最後の部屋にも立てるため。 */
+  const generateEvenly = (n: number) => {
+    if (!data || !(n >= 1) || !Number.isFinite(n)) { alert('分割数は 1 以上の数で指定してください。'); return; }
+    const dur = data.duration;
+    buildFromTimes(
+      Array.from({ length: n + 1 }, (_, i) => (dur * i) / n),
+      `${n} 等分`,
+    );
+  };
+
+  /** `0, 3.1, 5.1` のように秒を並べて打つ。`f` を付けるとフレーム番号として読む。 */
+  const generateFromList = (text: string) => {
+    if (!data) return;
+    const fps = data.fps > 0 ? data.fps : 30;
+    const times = text
+      .split(/[,\s]+/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .map((x) => (/^\d+(\.\d+)?f$/i.test(x) ? Number(x.slice(0, -1)) / fps : Number(x)))
+      .filter((v) => Number.isFinite(v));
+    if (times.length === 0) { alert('数値として読めませんでした。`0, 3.1, 5.1` のように入れてください。'); return; }
+    buildFromTimes(times, '秒指定');
   };
 
   /**
@@ -706,13 +814,57 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
       </div>
 
       {/* ── 一括生成 ── */}
-      {!!data.stills?.length && (
-        <div className="ds-row" style={{ marginTop: 10 }}>
-          <button type="button" className={BTN_PRIMARY} onClick={generate}>
-            静止区間 {data.stills.length} 個からノードとエッジを起こす
-          </button>
+      <div style={S.sec}>
+        <span className="ds-label">一括で打つ</span>
+        {!!data.stills?.length && (
+          <div className="ds-row" style={{ marginTop: 6 }}>
+            <button type="button" className={BTN_PRIMARY} onClick={generate}>
+              静止区間 {data.stills.length} 個からノードとエッジを起こす
+            </button>
+          </div>
+        )}
+        <div className="ds-row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="number" min={1} max={200} step={1}
+            value={splitCount}
+            onChange={(e) => setSplitCount(e.target.value)}
+            className="ds-input"
+            style={{ width: 68 }}
+            aria-label="分割数"
+          />
+          <button
+            type="button"
+            className={BTN_PRIMARY}
+            onClick={() => generateEvenly(Number(splitCount))}
+          >等分して打つ</button>
+          <span className="ds-sub">
+            {(() => {
+              const n = Number(splitCount);
+              if (!(n >= 1) || !Number.isFinite(n)) return '';
+              return `→ ${n + 1} ポイント / ${(duration / n).toFixed(2)}s ごと`;
+            })()}
+          </span>
         </div>
-      )}
+        <div className="ds-row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="text"
+            value={timeList}
+            onChange={(e) => setTimeList(e.target.value)}
+            placeholder="0, 3.1, 5.1, 8.4"
+            className="ds-input"
+            style={{ flex: 1, minWidth: 180 }}
+            aria-label="秒の並び"
+          />
+          <button type="button" className={BTN} onClick={() => generateFromList(timeList)}>秒を並べて打つ</button>
+        </div>
+        <p className="ds-hint">
+          <b>どちらも既存のノード・エッジを置き換えます</b>（視点は足りない分だけ作ります）。
+          時刻はフレーム境界に丸めます — 丸めないと、シークが隣のフレームに着地するかが
+          再生ごとに揺れて、止まっている絵がちらつきます。<br />
+          秒の並びは <code>93f</code> のように <code>f</code> を付けるとフレーム番号として読みます
+          （この素材は {data.fps.toFixed(2)}fps / {Math.round(duration * data.fps)} フレーム）。
+        </p>
+      </div>
 
       {/* ── ノード ── */}
       <div style={S.sec}>
