@@ -67,28 +67,49 @@ export type LoadProgress = (progress: number | null) => void;
  * 蜈ｨ繝舌う繝医ｒ 1 蛟九・ Blob 縺ｫ縺ｾ縺ｨ繧√※霑斐☆縲・ontent-Length 縺檎┌縺・(= 蝨ｧ邵ｮ霆｢騾√↑縺ｩ) 蝣ｴ蜷医・
  * 1 蠎ｦ縺縺・`null` 繧堤匱轣ｫ縺励※縺九ｉ鮟吶・→隱ｭ繧 窶・荳贋ｽ阪・縲後ム繧ｦ繝ｳ繝ｭ繝ｼ繝我ｸｭ縺縺・%譛ｪ遒ｺ螳壹阪→縺励※
  * 繧ｹ繝斐リ繝ｼ縺縺大・縺帙・繧医＞縲・ */
-async function fetchWithProgress(url: string, onProgress?: LoadProgress): Promise<Blob> {
+async function fetchWithProgress(url: string, onProgress?: LoadProgress): Promise<Uint8Array> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText} (${url})`);
   const totalHdr = res.headers.get('content-length');
   const total = totalHdr ? parseInt(totalHdr, 10) : 0;
   if (!res.body || !total) {
     // 騾ｲ謐励ｒ蜿悶ｌ縺ｪ縺・こ繝ｼ繧ｹ: Blob 縺縺題ｿ斐＠縺ｦ null 繧呈ｵ√☆縲・    onProgress?.(null);
-    return res.blob();
+    return new Uint8Array(await res.arrayBuffer());
   }
+  // 受け取りは **1 本の Uint8Array に直接積む**。
+  //
+  // 以前はチャンクを配列に貯めて Blob を作り、そのあと arrayBuffer() で読み直して
+  // いた。90MB の .sog でピークが 3 倍以上になり、スマホ (特に iOS Safari) では
+  // タブごと落ちる。Content-Length は分かっているので、最初から確保して埋める。
   const reader = res.body.getReader();
-  const chunks: BlobPart[] = [];
+  const out = new Uint8Array(total);
+  /** Content-Length を超えた場合の逃げ道。圧縮転送だと申告より長く届きうる。 */
+  let overflow: Uint8Array[] | null = null;
   let received = 0;
   onProgress?.(0);
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    // Uint8Array<SharedArrayBuffer> 蜷ｫ縺ｿ縺ｮ蝙九→ Blob ctor 縺ｮ BlobPart 譛溷ｾ・梛縺・    // 蝎帙∩蜷医ｏ縺ｪ縺・・縺ｧ縲∝ｮ牙・縺ｫ ArrayBuffer 蛛ｴ縺ｫ繧ｳ繝斐・縺励※隧ｰ繧√ｋ (`slice().buffer`)縲・    chunks.push(value.slice().buffer);
+    if (!overflow && received + value.byteLength > total) overflow = [out.subarray(0, received)];
+    if (overflow) overflow.push(value.slice());
+    else out.set(value, received);
     received += value.byteLength;
     onProgress?.(Math.min(1, received / total));
   }
   onProgress?.(1);
-  return new Blob(chunks);
+  if (overflow) {
+    const len = overflow.reduce((n, c) => n + c.byteLength, 0);
+    const merged = new Uint8Array(len);
+    let at = 0;
+    for (const c of overflow) { merged.set(c, at); at += c.byteLength; }
+    return merged;
+  }
+  // 申告より短ければ途中で切れている。ここで止めないと、下流が「壊れたファイル」
+  // として扱い、zip なら「invalid zip data」という原因の分からない失敗になる。
+  if (received < total) {
+    throw new Error(`ダウンロードが途中で切れました: ${received} / ${total} バイト (${url})`);
+  }
+  return out;
 }
 
 /**
@@ -110,8 +131,8 @@ export async function loadGSplat(
   let assetUrl = url;
   let revoke: string | null = null;
   if (/^https?:|^\//.test(url)) {
-    const blob = await fetchWithProgress(url, onProgress);
-    assetUrl = URL.createObjectURL(blob);
+    const bytes = await fetchWithProgress(url, onProgress);
+    assetUrl = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer]));
     revoke = assetUrl;
   } else {
     onProgress?.(null);
@@ -289,15 +310,16 @@ export async function loadSogFromUrl(
   transform?: SplatTransform,
   onProgress?: LoadProgress,
 ): Promise<Entity> {
-  const blob = await fetchWithProgress(sogUrl, onProgress);
-  const buf = new Uint8Array(await blob.arrayBuffer());
-  assertZip(buf, sogUrl, blob.type);
+  const buf = await fetchWithProgress(sogUrl, onProgress);
+  assertZip(buf, sogUrl, 'application/octet-stream');
   const entries = unzipSync(buf);
 
   const urlMap = new Map<string, string>();
   let meta: unknown = null;
   for (const [filename, data] of Object.entries(entries)) {
-    const blob = new Blob([data.slice()]);
+    // `data.slice()` を挟まない。Blob の生成で中身はどのみち複製されるので、
+    // 事前のコピーは丸ごと無駄 ― 90MB の束では素材 1 個ごとに効いてくる。
+    const blob = new Blob([(data.buffer as ArrayBuffer).slice(data.byteOffset, data.byteOffset + data.byteLength)]);
     urlMap.set(filename, URL.createObjectURL(blob));
     if (filename === 'meta.json') {
       meta = JSON.parse(new TextDecoder().decode(data));
