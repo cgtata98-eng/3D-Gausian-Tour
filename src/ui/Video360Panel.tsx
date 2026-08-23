@@ -520,6 +520,26 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
   };
 
   const duration = data?.duration ?? 0;
+
+  // いま貼られているバリアント。live の walker が正 ― パネルが別に覚えると、
+  // プレビューを開き直したときに表示と実物がずれる。
+  const activeVariantId = getManager?.()?.getVideo360()?.variantId ?? data?.defaultVariantId ?? null;
+  const activeVariant = data?.variants?.find((v) => v.id === activeVariantId) ?? null;
+
+  /**
+   * オーサリング側の切替。家具・照明ストアも一緒に動かす ―
+   * ビューアはそちらを見るので、ここだけ変えると Debug とビューアで食い違う。
+   */
+  const switchVariant = (v: Video360Variant) => {
+    const ui = useUIStore.getState();
+    if (v.furniture) ui.setFurniture(v.furniture);
+    if (v.lighting) ui.setLighting(v.lighting);
+    const sm = getManager?.();
+    if (!sm) return;
+    setBusy('動画を読み込み中…');
+    void sm.getVideo360()?.setVariant(v.id).finally(() => setBusy(null));
+  };
+
   const vpLabel = useMemo(() => {
     const m = new Map(plan.viewpoints.map((v) => [v.id, v.label]));
     return (id: string) => m.get(id) ?? id;
@@ -548,7 +568,11 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
       <div className="ds-row" style={{ gap: 6, flexWrap: 'wrap' }}>
         <span className="ds-sub">素材</span>
         <span className="ds-mono ds-v360-meta">
-          {data.sourceName ?? data.src} / {duration.toFixed(1)}s @ {data.fps}fps
+          {/* 出すのは **いま貼っているファイル名**。`sourceName` は元のレンダー名
+              (A.00000.mp4) のままなので、バリアントを入れても文字列が変わらず
+              「1 本しか入っていない」ように見えてしまう。 */}
+          {activeVariant?.src ?? data.sourceName ?? data.src} / {duration.toFixed(1)}s @ {data.fps.toFixed(2)}fps
+          {data.variants?.length ? ` / ${data.variants.length} 本` : ''}
         </span>
       </div>
       <div className="ds-row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
@@ -576,11 +600,28 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
         本体の動画の差し替えは <b>全体タブ →「各プラン」</b>の ⇪ から。
       </p>
       {data.variants?.length ? (
-        <p className="ds-hint">
-          描き分け素材 <b>{data.variants.length} 本</b>:{' '}
-          {data.variants.map((v) => v.label || v.id).join(' / ')}。
-          ビューアの<b>家具・情景トグル</b>で切り替わります（素材の無い組み合わせは押せません）。
-        </p>
+        <>
+          {/* オーサリング中にも切り替えられるようにする。ノードの時刻は 3 本で共通
+              なので、夜だけ絵が破綻していないか等をここで確かめられないと、
+              打ち終わってからビューアで気付くことになる。 */}
+          <div className="ds-row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+            <span className="ds-sub">描き分け</span>
+            {data.variants.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                className={v.id === activeVariantId ? BTN_PRIMARY : BTN}
+                onClick={() => switchVariant(v)}
+                disabled={!!busy}
+                title={v.src}
+              >{v.label || v.id}</button>
+            ))}
+          </div>
+          <p className="ds-hint">
+            ビューアでは<b>家具・情景トグル</b>（左レールの「カラー」）で切り替わります。
+            素材の無い組み合わせ（{data.variants.length < 4 ? '夜 × 家具なし など' : 'なし'}）は押せません。
+          </p>
+        </>
       ) : (
         <p className="ds-hint">
           家具あり / 家具なし / 夜 を切り替えたいときは、同じカメラ軌跡で描き分けた動画を
