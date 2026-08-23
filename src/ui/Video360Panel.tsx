@@ -14,7 +14,7 @@
  * 持つのが要点。同じにすると静止区間の「たまり」を毎回再生し直すことになる。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Plan, Video360Edge, Video360Node, Video360Variant, Video360Walk } from '../core/types';
+import type { Plan, Video360Edge, Video360Node, Video360Track, Video360Variant, Video360Walk } from '../core/types';
 import { useSceneStore } from '../store/scene-store';
 import { isIdbRef, resolveBlobRef, saveBlob } from '../utils/idb';
 import { resolveScenePath } from '../core/scene-manifest';
@@ -375,6 +375,8 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
       doors?: { label?: string; range: [number, number]; yaw: number; pitch: number; node: number }[];
       stills?: { start: number; end: number; rest: number }[];
       calmTimes?: number[];
+      /** レンダリング時のカメラ軌跡。入れると視点に実座標が入る。 */
+      track?: Video360Track;
     },
   ) => {
     if (!data) return;
@@ -440,6 +442,9 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
 
     const next: Video360Walk = {
       ...data,
+      // 軌跡を先に入れる。この下で視点へ実座標を書くのに使う ― あとから入れると
+      // 「ポイントは打ったのに図面のドットが原点に固まっている」を経由する。
+      ...(extras?.track ? { track: extras.track } : {}),
       nodes,
       edges: [...edges, ...doorEdges],
       ...(extras?.stills ? { stills: extras.stills } : {}),
@@ -498,11 +503,17 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
       const times = ns.map((n: { t: number }) => Number(n.t)).filter((t: number) => Number.isFinite(t));
       if (times.length === 0) throw new Error('nodes の t が数値として読めません');
 
+      // 軌跡があれば一緒に入れる。位置を推定せず、書き出したものを使う ―
+      // 「10 フレーム目のポイントは 10 フレーム目に立っている場所の真下」を
+      // 満たせるのは、レンダリング時の座標を持ってくる経路だけ。
+      const track = json.track ? parseWalkTrack(json.track).track : undefined;
+
       setBusy(null);
       buildFromTimes(times, `取り込み (${json.mode ?? '案'})`, {
         doors: Array.isArray(json.doors) ? json.doors : [],
         stills: Array.isArray(json.stills) ? json.stills : undefined,
         calmTimes: Array.isArray(json.calmTimes) ? json.calmTimes : undefined,
+        track,
       });
     } catch (err) {
       console.error('[video360] ウォークスルー案の取り込みに失敗', err);

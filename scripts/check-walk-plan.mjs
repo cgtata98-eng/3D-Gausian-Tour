@@ -62,6 +62,12 @@ const PLAN = {
   ],
   stills: [{ start: 0, end: 0.4, rest: 0.2 }],
   calmTimes: [0.2, 1.5, 3.0],
+  // 1 フレームごとに x が 0.1m ずつ進むだけの軌跡。ノード時刻での座標が
+  // 計算で分かるので、視点にそのまま入ったかを突き合わせられる。
+  track: {
+    source: 'synthetic.csv', fps: 30, unitScale: 1,
+    samples: Array.from({ length: 180 }, (_, i) => [+(i * 0.1).toFixed(3), 1.32, -5, 0]),
+  },
 };
 const planPath = path.join(OUT, 'video360-walk-plan.json');
 await writeFile(planPath, JSON.stringify(PLAN, null, 2), 'utf8');
@@ -220,6 +226,8 @@ const stored = await page.evaluate(async (sceneId) => {
     nodes: p?.video360?.nodes?.length ?? 0,
     doors: doors.map((d) => ({ id: d.id, label: d.label, yaw: d.doorYaw, pitch: d.doorPitch, range: d.range, from: d.from })),
     calm: p?.video360?.calmTimes?.length ?? 0,
+    vp2: p?.viewpoints?.[1],
+    trackSamples: p?.video360?.track?.samples?.length ?? 0,
   };
 }, SCENE_ID);
 check('視点が 5 件できている', stored.viewpoints === 5, `視点=${stored.viewpoints}`);
@@ -234,6 +242,13 @@ check('扉の区間が入る',
   stored.doors[0]?.range?.[0] === 1.2 && stored.doors[0]?.range?.[1] === 1.9,
   JSON.stringify(stored.doors[0]?.range));
 check('calmTimes も取り込まれる', stored.calm === 3, `calm=${stored.calm}`);
+// t=1.5s → frame 45 → x = 4.5。視点にそのまま入っていなければ、案の軌跡が
+// 効いていないか、フレーム→時刻の読み替えがずれている。
+check('視点に軌跡の実座標が入る',
+  Math.abs((stored.vp2?.position?.[0] ?? -99) - 4.5) < 0.001
+  && Math.abs((stored.vp2?.mapPosition?.[0] ?? -99) - 4.5) < 0.001,
+  `ポイント2 position=${JSON.stringify(stored.vp2?.position)} mapPosition=${JSON.stringify(stored.vp2?.mapPosition)}`);
+check('軌跡が manifest に残る', stored.trackSamples === 180, `samples=${stored.trackSamples}`);
 
 const bad = logs.filter((l) => !/favicon|ERR_|Failed to load resource/.test(l));
 if (bad.length) { console.log('\n=== コンソールエラー ==='); bad.slice(0, 8).forEach((l) => console.log(`  ${l}`)); }

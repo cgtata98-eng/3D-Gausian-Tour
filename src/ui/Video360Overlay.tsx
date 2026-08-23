@@ -145,8 +145,15 @@ export function Video360Overlay({ getManager }: Props) {
   // ドアのマーク。床の位置ではないので浮かぶ印として出す。
   // 実座標 (`doorPos`) を持つものはそのまま投影する ― 方向だけで持つと、立つ場所が
   // 変わったときにドアが付いてきてしまう。古いデータは方向のまま読む。
+  // 出すのは **いま立っているノードの扉だけ**。全部出すと、部屋を移っても前の部屋の
+  // 扉が画面のどこかに浮かび続ける ― 押せば動くとはいえ、そこに扉は見えていない。
+  // 開く場所に着いて初めて出るほうが、何が起きるのか一目で分かる。
+  //
+  // 歩いている最中も出さない。移動中に出しても押せないうえ、動く絵の上を印だけが
+  // 滑っていくのが目に障る。
   const doorList = (walkData?.edges ?? [])
     .filter((e) => e.kind === 'door')
+    .filter((e) => walkState?.mode === 'idle' && e.from === walkState?.nodeId)
     .map((e) => ({
       id: e.id,
       pos: e.doorPos ?? null,

@@ -42,6 +42,9 @@ const arg = (n, d = null) => {
 };
 
 const VIDEO = arg('video');
+const TRACK_CSV = arg('track');
+/** 動画の先頭を何コマ落としたか。CSV は元のレンダー全長ぶんあるので、その分ずらす。 */
+const TRACK_OFFSET = Number(arg('track-offset', '0'));
 const NODES = arg('nodes', 'even:10');
 const OUT_DIR = arg('out', path.dirname(VIDEO ?? '.'));
 const PUBLISH = arg('publish');
@@ -65,6 +68,8 @@ const MIN_STILL_FRAMES = 6;
 /** 扉と見なすのに必要な、静止区間の中の残り動き (平均) と長さ (秒)。 */
 const DOOR_MIN_MOTION = 0.5;
 const DOOR_MIN_SECONDS = 0.5;
+/** 扉からこれ以上離れたポイントしか無ければ、扉の前にポイントを足す (秒)。 */
+const DOOR_NODE_MAX_SEC = 0.5;
 
 const run = (cmd, a) => new Promise((res, rej) => {
   const p = spawn(cmd, a, { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -240,6 +245,34 @@ if (NODES.startsWith('even:')) {
   mode = 'stills';
   nodeTimes = segments.map((s) => ({ t: s.rest, wanted: s.rest, movedBy: 0 }));
 }
+/**
+ * 扉の前に立てる場所が無ければ足す。
+ *
+ * 扉の印は「そこに立ったときだけ」出す。だから扉のそばにポイントが無いと、
+ * 開けに行けない扉ができるか、遠くのポイントに紐づいて壁の中に印が浮く。
+ * 実測では 5 等分だと 2 つの扉が 3.8m / 7.6m 離れたポイントに付いた。
+ *
+ * 等分の指定を勝手に増やすことになるが、立てない扉を残すよりはいい。
+ * `--no-door-nodes` で切れる。
+ */
+if (!argv.includes('--no-door-nodes')) {
+  const added = [];
+  for (const seg of segments.filter((x) => x.isDoor)) {
+    const mid = (seg.from + seg.to) / 2;
+    const near = nodeTimes.reduce((b, n) => (Math.abs(n.t - mid) < Math.abs(b.t - mid) ? n : b), nodeTimes[0]);
+    const gap = near.t < seg.from ? seg.from - near.t : near.t > seg.to ? near.t - seg.to : 0;
+    if (gap > DOOR_NODE_MAX_SEC) {
+      nodeTimes.push({ t: seg.rest, wanted: seg.rest, movedBy: 0, forDoor: true });
+      added.push(seg.rest);
+    }
+  }
+  if (added.length) {
+    console.log(`
+扉の前に立つポイントを ${added.length} 個足しました: `
+      + added.map((t) => `${t.toFixed(2)}s`).join(', '));
+  }
+}
+
 // 同じコマに落ちたものは畳む。同じ絵で止まる 2 地点に意味が無い。
 const seen = new Set();
 nodeTimes = nodeTimes.filter((n) => (seen.has(n.t) ? false : (seen.add(n.t), true)))
@@ -247,6 +280,7 @@ nodeTimes = nodeTimes.filter((n) => (seen.has(n.t) ? false : (seen.add(n.t), tru
 
 const nodes = nodeTimes.map((n, i) => ({
   index: i + 1, label: `ポイント ${i + 1}`, t: n.t, wanted: n.wanted, movedBy: n.movedBy,
+  ...(n.forDoor ? { forDoor: true } : {}),
 }));
 const edges = [];
 for (let i = 0; i + 1 < nodes.length; i++) {
@@ -277,6 +311,7 @@ const doors = segments.filter((s) => s.isDoor).map((s, i) => {
 console.log(`\nノード ${nodes.length} 個 (${mode})`);
 for (const n of nodes) {
   console.log(`  ${String(n.index).padStart(2)}  ${n.t.toFixed(2)}s`
+    + (n.forDoor ? '  (扉の前)' : '')
     + (n.movedBy > 0.001 ? `  (等分点 ${n.wanted.toFixed(2)}s から ${n.movedBy.toFixed(2)}s 寄せた)` : ''));
 }
 console.log(`\n扉 ${doors.length} 個`);
@@ -284,6 +319,78 @@ for (const d of doors) {
   console.log(`  ${d.label}  ${d.range[0].toFixed(2)}-${d.range[1].toFixed(2)}s  `
     + `yaw ${d.yaw}° pitch ${d.pitch}°  → ポイント ${d.node}`
     + (d.distanceSec > 0 ? ` (${d.distanceSec.toFixed(2)}s 離れている)` : ''));
+}
+
+// ── カメラ軌跡 (SphereAlign の CSV) ────────────────────────────────────────
+/**
+ * 3ds Max の書き出しをビューアの座標系に直す。
+ *
+ * Max は **Z-up 右手系**、ビューア (PlayCanvas) は **Y-up 右手系**。
+ * `(x, y, z)_max → (x, z, -y)_pc` で右手系のまま倒せる。単位は mm → m。
+ *
+ * yaw はカメラのローカル -Z (Max の見ている向き) から出す。PlayCanvas は
+ * `dir = (-sin yaw, sin pitch, -cos yaw)` なので `yaw = atan2(-dir.x, -dir.z)`。
+ *
+ * CSV は元のレンダー全長ぶんある。動画の先頭を削っているなら、その分だけ
+ * 頭を捨てないとフレーム番号が 1 対 1 にならない ― ここがずれると、ポイントが
+ * 隣の部屋の座標に置かれる。
+ */
+function parseTrackCsv(text, offset) {
+  const lines = text.split(/\r?\n/).filter((l) => l && !l.startsWith('#'));
+  const head = lines[0].split(',').map((h) => h.trim());
+  const col = (n) => head.indexOf(n);
+  const [iPx, iPy, iPz] = ['px', 'py', 'pz'].map(col);
+  const [iZx, iZy, iZz] = ['zx', 'zy', 'zz'].map(col);
+  if (iPx < 0 || iZx < 0) throw new Error('CSV に px/py/pz/zx/zy/zz の列がありません');
+
+  const rows = lines.slice(1).map((l) => l.split(',').map(Number));
+  const used = rows.slice(offset);
+  const samples = used.map((r) => {
+    const x = r[iPx] / 1000;
+    const y = r[iPy] / 1000;
+    const z = r[iPz] / 1000;
+    // Max のカメラは局所 -Z を見ている。
+    const fx = -r[iZx];
+    const fy = -r[iZy];
+    const fz = -r[iZz];
+    // Max → PlayCanvas
+    const px = x, py = z, pz = -y;
+    const dx = fx, dz = -fy;
+    const yaw = (Math.atan2(-dx, -dz) * 180) / Math.PI;
+    return [+px.toFixed(4), +py.toFixed(4), +pz.toFixed(4), +(((yaw % 360) + 360) % 360).toFixed(2)];
+  });
+  return { totalRows: rows.length, samples };
+}
+
+let track = null;
+if (TRACK_CSV) {
+  if (!existsSync(TRACK_CSV)) throw new Error(`軌跡 CSV が見つかりません: ${TRACK_CSV}`);
+  const parsed = parseTrackCsv(await readFile(TRACK_CSV, 'utf8'), TRACK_OFFSET);
+  track = { source: path.basename(TRACK_CSV), fps: +fps.toFixed(6), unitScale: 1, samples: parsed.samples };
+  console.log(`\n軌跡: ${path.basename(TRACK_CSV)}  ${parsed.totalRows} 行 − 先頭 ${TRACK_OFFSET} = ${parsed.samples.length} サンプル`);
+  if (parsed.samples.length !== frames) {
+    console.log(`  ⚠ 動画は ${frames} フレーム。サンプル数と合っていません`);
+    console.log(`     --track-offset を ${parsed.totalRows - frames} にすると一致します`);
+  } else {
+    console.log('  ✅ 動画のフレーム数と一致');
+  }
+  const at = (t) => parsed.samples[Math.max(0, Math.min(parsed.samples.length - 1, Math.round(t * fps)))];
+  for (const n of nodes) {
+    const s2 = at(n.t);
+    if (!s2) continue;
+    n.position = [s2[0], s2[1], s2[2]];
+    n.mapPosition = [s2[0], s2[2]];
+    n.yaw = s2[3];
+  }
+  for (const d of doors) {
+    const s2 = at((d.range[0] + d.range[1]) / 2);
+    if (s2) d.cameraAt = [s2[0], s2[1], s2[2]];
+  }
+  console.log('\nポイントの位置 (m)');
+  for (const n of nodes) {
+    console.log(`  ${String(n.index).padStart(2)}  ${n.t.toFixed(2)}s  `
+      + `x ${n.position[0].toFixed(2)}  y ${n.position[1].toFixed(2)}  z ${n.position[2].toFixed(2)}`);
+  }
 }
 
 const plan = {
@@ -295,6 +402,7 @@ const plan = {
   nodes,
   edges,
   doors,
+  ...(track ? { track } : {}),
   /** 検出した静止区間そのもの。Debug のタイムラインに帯で出す。 */
   stills: segments.map((s) => ({ start: s.from, end: s.to, rest: s.rest })),
   /** 止まっても絵がブレない時刻。ポイントを動かすときの吸着先。 */

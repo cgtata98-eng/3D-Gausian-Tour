@@ -145,7 +145,11 @@ await page.evaluate(async (payload) => {
           src: `idb:v360-${v.id}`,
         })),
         nodes: nodes.map((n) => ({ viewpointId: n.id, t: n.t })),
-        edges: [{ id: 'e1', from: 'p1', to: 'p2', range: [0.5, 5.0], label: '奥へ' }],
+        edges: [
+          { id: 'e1', from: 'p1', to: 'p2', range: [0.5, 5.0], label: '奥へ' },
+          // 扉は p1 のもの。p2 に立っているときや歩いている最中に出てはいけない。
+          { id: 'd1', from: 'p1', to: 'p1', range: [0.6, 1.2], label: '扉', kind: 'door', doorYaw: 30, doorPitch: 0 },
+        ],
       },
     }],
   });
@@ -264,6 +268,12 @@ check('家具 / 情景トグルが出ている',
 check('赤い素材が貼られている', hue(a.bg) === 'red', `bg=${hue(a.bg)}`);
 await shot('01-default', `通常 / t=${a.time}`);
 
+// ── 扉の印は「立っているノードの扉」だけ ──────────────────────────────────
+console.log('\n=== 4b. 扉の印 ===');
+const doorsVisible = () => page.evaluate(() => [...document.querySelectorAll('.ds-v360-door')]
+  .filter((el) => getComputedStyle(el).display !== 'none').length);
+check('自分のノードに立つと扉の印が出る', (await doorsVisible()) === 1, `見えている数=${await doorsVisible()}`);
+
 // ── 5. トグルで切り替える ──────────────────────────────────────────────────
 console.log('\n=== 5. 家具トグルで切り替える ===');
 const clickSeg = (label) => page.evaluate((l) => {
@@ -329,6 +339,7 @@ await page.evaluate(async () => {
 });
 await sleep(1200);
 const d1 = await probe();
+check('別のノードへ移ると扉の印が消える', (await doorsVisible()) === 0, `見えている数=${await doorsVisible()}`);
 const moved = d1.barX > a.barX + 4;
 check('奥のノードまで歩いた', moved, `bar ${a.barX}→${d1.barX} t=${d1.time}`);
 await page.evaluate(() => window.__sceneManager.setVideo360Variant('on', 'day'));
