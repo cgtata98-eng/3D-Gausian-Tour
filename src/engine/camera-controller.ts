@@ -242,8 +242,42 @@ export class CameraController {
     this.addListener(window, 'keyup', ((e: KeyboardEvent) => { this.keys.delete(e.code); }) as EventListener);
   }
 
+  /** 2 本指の距離。ピンチの倍率を出すのに使う。 */
+  private pinchDist = 0;
+
+  /**
+   * ピンチで画角 (FOV) を変える。
+   *
+   * スマホにはホイールが無いので、寄り引きの手段がここしかない。ホイールと違って
+   * **モードで挙動を変えない** ― 3DGS でホイールが歩行速度を変えるのは、動かしながら
+   * 何度も回せる入力だから成り立つ話で、指では「寄りたい」以外の意図がまず無い。
+   */
+  private applyPinch(e: TouchEvent): void {
+    const a = e.touches[0];
+    const b = e.touches[1];
+    const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    if (this.pinchDist <= 0) { this.pinchDist = dist; return; }
+    const cam = this.entity.camera as { fov?: number } | null;
+    if (!cam || typeof cam.fov !== 'number') { this.pinchDist = dist; return; }
+    // 指を広げる = 寄る = FOV を小さく。距離の比をそのまま倍率にすると、
+    // どの画角からでも同じ手の動きで同じだけ寄れる。
+    const ratio = this.pinchDist / Math.max(1, dist);
+    const next = math.clamp(cam.fov * ratio, this.options.zoomFovMin, this.options.zoomFovMax);
+    this.pinchDist = dist;
+    if (Math.abs(next - cam.fov) < 0.01) return;
+    cam.fov = next;
+    this.onLookInputChange?.();
+  }
+
   private setupTouchInput() {
     this.addListener(this.canvas, 'touchstart', ((e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        // 2 本目が触れた時点で見回しは止める。片方の指の移動が回転として
+        // 拾われると、寄せている最中に画がぐるっと回る。
+        this.touchActive = false;
+        this.pinchDist = 0;
+        return;
+      }
       if (e.touches.length === 1) {
         this.touchActive = true;
         this.lastTouchX = e.touches[0].clientX;
@@ -251,6 +285,11 @@ export class CameraController {
       }
     }) as EventListener);
     this.addListener(this.canvas, 'touchmove', ((e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+        this.applyPinch(e);
+        return;
+      }
       if (!this.touchActive || e.touches.length !== 1) return;
       e.preventDefault();
       const dx = e.touches[0].clientX - this.lastTouchX;
@@ -267,7 +306,19 @@ export class CameraController {
       }
       this.onLookInputChange?.();
     }) as EventListener, { passive: false });
-    this.addListener(this.canvas, 'touchend', (() => { this.touchActive = false; }) as EventListener);
+    const endTouch = ((e: TouchEvent) => {
+      this.touchActive = false;
+      this.pinchDist = 0;
+      // 指が 1 本残ったら、そこを新しい起点にする。前の座標のままだと、
+      // 離した瞬間に画面が飛ぶ。
+      if (e.touches.length === 1) {
+        this.touchActive = true;
+        this.lastTouchX = e.touches[0].clientX;
+        this.lastTouchY = e.touches[0].clientY;
+      }
+    }) as EventListener;
+    this.addListener(this.canvas, 'touchend', endTouch);
+    this.addListener(this.canvas, 'touchcancel', endTouch);
   }
 
   private setupUpdate() {

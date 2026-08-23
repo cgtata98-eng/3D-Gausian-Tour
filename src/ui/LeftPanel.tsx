@@ -130,7 +130,8 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   if (sidebarCollapsed) {
     const handleStyle = collapsedHandleStyle(placement);
     // 左/右上で「>」、右下では「<」のような感じだと意味が逆になるので、向きも合わせて反転。
-    const chevronD = placement === 'left' ? 'M9 18l6-6-6-6' : 'M15 18l-6-6 6-6';
+    // ハンドルは常に左なので、開く向きも常に「右へ」。
+    const chevronD = 'M9 18l6-6-6-6';
     return (
       <>
         <button onClick={() => setSidebarCollapsed(false)} className={COLLAPSED_HANDLE} style={handleStyle} title={`${sceneName} を表示`}>
@@ -200,7 +201,10 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
     setOpenBlock(id);
   };
 
-  const railSide: 'left' | 'right' = placement === 'left' ? 'left' : 'right';
+  // スマホでも左に置く。以前は右だったが、これは左下のジョイスティックと分ける
+  // ための逃げで、操作の置き場としては PC と同じ左に揃っているほうが探しやすい。
+  // ジョイスティックとはレールの高さを詰めて分ける (`railScroll`)。
+  const railSide: 'left' | 'right' = 'left';
 
 
   return (
@@ -227,7 +231,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
       </div>
 
       {(railItems.length > 0 || showMap || showPinsToggle || showFullscreen || showAudio) && (
-        <div className="ds-rail" style={{ ...edgeStyle(railSide, RAIL_INSET, RAIL_TOP), ...railScroll }}>
+        <div className="ds-rail" style={{ ...edgeStyle(railSide, RAIL_INSET, RAIL_TOP), ...railScrollStyle(isTouchDevice) }}>
           {railItems.map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -268,7 +272,7 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
       )}
 
       {activeBlock && (
-        <div className="ds-rail-panel" style={{ ...edgeStyle(railSide, RAIL_PANEL_INSET, RAIL_TOP), ...railScroll }}>
+        <div className="ds-rail-panel" style={{ ...edgeStyle(railSide, RAIL_PANEL_INSET, RAIL_TOP), ...railScrollStyle(isTouchDevice) }}>
           <div className="ds-rail-panel__body">{blocks[activeBlock]}</div>
         </div>
       )}
@@ -1982,10 +1986,16 @@ function edgeStyle(side: 'left' | 'right', inset: number, top: number): React.CS
 
 /** Both the rail and the panel have to survive a short window — a laptop in
  *  landscape with nine sections, or a phone. Neither may run off the bottom. */
-const railScroll: React.CSSProperties = {
-  maxHeight: `calc(100dvh - ${RAIL_TOP + RAIL_INSET}px)`,
-  overflowY: 'auto',
-};
+/**
+ * レールとパネルの高さ上限。どちらも画面の下に流れ落ちてはいけない。
+ *
+ * スマホでは下端に 190px 空ける ― 左下にジョイスティックが居るので、レールが
+ * そこまで伸びると重なって、どちらも押しにくくなる。PC には居ないので詰めない。
+ */
+function railScrollStyle(isTouch: boolean): React.CSSProperties {
+  const reserve = RAIL_TOP + RAIL_INSET + (isTouch ? 190 : 0);
+  return { maxHeight: `calc(100dvh - ${reserve}px)`, overflowY: 'auto' };
+}
 
 /** Icon per block. A switch rather than a lookup object: the block ids include
  *  `color`, and an object literal with a `color:` key reads to the
@@ -2040,23 +2050,26 @@ const COLLAPSED_HANDLE = `${surfaceClass('plain')} ds-overlay ds-overlay--pill d
 
 /** Layout only. */
 const collapsedHandle: React.CSSProperties = {
-  position: 'absolute',
-  top: 16, left: 16,
-  width: 36, height: 36,
-  zIndex: 6,
+  // `fixed`。`absolute` だと親の高さしだいで画面の外に出る (スマホで実際に起きた)。
+  position: 'fixed',
+  top: 'max(env(safe-area-inset-top, 16px), 16px)',
+  left: 'max(env(safe-area-inset-left, 16px), 16px)',
+  width: 44, height: 44,
+  // ジョイスティック (50) より上。畳んだ状態で唯一の戻り道なので、何にも隠されない。
+  zIndex: 60,
 };
 
-/** placement に応じて閉じハンドルの上下左右を切り替える。
- *  - `portrait` : サイドバー本体は右上だが、閉じハンドルだけは「右下」固定 (ユーザー指定)。
- *  - `right`    : 横向き — 右上。
- *  - `left`     : PC — 左上 (既定)。 */
-function collapsedHandleStyle(placement: SidebarPlacement): React.CSSProperties {
-  if (placement === 'portrait') {
-    return { ...collapsedHandle, top: 'auto', left: 'auto', right: 16, bottom: 16 };
-  }
-  if (placement === 'right') {
-    return { ...collapsedHandle, left: 'auto', right: 16 };
-  }
+/**
+ * 畳んだあとに残るハンドルの位置。**どの端末でも左上**。
+ *
+ * 以前はスマホだけ右下に置いていたが、そこは
+ *   - `position: absolute` なので、親が画面いっぱいでないと枠の外に出てしまう
+ *   - シーンバーや端末の下端 UI と重なる
+ * で、「一度閉じると二度と出てこない」状態になっていた。`position: fixed` に変えて
+ * ビューポート基準に固定し、サイドバー本体と同じ左上に戻す — 閉じたものが
+ * 出てくる場所は、閉じる前にそれがあった場所であるべき。
+ */
+function collapsedHandleStyle(_placement: SidebarPlacement): React.CSSProperties {
   return collapsedHandle;
 }
 
