@@ -589,6 +589,7 @@ export class ThreeSceneManager {
   setViewMode(_mode: ViewMode) { /* noop — 360 / video360 は PlayCanvas 経路のみ */ }
   async applyActiveColor(): Promise<void> { /* noop — color variants not yet implemented */ }
   async setVariant(_f: 'on' | 'off', _l: 'day' | 'night'): Promise<void> { /* noop */ }
+  async setVideo360Variant(_f: 'on' | 'off', _l: 'day' | 'night'): Promise<void> { /* noop — 360 / video360 は PlayCanvas 経路のみ */ }
   setRenderMode(_m: 'default' | 'sharp' | 'highq') { /* preset is applied via applyRenderConfig */ }
   async setViewpointPanorama(_viewpointId: string, _dataUrl: string): Promise<void> { /* noop — 360 不対応 */ }
   async showPanoramaPreview(_src: string, _opts?: { animated?: boolean }): Promise<boolean> { return false; /* noop — 360 不対応 */ }

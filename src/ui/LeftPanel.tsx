@@ -5,7 +5,8 @@ import { useUIStore, type SidebarSection } from '../store/ui-store';
 import { useTrackingStore } from '../store/tracking-store';
 import { calibrateHeadTracker } from '../utils/head-tracker';
 import { resolveScenePath } from '../core/scene-manifest';
-import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock } from '../core/types';
+import { DEFAULT_SIDEBAR_ORDER, type OrderableSidebarBlock, type Plan } from '../core/types';
+import { canSelect, variantAxes, video360VariantsOf } from '../core/video360-variants';
 import * as idb from '../utils/idb';
 import { getOpenAIKey, getGeminiKey, getSelectedModelId, setSelectedModelId } from '../utils/api-keys';
 import { getModelById, PROVIDERS, modelsForProvider, firstModelForProvider, type AiProvider } from '../utils/ai-models';
@@ -62,7 +63,14 @@ export function LeftPanel({ onViewpointClick, onPlanSwitch }: LeftPanelProps) {
   const showOverview   = tb.overview   === true && !isOther && !isProduct;
   // `viewpoints` is gated inside `ViewpointBar` — it renders outside the
   // sidebar and has to survive the sidebar being folded away.
-  const showColor      = tb.color      === true && !isOther;
+  // 360°動画の描き分け素材があるときは、ツールバー表示のチェックが無くても
+  // カラー節を出す。素材を入れたのに切替が出てこない状態は「入れたのに動かない」
+  // にしか見えず、原因がもう 1 か所のチェックだと気付ける人がいない。
+  const hasV360Variants = (() => {
+    const ax = variantAxes(video360VariantsOf(activePlan));
+    return ax.furniture.length > 1 || ax.lighting.length > 1;
+  })();
+  const showColor      = (tb.color      === true && !isOther) || hasV360Variants;
   const showMap        = tb.map        === true && !isProduct;
   // 拡大 (fullscreen) はデスクトップ専用。スマホ (touch) は OS 側の全画面 UI と
    // 衝突するうえ、サイドバー幅が限られるのでアイコンを出さない。
@@ -805,8 +813,12 @@ function ColorSelectBlock() {
   const setSectionHidden = useUIStore((s) => s.setSectionHidden);
   const activePlan = manifest?.plans?.find((p) => p.id === activePlanId);
   const variants = activePlan?.colorVariants ?? [];
-  const showFurnitureTool = !!manifest?.variants?.furniture;
-  const showLightingTool = !!manifest?.variants?.lighting;
+  // 360°動画の描き分け素材があるなら、Debug のチェックとは別にトグルを出す。
+  // 素材を入れたのにトグルが出ない ⇒ もう 1 か所チェックが要る、という二段構えは
+  // 「入れたのに切り替わらない」の原因になるので、素材の存在そのものを根拠にする。
+  const v360Axes = variantAxes(video360VariantsOf(activePlan));
+  const showFurnitureTool = !!manifest?.variants?.furniture || v360Axes.furniture.length > 1;
+  const showLightingTool = !!manifest?.variants?.lighting || v360Axes.lighting.length > 1;
   if (hiddenSections.includes('color')) {
     return <ClosedSectionHandle label="カラー" onOpen={() => setSectionHidden('color', false)} />;
   }
@@ -852,13 +864,13 @@ function ColorSelectBlock() {
           {showFurnitureTool && (
             <div style={inlineToggleRow}>
               <span className="ds-label" style={inlineToggleLabel}>家具</span>
-              <FurnitureContent />
+              <FurnitureContent plan={activePlan} />
             </div>
           )}
           {showLightingTool && (
             <div style={inlineToggleRow}>
               <span className="ds-label" style={inlineToggleLabel}>情景</span>
-              <LightingContent />
+              <LightingContent plan={activePlan} />
             </div>
           )}
         </div>
@@ -1805,16 +1817,52 @@ function DemoModeBlock() {
 
 // ── Furniture / Lighting ──────────────────────────────────────────
 
-function FurnitureContent() {
-  const value = useUIStore((s) => s.furniture);
-  const setValue = useUIStore((s) => s.setFurniture);
-  return <SegmentedToggle value={value} onChange={setValue} options={[{ id: 'on', label: 'あり' }, { id: 'off', label: 'なし' }]} />;
+/**
+ * 素材が無い組み合わせを押せなくする。
+ *
+ * 360°動画は 通常 / 家具なし / 夜 の 3 本ということがあり、「夜 × 家具なし」の
+ * 絵が存在しない。押せてしまうと、切り替わらないのが不具合なのか素材が無いのかを
+ * 見た人が判断できない。押せないうえで理由を出すほうが早く伝わる。
+ *
+ * 動画のバリアントを持たないプラン (splat の変体だけ) では常に押せる ―
+ * 従来どおりの挙動を変えない。
+ */
+function useVariantGate(plan: Plan | undefined, axis: 'furniture' | 'lighting') {
+  const furniture = useUIStore((s) => s.furniture);
+  const lighting = useUIStore((s) => s.lighting);
+  const pending = useUIStore((s) => s.video360VariantPending);
+  const list = video360VariantsOf(plan);
+  const other = axis === 'furniture' ? lighting : furniture;
+  return (value: 'on' | 'off' | 'day' | 'night') => {
+    if (list.length === 0) return { disabled: false, title: undefined as string | undefined };
+    if (!canSelect(list, axis, value, other)) {
+      return { disabled: true, title: 'この組み合わせの動画がありません' };
+    }
+    // 読み込み中はいったん全部止める。8K は 1 本 100MB あり、初回だけ数秒かかる。
+    // 押せたままにすると連打され、そのぶん遅くなるうえ、どれが効いたのか分からなくなる。
+    if (pending) return { disabled: true, title: '動画を読み込み中…' };
+    return { disabled: false, title: undefined };
+  };
 }
 
-function LightingContent() {
+function FurnitureContent({ plan }: { plan?: Plan }) {
+  const value = useUIStore((s) => s.furniture);
+  const setValue = useUIStore((s) => s.setFurniture);
+  const gate = useVariantGate(plan, 'furniture');
+  return <SegmentedToggle value={value} onChange={setValue} options={[
+    { id: 'on', label: 'あり', ...gate('on') },
+    { id: 'off', label: 'なし', ...gate('off') },
+  ]} />;
+}
+
+function LightingContent({ plan }: { plan?: Plan }) {
   const value = useUIStore((s) => s.lighting);
   const setValue = useUIStore((s) => s.setLighting);
-  return <SegmentedToggle value={value} onChange={setValue} options={[{ id: 'day', label: '昼' }, { id: 'night', label: '夜' }]} />;
+  const gate = useVariantGate(plan, 'lighting');
+  return <SegmentedToggle value={value} onChange={setValue} options={[
+    { id: 'day', label: '昼', ...gate('day') },
+    { id: 'night', label: '夜', ...gate('night') },
+  ]} />;
 }
 
 /**
@@ -1827,7 +1875,7 @@ function LightingContent() {
  * on top of them. Kept as a named wrapper only so existing call sites and
  * their `{ id, label }` option shape need no edit.
  */
-function SegmentedToggle<T extends string>(props: { value: T; onChange: (v: T) => void; options: { id: T; label: string }[] }) {
+function SegmentedToggle<T extends string>(props: { value: T; onChange: (v: T) => void; options: { id: T; label: string; disabled?: boolean; title?: string }[] }) {
   return <SegmentedControl {...props} />;
 }
 

@@ -14,11 +14,12 @@
  * 持つのが要点。同じにすると静止区間の「たまり」を毎回再生し直すことになる。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Plan, Video360Edge, Video360Node, Video360Walk } from '../core/types';
+import type { Plan, Video360Edge, Video360Node, Video360Variant, Video360Walk } from '../core/types';
 import { useSceneStore } from '../store/scene-store';
 import { isIdbRef, resolveBlobRef, saveBlob } from '../utils/idb';
 import { resolveScenePath } from '../core/scene-manifest';
 import { analyzeVideo360 } from '../utils/video360-analyze';
+import { applyTrackToViewpoints, nearestNodeForDoor, parseWalkTrack } from '../core/video360-track';
 import { useUIStore } from '../store/ui-store';
 import type { SceneManager } from '../engine/scene-manager';
 import { surfaceClass } from './components';
@@ -175,6 +176,161 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
     }
   };
 
+  /**
+   * カメラ軌跡を取り込む。位置を推定するのではなく、レンダリング時に書き出した
+   * ものを持ってくる。取り込むと各ノードの視点に実座標が入り、床ポイントの向きも
+   * 図面のドットも既存の経路のまま正しくなる。
+   *
+   * 書き出したドアがあれば、一番近づいた時刻のノードに紐づけて自動で貼る ―
+   * 撮影者がドアの前に立った瞬間そのものなので、手で選ぶより確実。
+   */
+  const loadTrack = async (file: File) => {
+    setBusy('カメラ軌跡を読み込み中…');
+    try {
+      const parsed = parseWalkTrack(JSON.parse(await file.text()));
+      const next: Video360Walk = { ...data!, track: parsed.track };
+
+      // 書き出したドアをエッジとして起こす
+      const doorEdges = parsed.doors.map((d, i) => {
+        const near = nearestNodeForDoor(next, d.pos);
+        return near ? {
+          id: `door-track-${i}`,
+          from: near.viewpointId,
+          to: near.viewpointId,
+          range: [near.t, Math.min(near.t + 2, next.duration)] as [number, number],
+          label: d.name || 'ドアを開ける',
+          kind: 'door' as const,
+          doorPos: d.pos,
+        } : null;
+      }).filter(Boolean) as Video360Edge[];
+
+      // 既に軌跡から起こしたドアは差し替える (二重に貼らない)
+      const kept = next.edges.filter((e) => !e.id.startsWith('door-track-'));
+      next.edges = [...kept, ...doorEdges];
+
+      useSceneStore.getState().setPlanVideo360(plan.id, next);
+
+      // 視点に実座標を書く。ここが下流すべての持ち主 ―
+      // 床ポイントの向きも図面のドットもミニマップも、全部ここを見ている。
+      // 1 件ずつ呼ぶと視点の数だけ再描画が走るので、まとめて 1 回で置き換える。
+      const { updated, count } = applyTrackToViewpoints(next, plan.viewpoints);
+      useSceneStore.setState((st) => {
+        if (!st.manifest?.plans) return st;
+        return {
+          manifest: {
+            ...st.manifest,
+            plans: st.manifest.plans.map((pp) => (pp.id === plan.id ? { ...pp, viewpoints: updated } : pp)),
+          },
+        };
+      });
+      setBusy(null);
+      alert(`カメラ軌跡を取り込みました。\n`
+        + `サンプル ${parsed.track.samples.length} / 視点に座標を入れた ${count} 件`
+        + (doorEdges.length ? ` / ドア ${doorEdges.length} 件` : ''));
+    } catch (err) {
+      console.error('[video360] カメラ軌跡の取り込みに失敗', err);
+      alert(`カメラ軌跡を読めませんでした: ${(err as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // ── 描き分け素材 (家具あり / なし / 夜) ─────────────────────────────────
+
+  /**
+   * `scripts/video360/build-variants.mjs` が書き出した `video360-variants.json` を
+   * 取り込む。R2 に上げてあればそこから、手元のファイルからでも読める。
+   *
+   * ノードもエッジも軌跡も **触らない**。3 本は同じカメラ軌跡の描き分けで、変換側が
+   * 総フレーム数まで突き合わせているので、時間軸は 1 本のまま使い回せる。ここで
+   * 3 組に増やすと、打ち直すたびにどれかが古くなる。
+   *
+   * 先頭カットがある場合だけ、時刻がその秒数ぶん前へずれる。既存のノードを
+   * 打ち直させるのは無駄なので、まとめてずらすかを聞いてから当てる。
+   */
+  const loadVariants = async (file?: File) => {
+    setBusy('バリアントを取り込み中…');
+    try {
+      const json = file
+        ? JSON.parse(await file.text())
+        : await (async () => {
+          const url = resolveScenePath(sceneId, 'video360-variants.json');
+          const res = await fetch(url, { cache: 'no-store' });
+          if (!res.ok) throw new Error(`${url} を取得できませんでした (${res.status})`);
+          return res.json();
+        })();
+
+      const list = Array.isArray(json?.variants) ? json.variants as Video360Variant[] : [];
+      if (list.length === 0) throw new Error('variants が入っていません');
+      for (const v of list) {
+        if (!v.id || !v.src) throw new Error(`variants の項目に id / src がありません: ${JSON.stringify(v)}`);
+      }
+
+      const def = list.find((v) => v.id === json.defaultVariantId) ?? list[0];
+      let next: Video360Walk = {
+        ...data!,
+        variants: list,
+        defaultVariantId: def.id,
+        // 本体の src も既定バリアントに寄せる。別々のものを指したままにすると、
+        // バリアントを持たない古い経路 (書き出し・検証) が違う素材を見ることになる。
+        src: def.src,
+        srcReverse: def.srcReverse,
+        duration: typeof json.duration === 'number' ? json.duration : data!.duration,
+        fps: typeof json.fps === 'number' ? json.fps : data!.fps,
+        sourceName: def.sourceName ?? def.src,
+      };
+
+      const trim = typeof json.trimSeconds === 'number' ? json.trimSeconds : 0;
+      const trimFrames = typeof json.trimmedFrames === 'number' ? json.trimmedFrames : 0;
+      let shifted = false;
+      if (trim > 0 && (data!.nodes.length > 0 || data!.edges.length > 0 || data!.track)) {
+        shifted = confirm(
+          [
+            `先頭 ${trimFrames} コマ (${trim.toFixed(3)} 秒) を落とした素材です。`,
+            'いまのノード・エッジ・軌跡がカット前の素材で打たれているなら、'
+              + `その ${trim.toFixed(3)} 秒ぶん前へずらす必要があります。`,
+            '',
+            'ずらしますか？（すでにカット後の素材で打ち直している場合は「キャンセル」）',
+          ].join('\n'),
+        );
+      }
+      if (shifted) {
+        const dur = next.duration;
+        const sh = (t: number) => Math.min(dur, Math.max(0, +(t - trim).toFixed(4)));
+        next = {
+          ...next,
+          nodes: next.nodes.map((n) => ({ ...n, t: sh(n.t) })),
+          edges: next.edges.map((e) => ({ ...e, range: [sh(e.range[0]), sh(e.range[1])] as [number, number] })),
+          events: next.events?.map((ev) => ({
+            ...ev, at: sh(ev.at), ...(ev.until != null ? { until: sh(ev.until) } : {}),
+          })),
+          stills: next.stills?.map((st) => ({ start: sh(st.start), end: sh(st.end), rest: sh(st.rest) })),
+          calmTimes: next.calmTimes?.map(sh),
+          // 軌跡はフレーム番号で引くので、秒ではなく **頭からコマを落とす**。
+          // 秒でずらすと、フレーム 0 が動画のどのコマかという対応が崩れる。
+          track: next.track && trimFrames > 0
+            ? { ...next.track, samples: next.track.samples.slice(trimFrames) }
+            : next.track,
+        };
+      }
+
+      setPlanVideo360(plan.id, next);
+      setBusy(null);
+      alert([
+        `バリアントを ${list.length} 件取り込みました。`,
+        ...list.map((v) => `・${v.label ?? v.id} (${v.src})`),
+        '',
+        `既定: ${def.label ?? def.id}`,
+        ...(shifted ? [`時刻を ${trim.toFixed(3)} 秒ぶん前へずらしました。`] : []),
+      ].join('\n'));
+    } catch (err) {
+      console.error('[video360] バリアントの取り込みに失敗', err);
+      alert(`バリアントを読めませんでした: ${(err as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // ── 解析結果の読み込み ──────────────────────────────────────────────────
   const loadAnalysis = async (file: File) => {
     setBusy('解析結果を読み込み中…');
@@ -278,6 +434,54 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
     // ライブが無いときは何もしない。描画済みの絵が唯一の作り元。
   };
 
+  /**
+   * エッジに専用クリップを入れる。
+   *
+   * 隣同士は本編の区間再生でいいが、「リビングから書斎」のような遠い移動まで
+   * 区間をつないで再生すると実測 37 秒かかって待てない。そこだけ 3 秒程度の
+   * 専用クリップに差し替える。
+   */
+  const attachClip = async (file: File, edgeId: string, slot: 'src' | 'reverse') => {
+    setBusy(slot === 'src' ? 'クリップを取り込み中…' : '逆走クリップを取り込み中…');
+    try {
+      const key = `video360-clip-${sceneId}-${plan.id}-${edgeId}-${slot}`;
+      await saveBlob(key, file);
+      const duration = await new Promise<number>((res) => {
+        const url = URL.createObjectURL(file);
+        const v = document.createElement('video');
+        v.preload = 'metadata';
+        v.onloadedmetadata = () => { const d = v.duration; URL.revokeObjectURL(url); res(Number.isFinite(d) ? +d.toFixed(3) : 0); };
+        v.onerror = () => { URL.revokeObjectURL(url); res(0); };
+        v.src = url;
+      });
+      patch({
+        edges: data!.edges.map((e) => {
+          if (e.id !== edgeId) return e;
+          const cur = e.clip;
+          return {
+            ...e,
+            clip: slot === 'src'
+              ? { ...(cur ?? {}), src: `idb:${key}`, duration, sourceName: file.name }
+              : { src: cur?.src ?? '', duration: cur?.duration ?? duration, sourceName: cur?.sourceName, reverse: `idb:${key}` },
+          };
+        }),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const clearClip = (edgeId: string) => {
+    patch({
+      edges: data!.edges.map((e) => {
+        if (e.id !== edgeId) return e;
+        const next = { ...e };
+        delete next.clip;
+        return next;
+      }),
+    });
+  };
+
   // ── プレビュー用の動画 ──────────────────────────────────────────────────
   useEffect(() => {
     let revoked: string | null = null;
@@ -362,10 +566,43 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
           onPick={attachReverse}
         />
         <FilePick label="解析 JSON を読む" accept="application/json,.json" onPick={loadAnalysis} />
+        <FilePick label="カメラ軌跡を読む" accept="application/json,.json" onPick={loadTrack} />
+        <button type="button" className={BTN} onClick={() => void loadVariants()} disabled={!!busy}>
+          {data.variants?.length ? 'バリアントを取り込みなおす' : 'バリアントを取り込む'}
+        </button>
+        <FilePick label="バリアント JSON を読む" accept="application/json,.json" onPick={loadVariants} />
       </div>
       <p className="ds-hint">
         本体の動画の差し替えは <b>全体タブ →「各プラン」</b>の ⇪ から。
       </p>
+      {data.variants?.length ? (
+        <p className="ds-hint">
+          描き分け素材 <b>{data.variants.length} 本</b>:{' '}
+          {data.variants.map((v) => v.label || v.id).join(' / ')}。
+          ビューアの<b>家具・情景トグル</b>で切り替わります（素材の無い組み合わせは押せません）。
+        </p>
+      ) : (
+        <p className="ds-hint">
+          家具あり / 家具なし / 夜 を切り替えたいときは、同じカメラ軌跡で描き分けた動画を
+          <code>node scripts/video360/build-variants.mjs</code> に通してから
+          <b>「バリアントを取り込む」</b>を押してください。フレーム数が一致していることを
+          変換側が確かめるので、切り替えても場所が飛びません。
+        </p>
+      )}
+      {data.track ? (
+        <p className="ds-hint">
+          カメラ軌跡 <b>{data.track.samples.length} サンプル</b>
+          {data.track.source ? `（${data.track.source}）` : ''} を取り込み済み。
+          ポイントの向き・間隔・ドアの位置は実座標から出ています。
+        </p>
+      ) : (
+        <p className="ds-hint">
+          <b>位置は推定していません。</b>カメラ軌跡を入れるまで、床ポイントは
+          「カメラの正面へ再生秒数 × 歩行速度」の見立てで置かれます。
+          3ds Max で <code>scripts/render/export-walk-track.ms</code> を読み込み、
+          <code>VR_exportWalkTrack()</code> で書き出した JSON を入れてください。
+        </p>
+      )}
       {!data.srcReverse && (
         <p className="ds-hint">
           反転素材なしでも動きます（「戻る」が逆歩きではなく瞬間移動になります）。
@@ -510,8 +747,63 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
                 ドアは床のポイントにしません。壁の上にあって床の位置ではないので、浮かぶマーカーで出ます。
               </p>
             )}
+            {edge.kind !== 'door' && (
+              <>
+                <div className="ds-row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                  <FilePick
+                    label={edge.clip ? '専用クリップを差し替え' : '専用クリップを入れる'}
+                    accept="video/*"
+                    onPick={(f) => attachClip(f, edge.id, 'src')}
+                  />
+                  {edge.clip && (
+                    <>
+                      <FilePick label="逆走クリップ" accept="video/*" onPick={(f) => attachClip(f, edge.id, 'reverse')} />
+                      <button type="button" className={BTN} onClick={() => clearClip(edge.id)}>専用クリップを外す</button>
+                    </>
+                  )}
+                </div>
+                {edge.clip && (
+                  <div className="ds-mono ds-v360-meta" style={{ marginTop: 4 }}>
+                    クリップ {edge.clip.sourceName ?? edge.clip.src} / {edge.clip.duration.toFixed(1)}s
+                    {edge.clip.reverse ? ' / 逆走あり' : ' / 逆走なし（戻りは瞬間移動）'}
+                  </div>
+                )}
+                <p className="ds-hint">
+                  専用クリップを入れると、本編の区間ではなくそのクリップを 1 本流します。
+                  隣の部屋は区間再生のまま、遠い移動だけ短いクリップに差し替えるのが狙いです。
+                </p>
+              </>
+            )}
           </>
         )}
+      </div>
+
+      {/* ── 時刻イベント ── */}
+      <div style={S.sec}>
+        <span className="ds-label">説明の吹き出し（{data.events?.length ?? 0}）</span>
+        <div className="ds-row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+          <button type="button" className={BTN} onClick={() => {
+            const text = prompt('この秒数で出す説明', '');
+            if (!text) return;
+            const at = +playhead.toFixed(2);
+            patch({
+              events: [...(data.events ?? []), { id: `ev-${Date.now().toString(36)}`, at, until: +(at + 4).toFixed(2), text }]
+                .sort((a, b) => a.at - b.at),
+            });
+          }}>+ 再生位置に追加</button>
+        </div>
+        {(data.events ?? []).map((ev) => (
+          <div key={ev.id} className="ds-row" style={{ gap: 6, marginTop: 6, alignItems: 'center' }}>
+            <button type="button" className={BTN} onClick={() => seek(ev.at)}>{ev.at.toFixed(1)}s</button>
+            <span className="ds-v360-eventtext" style={{ flex: 1 }}>{ev.text}</span>
+            <button type="button" className={BTN} onClick={() => patch({ events: (data.events ?? []).filter((x) => x.id !== ev.id) })}>外す</button>
+          </div>
+        ))}
+        <p className="ds-hint">
+          歩いている最中に出したい説明が多いので、ノードではなく<b>尺</b>に紐づけます
+          （「玄関を通過したあたりで断熱の話」のような、場所ではなく時間で決まるもの）。
+          既定は 4 秒間の表示です。
+        </p>
       </div>
 
       {/* ── 細かい調整 ── */}
@@ -522,7 +814,9 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
         <Num label="ポイント間隔 (m)" value={data.stepSpacing ?? DEFAULTS.stepSpacing} step={0.1} min={1} max={6}
           onChange={(v) => patch({ stepSpacing: v })} hint="広げるとポイントが減ります（最大 4 個）" />
         <Num label="歩行速度 (m/s)" value={data.walkSpeed ?? DEFAULTS.walkSpeed} step={0.05} min={0.3} max={3}
-          onChange={(v) => patch({ walkSpeed: v })} hint="視点の座標が未設定のときだけ、秒数から距離を見立てるのに使います" />
+          onChange={(v) => patch({ walkSpeed: v })} hint="カメラ軌跡が未設定のときだけ、秒数から距離を見立てるのに使います" />
+        <Num label="ドアを置く距離 (m)" value={data.doorDistance ?? 2} step={0.1} min={0.5} max={8}
+          onChange={(v) => patch({ doorDistance: v })} hint="ドアはクリックした向きへこの距離だけ進んだ点に貼ります" />
         <p className="ds-hint">
           ポイントの向きと間隔は、ふだんは<b>視点同士の実座標</b>から出します。図面にドットを置けば
           それで決まるので、方位を打ち込む必要はありません。

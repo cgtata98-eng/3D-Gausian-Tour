@@ -440,15 +440,49 @@ export interface Video360Walk {
   /** 元ファイル名。Debug のカードで「どの素材が入っているか」を出すため。 */
   sourceName?: string;
 
+  /**
+   * 同じカメラ軌跡を家具あり / 家具なし / 夜で描き分けた素材。
+   *
+   * ノード・エッジ・軌跡は **バリアントごとに持たない**。全部が同じ軌跡の描き分け
+   * である以上、時間軸は 1 本しかないからで、切替は「再生位置を保ったまま <video>
+   * の中身を差し替える」だけで済む。3 組持つと必ずどれかが古くなる。
+   *
+   * 素材が 1 フレームでもズレていると切り替えた瞬間に別の場所へ飛ぶので、生成側
+   * (`scripts/video360/build-variants.mjs`) が変換後に総フレーム数を突き合わせる。
+   *
+   * 空なら従来どおり `src` の 1 本だけを使う。
+   */
+  variants?: Video360Variant[];
+  /** 最初に見せるバリアント。未設定なら `variants[0]`。 */
+  defaultVariantId?: string;
+
   /** 目線の高さ (m)。床ポイントの遠近の付き方が変わる。既定 1.6。 */
   eyeHeight?: number;
   /** 歩行速度 (m/s)。再生秒数を床上の距離に読み替える係数。既定 1.05。 */
   walkSpeed?: number;
   /** 床ポイントの間隔 (m)。既定 2.4。 */
   stepSpacing?: number;
+  /** ドアを貼るときに、クリック方向へ何 m 進んだ点に置くか。既定 2。 */
+  doorDistance?: number;
 
   nodes: Video360Node[];
   edges: Video360Edge[];
+
+  /**
+   * レンダリング時に書き出したカメラ軌跡。
+   *
+   * 位置は **推定しない**。動画だけから復元しようとすると SfM / 光学フローの世界に
+   * なり、equirect・低テクスチャの室内・歩行ブレという条件では精度が出ない。
+   * CG で作るなら軌跡は既知なので、書き出したものをそのまま取り込む。
+   *
+   * 取り込むと各ノードの視点の `position` / `mapPosition` に実座標が入る。
+   * 以降は床ポイントも図面のドットも既存の経路がそのまま正しく動く。
+   * 生成は `scripts/render/export-walk-track.ms`。
+   */
+  track?: Video360Track;
+
+  /** 「何秒のところで何を出すか」。説明の吹き出しをタイムライン上に打つ。 */
+  events?: Video360Event[];
 
   /**
    * `scripts/video360/analyze.mjs` が出した静止区間。ノードを置いてよい場所の候補で、
@@ -464,6 +498,29 @@ export interface Video360Walk {
    * 極小値だけを抜いて持つ。
    */
   calmTimes?: number[];
+}
+
+/**
+ * 1 本ぶんの描き分け素材。
+ *
+ * `furniture` / `lighting` は既存の家具・照明トグル (`FurnitureMode` /
+ * `LightingMode`) と同じ綴り。ビューアはトグルの現在値からバリアントを引くので、
+ * 対応表を別に持たなくて済む。素材が無い組み合わせ (例: 夜 × 家具なし) は
+ * 単に候補に現れず、トグル側がその選択肢を出さない。
+ */
+export interface Video360Variant {
+  /** `${furniture}_${lighting}` (例: `on_day`)。manifest 内で一意。 */
+  id: string;
+  /** ビューアのボタンに出す名前 (例: 通常 / 家具なし / 夜)。 */
+  label: string;
+  furniture?: 'on' | 'off';
+  lighting?: 'day' | 'night';
+  /** 順再生。manifest パス / IDB 参照 / data URL。 */
+  src: string;
+  /** 逆走用の反転素材。 */
+  srcReverse?: string;
+  /** 元ファイル名。Debug で中身を見分けるため。 */
+  sourceName?: string;
 }
 
 export interface Video360Node {
@@ -494,14 +551,77 @@ export interface Video360Edge {
    */
   kind?: 'walk' | 'door';
   /**
-   * ドア用のホットスポット方向 (ワールド yaw / pitch、度)。`kind: 'door'` のときだけ使う。
+   * ドアのワールド座標。`kind: 'door'` のときだけ使う。
    *
-   * 歩き (`kind: 'walk'`) は方向も距離も **視点同士の実座標から出す** ので、ここには持たない。
-   * 図面にドットを置けばポイントの向きと間隔が決まる ― 方位を別に打ち込む必要はないし、
-   * 打ち込めるようにすると図面とズレたときにどちらが正か分からなくなる。
+   * 方向だけで持つと、立つ場所が変わったときにドアが付いてきてしまう。実座標で
+   * 持てば、どこから見ても同じ場所に貼り付く。打つときはクリック方向 × 距離で出す。
    */
+  doorPos?: Vec3;
+  /** @deprecated 実座標 (`doorPos`) に移行。古いデータの読み替え用に残す。 */
   doorYaw?: number;
   doorPitch?: number;
+
+  /**
+   * このエッジ専用のクリップ。設定すると本編の `range` ではなくこちらを再生する。
+   *
+   * 隣同士の移動は本編の区間再生でいい。ただし「リビングから書斎」のような遠い
+   * 移動まで区間をつないで再生すると、実測で 37 秒かかって待てない。遠い移動には
+   * 3 秒程度の専用クリップを 1 本流すほうが、速いし作るのも楽。
+   */
+  clip?: Video360Clip;
+}
+
+/** エッジ専用の移動クリップ。 */
+export interface Video360Clip {
+  /** 動画の参照 (manifest パス / IDB 参照 / data URL)。 */
+  src: string;
+  /** 逆走用。未設定なら戻りは瞬間移動になる。 */
+  reverse?: string;
+  duration: number;
+  /** 元ファイル名。Debug の一覧で中身を見分けるため。 */
+  sourceName?: string;
+}
+
+/**
+ * カメラ軌跡。フレーム番号順に並んだサンプル。
+ *
+ * 取り込みのときにしか使わない (実行時は視点の座標を見る) が、あとから
+ * ノードを打ち直したときに再利用できるよう manifest に残しておく。
+ */
+export interface Video360Track {
+  /** 書き出し元のファイル名。どのレンダリングの軌跡かを見失わないため。 */
+  source?: string;
+  fps: number;
+  /**
+   * `[x, y, z, yaw]`。座標はワールド、yaw は度 (PlayCanvas 準拠: 0 = -Z 向き)。
+   * フレーム 0 から連続。抜けは無い前提。
+   */
+  samples: [number, number, number, number][];
+  /**
+   * 書き出し元の単位をメートルに直す係数。3ds Max は cm 単位のことが多いので
+   * その場合は 0.01。取り込み時に掛けて保存するので、実行時は 1 として扱ってよい。
+   */
+  unitScale?: number;
+}
+
+/**
+ * 時刻イベント。ある秒数のあいだ画面に出す説明。
+ *
+ * ノードに紐づけない ― 歩いている最中に出したいものが多いし、「玄関を通過した
+ * あたりで断熱の話を出す」のような、場所ではなく尺で決まる説明が実際に要る。
+ */
+export interface Video360Event {
+  id: string;
+  /** 順再生の時間軸での表示開始 (秒)。 */
+  at: number;
+  /** 表示終了 (秒)。未設定なら `at + 3`。 */
+  until?: number;
+  text: string;
+  /** 画面のどこに出すか。既定は下寄せの帯。 */
+  place?: 'banner' | 'point';
+  /** `place: 'point'` のときの向き (度)。 */
+  yaw?: number;
+  pitch?: number;
 }
 
 /** 自動検出した静止区間 (オーサリング用)。 */

@@ -17,7 +17,7 @@
  * 図面とズレたときにどちらが正か分からなくなる)。
  */
 import { useEffect, useRef, useState } from 'react';
-import type { Plan, Viewpoint } from '../core/types';
+import type { Plan, Vec3, Viewpoint } from '../core/types';
 import type { SceneManager } from '../engine/scene-manager';
 import type { Video360Exit, Video360State } from '../engine/video360-walk';
 import { useSceneStore } from '../store/scene-store';
@@ -137,15 +137,24 @@ export function Video360Overlay({ getManager }: Props) {
   // 描画ループが読む値は ref に置く。props の関数も配列も毎レンダーで別物になるので、
   // 依存配列に入れると rAF を毎回張り直すことになる (実際そうなっていた)。
   const managerRef = useRef(getManager);
-  const doorListRef = useRef<{ id: string; yaw: number; pitch: number; label: string }[]>([]);
+  const doorListRef = useRef<{ id: string; pos: Vec3 | null; yaw: number; pitch: number; label: string }[]>([]);
 
   const plan: Plan | undefined = manifest?.plans?.find((p) => p.id === activePlanId);
   const walkData = plan?.video360;
   const eyeHeight = walkData?.eyeHeight ?? DEFAULT_EYE;
-  // ドアのマーク。床の位置ではないので方向だけを持ち、浮かぶ印として出す。
+  // ドアのマーク。床の位置ではないので浮かぶ印として出す。
+  // 実座標 (`doorPos`) を持つものはそのまま投影する ― 方向だけで持つと、立つ場所が
+  // 変わったときにドアが付いてきてしまう。古いデータは方向のまま読む。
   const doorList = (walkData?.edges ?? [])
     .filter((e) => e.kind === 'door')
-    .map((e) => ({ id: e.id, yaw: e.doorYaw ?? 0, pitch: e.doorPitch ?? 0, label: e.label ?? 'ドア', edge: e }));
+    .map((e) => ({
+      id: e.id,
+      pos: e.doorPos ?? null,
+      yaw: e.doorYaw ?? 0,
+      pitch: e.doorPitch ?? 0,
+      label: e.label ?? 'ドア',
+      edge: e,
+    }));
   const { authoring, setAuthoring, floorHit, anglesAt } = usePlacement(eyeHeight);
 
   // エンジンから状態を受け取る。React の再描画はモード/ノードが変わったときだけで、
@@ -327,9 +336,23 @@ export function Video360Overlay({ getManager }: Props) {
     });
   };
 
-  /** ドアのマークを貼る。押すと開くアニメーションの区間を後で割り当てる。 */
-  const placeDoor = (yaw: number, pitch: number) => {
+  /**
+   * ドアのマークを貼る。実座標で持つ ― 方向だけだと、立つ場所が変わったときに
+   * ドアが付いてきてしまう。クリック方向へ `doorDistance` だけ進んだ点に置く。
+   */
+  const placeDoor = (yaw: number, pitch: number, dist: number) => {
     if (!plan?.video360) return;
+    const sm = getManager();
+    if (!sm) return;
+    const cam = sm.getCameraWorldPosition();
+    const y = (yaw * Math.PI) / 180;
+    const p = (pitch * Math.PI) / 180;
+    const cp = Math.cos(p);
+    const pos: Vec3 = [
+      +(cam[0] - Math.sin(y) * cp * dist).toFixed(3),
+      +(cam[1] + Math.sin(p) * dist).toFixed(3),
+      +(cam[2] - Math.cos(y) * cp * dist).toFixed(3),
+    ];
     const cur = plan.video360;
     const t = shownTime();
     // いま居るノード (無ければ直近) を起点にする。ドアは「そこから開ける」もの。
@@ -344,8 +367,7 @@ export function Video360Overlay({ getManager }: Props) {
         range: [t, Math.min(t + 2, cur.duration)] as [number, number],
         label: 'ドアを開ける',
         kind: 'door' as const,
-        doorYaw: yaw,
-        doorPitch: pitch,
+        doorPos: pos,
       }],
     });
   };
@@ -371,7 +393,7 @@ export function Video360Overlay({ getManager }: Props) {
       } else if (e.code === 'KeyD') {
         e.preventDefault();
         const a = anglesAt(sm, cx, cy);
-        if (a) placeDoor(a.yaw, a.pitch);
+        if (a) placeDoor(a.yaw, a.pitch, walkData?.doorDistance ?? 2);
       } else if (e.code === 'Escape') {
         setAuthoring('off');
       }
@@ -386,6 +408,13 @@ export function Video360Overlay({ getManager }: Props) {
     managerRef.current = getManager;
     doorListRef.current = doorList;
   });
+
+  // いま出すべき時刻イベント。歩いている最中に出したい説明が多いので、
+  // ノードではなく尺に紐づける。
+  const now = walkState?.time ?? 0;
+  const activeEvent = (walkData?.events ?? []).find(
+    (e) => now >= e.at && now <= (e.until ?? e.at + 3),
+  ) ?? null;
 
   // ── 毎フレームの投影 ────────────────────────────────────────────────────
   // React の再描画は通さない。カメラをドラッグしている間ずっと再レンダリングすると
@@ -472,7 +501,9 @@ export function Video360Overlay({ getManager }: Props) {
           const el = doors![i] as HTMLElement;
           const d = doorListRef.current[i];
           if (!d) { el.style.display = 'none'; continue; }
-          const p = projectDirection(sm, d.yaw, d.pitch);
+          const p = d.pos
+            ? sm.worldToScreen(d.pos)
+            : projectDirection(sm, d.yaw, d.pitch);
           if (!p) { el.style.display = 'none'; continue; }
           el.style.display = 'block';
           el.style.left = `${r.left + p.x}px`;
@@ -536,7 +567,7 @@ export function Video360Overlay({ getManager }: Props) {
               if (hit) placePoint(hit);
             } else {
               const a = anglesAt(sm, e.clientX, e.clientY);
-              if (a) placeDoor(a.yaw, a.pitch);
+              if (a) placeDoor(a.yaw, a.pitch, walkData?.doorDistance ?? 2);
             }
             return;
           }
@@ -555,6 +586,7 @@ export function Video360Overlay({ getManager }: Props) {
         <path data-halo="1" d="" fill="#fff" fillRule="evenodd" opacity="0.85" />
       </svg>
       <div ref={labelRef} className="ds-v360-label" style={{ display: 'none' }} />
+      {activeEvent && <div className="ds-v360-event">{activeEvent.text}</div>}
       <div ref={doorsRef} className="ds-v360-doors">
         {doorList.map((d) => (
           <button

@@ -69,6 +69,8 @@ await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
 const logs = [];
 page.on('console', (m) => { if (m.type() === 'error') logs.push(m.text().slice(0, 200)); });
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
+// 確認ダイアログは自動で閉じる。複数箇所で張ると二重 accept で落ちるので、ここ 1 回だけ。
+page.on('dialog', (d) => { void d.accept().catch(() => {}); });
 
 const checks = [];
 const check = (name, pass, detail = '') => {
@@ -543,8 +545,6 @@ if (ping.ffmpeg) {
 
   if (hasBtn) {
     const t0 = Date.now();
-    // 確認ダイアログは自動で閉じる
-    page.on('dialog', (d) => { void d.accept(); });
     await page.evaluate(() => {
       const b = [...document.querySelectorAll('button')].find((x) => /反転素材を作/.test(x.textContent || ''));
       b?.click();
@@ -566,6 +566,149 @@ if (ping.ffmpeg) {
     check('作った反転素材がウォークスルーに入る', back.ok, back.why);
   }
 }
+
+// ── 11. カメラ軌跡 / 時刻イベント / エッジ専用クリップ ──────────────────
+console.log('\n=== 11. 軌跡・イベント・専用クリップ ===');
+
+// 軌跡を書き出したときと同じ形の JSON を作る。値は実測ではなく合成だが、
+// 「取り込んで視点に座標が入るか」を見るにはこれで足りる。
+const trackPath = `${OUT}/walk-track.json`;
+{
+  const fps = 30;
+  const samples = [];
+  for (let f = 0; f <= Math.round(58.6 * fps); f++) {
+    const t = f / fps;
+    // 廊下を一直線に歩く体でよい。距離が出れば床ポイントの間隔が決まる。
+    samples.push([0, 160, -(t * 105), 0]);   // cm 単位・yaw 0
+  }
+  await writeFile(trackPath, JSON.stringify({
+    source: 'VR_RENDER_CAM', fps, unitScale: 0.01, startFrame: 0, samples,
+    doors: [{ name: 'Door_Entrance', pos: [80, 190, -900] }],
+  }));
+}
+
+// 手順 9 で動画を入れ直してノードが空になっているので、ここで組み直す。
+// この手順が前の手順の状態に依存しないようにしておく ― 依存させると、
+// 前が変わるたびにここが理由もなく落ちる。
+await page.evaluate(async (payload) => {
+  const { sceneId, nodes, edges } = payload;
+  const db = await new Promise((res, rej) => {
+    const r = indexedDB.open('3droomtour', 1);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  const m = await new Promise((res, rej) => {
+    const tx = db.transaction('manifests', 'readonly');
+    const r = tx.objectStore('manifests').get(sceneId);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  const plan = m.plans[0];
+  plan.viewpoints = nodes.map((n) => ({
+    id: n.id, label: n.label, position: n.pos,
+    target: [n.pos[0], n.pos[1], n.pos[2] - 1], fov: 75,
+  }));
+  plan.video360.nodes = nodes.map((n) => ({ viewpointId: n.id, t: n.t }));
+  plan.video360.edges = edges;
+  await new Promise((res, rej) => {
+    const tx = db.transaction('manifests', 'readwrite');
+    tx.objectStore('manifests').put(m, sceneId);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}, { sceneId: SCENE_ID, nodes: NODES, edges: EDGES });
+
+await page.goto(`${BASE}/scene/${SCENE_ID}`, { waitUntil: 'networkidle2', timeout: 90000 });
+await sleep(4500);
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').trim().startsWith('プラン'));
+  b?.click();
+});
+await sleep(1200);
+await page.evaluate(() => {
+  for (const el of document.querySelectorAll('button, summary, [role="button"]')) {
+    if (/360°動画ウォークスルー/.test((el.textContent || '').trim())) el.click();
+  }
+});
+await sleep(900);
+
+// 取り込み前の視点座標を控える
+const vpBefore = await page.evaluate(async (sceneId) => {
+  const db = await new Promise((res, rej) => {
+    const r = indexedDB.open('3droomtour', 1);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  const m = await new Promise((res, rej) => {
+    const tx = db.transaction('manifests', 'readonly');
+    const r = tx.objectStore('manifests').get(sceneId);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  return m.plans[0].viewpoints.map((v) => v.position.join(','));
+}, SCENE_ID);
+
+const trackInput = await page.$$('input[type="file"][accept="application/json,.json"]');
+check('カメラ軌跡の取り込み口がある', trackInput.length >= 2, `${trackInput.length} 個`);
+if (trackInput.length >= 2) {
+  await trackInput[trackInput.length - 1].uploadFile(trackPath);
+  await sleep(3000);
+  // 自動保存が IDB に書くまで待って、そこから読む。engine が持つ manifest は
+  // 写しなので、書き換えが届いているとは限らない。
+  await sleep(4000);
+  const readVps = () => page.evaluate(async (sceneId) => {
+    const db = await new Promise((res, rej) => {
+      const r = indexedDB.open('3droomtour', 1);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    const m = await new Promise((res, rej) => {
+      const tx = db.transaction('manifests', 'readonly');
+      const r = tx.objectStore('manifests').get(sceneId);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    const plan = m.plans[0];
+    return {
+      vps: plan.viewpoints.map((v) => v.position.map((n) => +n.toFixed(2)).join(',')),
+      doors: (plan.video360?.edges ?? []).filter((e) => e.kind === 'door').map((e) => ({ id: e.id, pos: e.doorPos ?? null })),
+    };
+  }, SCENE_ID);
+  const snap = await readVps();
+  const vps = snap.vps;
+  const changed = vps.filter((v, i) => v !== vpBefore[i]).length;
+  check('軌跡を取り込むと視点に実座標が入る', changed >= 3, `${changed} 件が更新 / 例: ${vps[1] ?? '-'}`);
+
+  const doors = snap.doors;
+  check('書き出したドアが実座標で入る', doors.some((d) => d.id.startsWith('door-track-') && d.pos),
+    JSON.stringify(doors.slice(0, 2)));
+}
+
+// 時刻イベント
+const evAdded = await page.evaluate(() => {
+  const btn = [...document.querySelectorAll('button')].find((b) => /再生位置に追加/.test(b.textContent || ''));
+  return !!btn;
+});
+check('説明の吹き出しを追加する口がある', evAdded);
+
+// エッジ専用クリップ。エッジを選んでからでないと欄が出ない。
+// エッジはプルダウンではなくピルの一覧 (「A → B」)。
+const edgePicked = await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find((x) => /→/.test(x.textContent || ''));
+  if (!b) return false;
+  b.click();
+  return true;
+});
+check('エッジを選べる', edgePicked);
+await sleep(900);
+const clipSlot = await page.evaluate(() => {
+  const btn = [...document.querySelectorAll('button')].find((b) => /専用クリップを入れる|専用クリップを差し替え/.test(b.textContent || ''));
+  return !!btn;
+});
+check('エッジに専用クリップを入れる口がある', clipSlot);
+
+await page.screenshot({ path: `${OUT}/13-track-events.png` });
+console.log('  📸 13-track-events  軌跡・イベント・クリップ');
 
 await writeFile(`${OUT}/report.json`, JSON.stringify({ checks, logs }, null, 2));
 const failed = checks.filter((c) => !c.pass);

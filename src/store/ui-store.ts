@@ -114,6 +114,14 @@ interface UIState {
   activePanel: LeftPanelId;
   furniture: FurnitureMode;
   lighting: LightingMode;
+  /**
+   * 360°動画の描き分け素材を読み込んでいる最中か。
+   *
+   * 8K の素材は 1 本 100MB あり、初回の切替は回線しだいで数秒かかる。この間トグルが
+   * 何も言わないと「押したのに変わらない」に見えて連打され、そのぶん余計に遅くなる。
+   * 押している最中だと分かるようにするためだけの旗。
+   */
+  video360VariantPending: boolean;
   toggleDeveloper: () => void;
   toggleCollision: () => void;
   toggleUseCollisionWalkable: () => void;
@@ -130,6 +138,7 @@ interface UIState {
   setFps: (fps: number) => void;
   setActivePanel: (id: LeftPanelId) => void;
   setFurniture: (m: FurnitureMode) => void;
+  setVideo360VariantPending: (v: boolean) => void;
   setLighting: (m: LightingMode) => void;
   /**
    * ヘッドトラッキング: ブラウザ内蔵 (MediaPipe FaceLandmarker) で webcam から顔向きを
@@ -229,6 +238,7 @@ export const useUIStore = create<UIState>((set) => ({
   activePanel: null,
   furniture: 'on',
   lighting: 'day',
+  video360VariantPending: false,
   toggleDeveloper: () => set((s) => ({ isDeveloper: !s.isDeveloper })),
   toggleCollision: () => set((s) => ({ showCollision: !s.showCollision })),
   toggleUseCollisionWalkable: () => set((s) => ({ useCollisionWalkable: !s.useCollisionWalkable })),
@@ -245,6 +255,7 @@ export const useUIStore = create<UIState>((set) => ({
   setFps: (fps) => set({ fps }),
   setActivePanel: (activePanel) => set({ activePanel }),
   setFurniture: (furniture) => set({ furniture }),
+  setVideo360VariantPending: (video360VariantPending) => set({ video360VariantPending }),
   setLighting: (lighting) => set({ lighting }),
   demoMode: false,
   setDemoMode: (demoMode) => set({ demoMode }),

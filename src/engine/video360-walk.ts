@@ -14,7 +14,8 @@
  * このクラスはスカイボックスも UI も知らない。動画要素と「いまどうなっているか」を
  * 持つだけで、絵を出すのは SceneManager、ポイントを描くのは React 側。
  */
-import type { Video360Edge, Video360Walk } from '../core/types';
+import type { Video360Clip, Video360Edge, Video360Variant, Video360Walk } from '../core/types';
+import { video360SourceSignature } from '../core/video360-variants';
 
 export type Video360Mode = 'idle' | 'travel' | 'free' | 'scrub';
 
@@ -42,6 +43,9 @@ export interface Video360Exit {
 }
 
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
+
+/** variants を持たない (素材 1 本だけの) manifest 用のキャッシュキー。 */
+const BASE_PAIR_KEY = '__base__';
 
 export interface Video360WalkerOptions {
   data: Video360Walk;
@@ -73,6 +77,27 @@ export class Video360Walker {
   private destroyed = false;
   private feedVideo: HTMLVideoElement | null = null;
 
+  /**
+   * エッジ専用クリップの <video>。src をキーに使い回す。
+   *
+   * 隣同士は本編の区間再生でいいが、遠い移動まで区間をつないで再生すると実測で
+   * 37 秒かかって待てない。そこだけ 3 秒程度の専用クリップに差し替える。
+   * 毎回作り直すと 8K で読み込みが走るので、一度読んだものは残す。
+   */
+  private clipVideos = new Map<string, HTMLVideoElement>();
+
+  /**
+   * 読み込み済みのバリアント素材。キーはバリアント id。
+   *
+   * 切り替えても捨てない ― 家具あり ⇄ なしは見比べるために何度も往復する操作で、
+   * 毎回読み直すと 8K では往復のたびに数秒待たされる。最初の 1 回だけ待たせて、
+   * 以降は瞬時に入れ替わるほうが体験として正しい。
+   */
+  private variantPairs = new Map<string, { fwd: HTMLVideoElement; rev: HTMLVideoElement | null }>();
+  private currentVariantId: string | null = null;
+  /** 切替の世代番号。連打されたとき、古い切替が後から着地して上書きするのを防ぐ。 */
+  private variantToken = 0;
+
   private state: Video360State = {
     mode: 'idle', nodeId: null, edge: null, time: 0, seekMs: 0,
   };
@@ -85,9 +110,37 @@ export class Video360Walker {
   // ── 読み込み ────────────────────────────────────────────────────────────
 
   async load(): Promise<void> {
-    const mk = async (src: string) => {
+    const initial = this.initialVariant();
+    this.currentVariantId = initial?.id ?? null;
+    const pair = await this.loadPair(
+      initial?.id ?? BASE_PAIR_KEY,
+      initial?.src ?? this.data.src,
+      initial?.srcReverse ?? this.data.srcReverse,
+    );
+    this.fwd = pair.fwd;
+    this.rev = pair.rev;
+    this.activeVideo = this.fwd;
+  }
+
+  /** 最初に見せるバリアント。素材が 1 本だけの (variants 未設定の) manifest では null。 */
+  private initialVariant(): Video360Variant | null {
+    const list = this.data.variants ?? [];
+    if (list.length === 0) return null;
+    return list.find((v) => v.id === this.data.defaultVariantId) ?? list[0];
+  }
+
+  /** 順再生と反転素材を 1 組ぶん読む。読み終わったものはキャッシュから返す。 */
+  private async loadPair(
+    key: string,
+    src: string,
+    reverse: string | undefined,
+  ): Promise<{ fwd: HTMLVideoElement; rev: HTMLVideoElement | null }> {
+    const cached = this.variantPairs.get(key);
+    if (cached) return cached;
+
+    const mk = async (s: string) => {
       const v = document.createElement('video');
-      v.src = await this.opts.resolveUrl(src);
+      v.src = await this.opts.resolveUrl(s);
       v.preload = 'auto';
       v.muted = true;
       v.playsInline = true;
@@ -95,11 +148,10 @@ export class Video360Walker {
       v.loop = false;
       return v;
     };
-    this.fwd = await mk(this.data.src);
-    this.rev = this.data.srcReverse ? await mk(this.data.srcReverse) : null;
-    this.activeVideo = this.fwd;
+    const fwd = await mk(src);
+    const rev = reverse ? await mk(reverse) : null;
 
-    await Promise.all([this.fwd, this.rev].filter(Boolean).map((v) => new Promise<void>((res) => {
+    await Promise.all([fwd, rev].filter(Boolean).map((v) => new Promise<void>((res) => {
       const el = v as HTMLVideoElement;
       if (el.readyState >= 2) { res(); return; }
       el.addEventListener('loadeddata', () => res(), { once: true });
@@ -108,10 +160,81 @@ export class Video360Walker {
     })));
 
     // 自動再生の許可を先に取っておく。ユーザー操作の文脈で呼ばれる前提。
-    for (const v of [this.fwd, this.rev]) {
+    for (const v of [fwd, rev]) {
       if (!v) continue;
       try { await v.play(); v.pause(); } catch { /* muted なので基本通る */ }
     }
+
+    const pair = { fwd, rev };
+    this.variantPairs.set(key, pair);
+    return pair;
+  }
+
+  // ── バリアント切替 ──────────────────────────────────────────────────────
+
+  get variants(): Video360Variant[] { return this.data.variants ?? []; }
+  get variantId(): string | null { return this.currentVariantId; }
+  /** すでに読み込み済みか。UI が「初回だけ待たされる」ことを伝えるのに使う。 */
+  isVariantReady(id: string): boolean { return this.variantPairs.has(id); }
+
+  /**
+   * 家具あり / なし / 夜 を入れ替える。**再生位置は保つ**。
+   *
+   * 素材は同じカメラ軌跡の描き分けで、フレーム数まで一致している前提
+   * (`scripts/video360/build-variants.mjs` が変換後に突き合わせている)。だから
+   * 「今の時刻に新しい素材をシークして、要素だけ差し替える」で切替が成立する。
+   * ノードもエッジも軌跡も 1 組のまま触らない。
+   *
+   * 歩いている最中に押されても、その場で入れ替えて再生を続ける。到着まで待たせると
+   * 「押したのに変わらない」になり、二度押しされて余計こじれる。
+   */
+  async setVariant(id: string): Promise<boolean> {
+    if (id === this.currentVariantId) return true;
+    const variant = this.variants.find((v) => v.id === id);
+    if (!variant) return false;
+
+    const token = ++this.variantToken;
+    const pair = await this.loadPair(variant.id, variant.src, variant.srcReverse);
+    // 待っているあいだに別のバリアントが選ばれた。読み込みだけ済ませて静かに降りる。
+    if (token !== this.variantToken || this.destroyed) return false;
+
+    const old = this.activeVideo;
+    // エッジ専用クリップを流している最中は、そのクリップに描き分けが無い。差し替えても
+    // 絵は変わらないので、本編だけ入れ替えて次の着地に効かせる。
+    const onClip = old !== this.fwd && old !== this.rev;
+    const usingRev = old === this.rev;
+    const wasPlaying = !old.paused;
+    const at = old.currentTime;
+
+    // 逆走中に、反転素材を持たないバリアントへ移った場合。時間軸が違うので
+    // 順再生側の対応時刻に読み替えてから貼る。そのまま渡すと尺の反対側へ飛ぶ。
+    const fallbackFromRev = usingRev && !pair.rev;
+    const nextActive = onClip ? null : (usingRev ? pair.rev ?? pair.fwd : pair.fwd);
+    const nextAt = fallbackFromRev ? this.revTime(at) : at;
+
+    this.fwd = pair.fwd;
+    this.rev = pair.rev;
+    this.currentVariantId = variant.id;
+
+    if (!nextActive) return true;
+
+    this.stopFrameFeed();
+    old.pause();
+    // 再生中は待たない ― `seeked` を待つと差し替えのたびに数十 ms 止まって見える。
+    // 止まっているときは待つ。待たないと切り替えた直後の 1 フレームだけ前の絵が残る。
+    if (wasPlaying) {
+      nextActive.currentTime = nextAt;
+      this.activeVideo = nextActive;
+      this.startFrameFeed(nextActive);
+      try { await nextActive.play(); } catch { /* muted なので基本通る */ }
+    } else {
+      const ms = await this.seek(nextActive, nextAt);
+      if (token !== this.variantToken || this.destroyed) return false;
+      this.activeVideo = nextActive;
+      this.emit({ seekMs: ms });
+    }
+    this.opts.onFrame();
+    return true;
   }
 
   /**
@@ -125,9 +248,15 @@ export class Video360Walker {
     this.data = data;
   }
 
+  /** いま貼っている素材。バリアントを切り替えていればその参照になる。 */
   get sourceRefs(): { src: string; reverse?: string } {
+    const v = this.variants.find((x) => x.id === this.currentVariantId);
+    if (v) return { src: v.src, reverse: v.srcReverse };
     return { src: this.data.src, reverse: this.data.srcReverse };
   }
+
+  /** 素材の持ち物全体の鍵。walker を作り直すべきかの判定はこちらで行う。 */
+  get sourceSignature(): string { return video360SourceSignature(this.data); }
 
   /** スカイボックスに貼る動画要素。SceneManager が使う。 */
   get videoElement(): HTMLVideoElement { return this.activeVideo; }
@@ -139,12 +268,76 @@ export class Video360Walker {
     this.destroyed = true;
     this.navToken++;
     this.feedVideo = null;
-    for (const v of [this.fwd, this.rev]) {
+    // バリアントは切替のたびに残しているので、キャッシュ側から辿って全部片付ける。
+    // this.fwd / this.rev だけ止めると、切り替えて裏に回った素材が読み込まれたまま残る。
+    const pairs = [...this.variantPairs.values()].flatMap((p) => [p.fwd, p.rev]);
+    for (const v of [...pairs, ...this.clipVideos.values()]) {
       if (!v) continue;
       v.pause();
       v.removeAttribute('src');
       v.load();
     }
+    this.variantPairs.clear();
+    this.clipVideos.clear();
+  }
+
+  /** クリップの <video> を用意する。一度読んだものは使い回す。 */
+  private async clipVideo(src: string): Promise<HTMLVideoElement> {
+    const cached = this.clipVideos.get(src);
+    if (cached) return cached;
+    const v = document.createElement('video');
+    v.src = await this.opts.resolveUrl(src);
+    v.preload = 'auto';
+    v.muted = true;
+    v.playsInline = true;
+    v.crossOrigin = 'anonymous';
+    v.loop = false;
+    this.clipVideos.set(src, v);
+    await new Promise<void>((res) => {
+      if (v.readyState >= 2) { res(); return; }
+      v.addEventListener('loadeddata', () => res(), { once: true });
+      v.addEventListener('error', () => res(), { once: true });
+      setTimeout(res, 20000);
+    });
+    try { await v.play(); v.pause(); } catch { /* muted なので基本通る */ }
+    return v;
+  }
+
+  /** そのエッジをどちら向きに通るときに使うクリップ。無ければ null。 */
+  private clipFor(exit: Video360Exit): { clip: Video360Clip; src: string } | null {
+    const clip = exit.edge.clip;
+    if (!clip) return null;
+    if (exit.dir === 1) return { clip, src: clip.src };
+    // 逆走は反転クリップがあるときだけ。無ければ本編の逆走に落とす。
+    return clip.reverse ? { clip, src: clip.reverse } : null;
+  }
+
+  /** 専用クリップを頭から終わりまで流す。中断されたら false。 */
+  private async runClip(exit: Video360Exit, token: number, src: string, clip: Video360Clip): Promise<boolean> {
+    const video = await this.clipVideo(src);
+    if (this.stale(token) || this.destroyed) return false;
+
+    this.emit({ mode: 'travel', edge: exit.edge, nodeId: null });
+    this.activeVideo.pause();
+    const ms = await this.seek(video, 0);
+    if (this.stale(token)) return false;
+    this.activeVideo = video;
+    this.emit({ seekMs: ms });
+    this.startFrameFeed(video);
+    try { await video.play(); } catch { /* 弾かれても下の監視で止まる */ }
+
+    const end = Math.max(0.1, clip.duration || video.duration || 0.1);
+    const reached = await new Promise<boolean>((res) => {
+      const tick = () => {
+        if (this.stale(token) || this.destroyed) { res(false); return; }
+        if (video.currentTime >= end - 0.001 || video.ended) { res(true); return; }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    if (!reached) return false;
+    this.pendingStop = () => video.pause();
+    return true;
   }
 
   // ── 動画の面倒 ──────────────────────────────────────────────────────────
@@ -223,7 +416,7 @@ export class Video360Walker {
 
   hasNode(viewpointId: string): boolean { return !!this.nodeAt(viewpointId); }
 
-  /** そのノードから行ける先。逆走は反転素材があるときだけ出す。 */
+  /** そのノードから行ける先。戻りは本編の反転素材か、そのエッジの反転クリップがあるときだけ。 */
   exitsOf(viewpointId: string): Video360Exit[] {
     const out: Video360Exit[] = [];
     for (const e of this.data.edges) {
@@ -234,9 +427,10 @@ export class Video360Walker {
         label: e.label ?? this.opts.labelOf(e.to),
       });
     }
-    if (this.rev) {
-      for (const e of this.data.edges) {
-        if (e.to !== viewpointId) continue;
+    for (const e of this.data.edges) {
+      if (e.to !== viewpointId) continue;
+      // 戻れるのは、本編の反転素材があるか、そのエッジ専用の反転クリップがあるとき。
+      if (this.rev || e.clip?.reverse) {
         out.push({
           edge: e, dir: -1, to: e.from,
           kind: e.kind === 'door' ? 'door' : 'back',
@@ -300,6 +494,15 @@ export class Video360Walker {
     token: number,
     opts: { fromFwd?: number | null; stopAtFwd?: number | null } = {},
   ): Promise<boolean> {
+    // 専用クリップがあるならそちらを流す。区間再生より速く、遠い部屋への移動
+    // (実測で 37 秒かかっていた) を 3 秒程度で済ませるための逃げ道。
+    // 途中で止まる指定が来ているときは本編の区間で扱う ― クリップは丸ごと 1 本
+    // で完結する移動なので、途中の時刻という概念が無い。
+    const c = this.clipFor(ex);
+    if (c && opts.fromFwd == null && opts.stopAtFwd == null) {
+      return this.runClip(ex, token, c.src, c.clip);
+    }
+
     const [a, b] = ex.edge.range;
     const video = ex.dir === 1 ? this.fwd : this.rev;
     if (!video) return false;

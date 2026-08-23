@@ -116,6 +116,22 @@ export function Viewer({ sceneId }: ViewerProps) {
     sceneManagerRef.current?.setVariant(furniture, lighting);
   }, [ready, manifest, furniture, lighting]);
 
+  // 同じトグルを 360°動画の描き分け素材にも効かせる。素材が無い組み合わせは
+  // SceneManager 側で無視されるので、ここで条件を二重に書かない。
+  useEffect(() => {
+    if (!ready) return;
+    const sm = sceneManagerRef.current;
+    if (!sm) return;
+    let alive = true;
+    const setPending = useUIStore.getState().setVideo360VariantPending;
+    setPending(true);
+    void sm.setVideo360Variant(furniture, lighting).finally(() => {
+      // 途中で別の組み合わせが選ばれていたら、そちらの effect が旗を握っている。
+      if (alive) setPending(false);
+    });
+    return () => { alive = false; };
+  }, [ready, manifest, viewMode, furniture, lighting]);
+
   // Mirror view mode and movement mode from UI store into the engine.
   useEffect(() => { if (ready) sceneManagerRef.current?.setViewMode(viewMode); }, [ready, viewMode]);
   useEffect(() => { if (ready) sceneManagerRef.current?.setMovementMode(movementMode); }, [ready, movementMode]);

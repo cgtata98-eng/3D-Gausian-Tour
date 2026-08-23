@@ -1,0 +1,43 @@
+{
+  "axes": [
+    { "key": "mat",   "values": ["m01", "m02", "m03"], "label": "マテリアル" },
+    { "key": "light", "values": ["day", "night"],      "label": "昼夜" },
+    { "key": "furn",  "values": ["on", "off"],         "label": "家具" }
+  ],
+
+  "combinations": "full",
+
+  "_combinations_note": [
+    "\"full\" = cartesian product (3 x 2 x 2 = 12 vrscenes).",
+    "To render only some combinations, replace it with an explicit array, e.g.:",
+    "  \"combinations\": [",
+    "    { \"mat\": \"m01\", \"light\": \"day\",   \"furn\": \"on\"  },",
+    "    { \"mat\": \"m01\", \"light\": \"night\", \"furn\": \"on\"  },",
+    "    { \"mat\": \"m01\", \"light\": \"day\",   \"furn\": \"off\" },",
+    "    { \"mat\": \"m02\", \"light\": \"day\",   \"furn\": \"on\"  },",
+    "    { \"mat\": \"m03\", \"light\": \"day\",   \"furn\": \"on\"  }",
+    "  ]",
+    "Both 3ds Max and the renamer follow this list, so shrinking it here is the",
+    "only edit needed to cut the render count."
+  ],
+
+  "vrscenePattern": "vrscene/{state}.vrscene",
+
+  "_vrscenePattern_note": [
+    "Where each state's vrscene lives, relative to the render root.",
+    "Use \"{state}/{state}.vrscene\" when exporting with VR_exportSet, which puts",
+    "each set in its own self-named folder alongside its CSV."
+  ],
+
+  "output": { "width": 4096, "height": 2048, "format": "png" },
+
+  "vantage": {
+    "samples": 500,
+    "denoiser": 1,
+    "lightCache": 1,
+    "temporal": 0
+  },
+
+  "outDir": "render/{node}",
+  "naming": "{node}_{mat}_{light}_{furn}.png"
+}

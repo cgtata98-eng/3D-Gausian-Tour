@@ -179,9 +179,48 @@ interface SceneLike {
       source?: string;
     };
     walk?: { nodes?: Array<{ id: string; panorama?: string; [k: string]: unknown }>; [k: string]: unknown };
+    video360?: {
+      src?: string;
+      srcReverse?: string;
+      variants?: Array<{ id: string; src?: string; srcReverse?: string; [k: string]: unknown }>;
+      edges?: Array<{ id: string; clip?: { src?: string; reverse?: string; [k: string]: unknown }; [k: string]: unknown }>;
+      [k: string]: unknown;
+    };
     [k: string]: unknown;
   }>;
   [k: string]: unknown;
+}
+
+/**
+ * 360°動画の素材で、まだアップロードが要るもの。
+ *
+ * オーサリング中は IDB 参照 (`idb:...`) か data URL になっている。そのまま
+ * scene.json に書いて配ると、お客さんの端末にはその blob が無いので黒い画面に
+ * なる。ここで実体を上げてファイル名に書き換える。
+ *
+ * すでにファイル名 (R2 に上げ済み) のものは触らない ―
+ * `scripts/video360/build-variants.mjs --publish` で先に上げてある経路がある。
+ */
+function video360Slots(v360: NonNullable<NonNullable<SceneLike['plans']>[number]['video360']>) {
+  const slots: { get: () => string | undefined; set: (name: string) => void; hint: string }[] = [];
+  slots.push({ get: () => v360.src, set: (n) => { v360.src = n; }, hint: 'main' });
+  slots.push({ get: () => v360.srcReverse, set: (n) => { v360.srcReverse = n; }, hint: 'main-rev' });
+  for (const va of v360.variants ?? []) {
+    slots.push({ get: () => va.src, set: (n) => { va.src = n; }, hint: va.id });
+    slots.push({ get: () => va.srcReverse, set: (n) => { va.srcReverse = n; }, hint: `${va.id}-rev` });
+  }
+  for (const e of v360.edges ?? []) {
+    if (!e.clip) continue;
+    const clip = e.clip;
+    slots.push({ get: () => clip.src, set: (n) => { clip.src = n; }, hint: `clip-${e.id}` });
+    slots.push({ get: () => clip.reverse, set: (n) => { clip.reverse = n; }, hint: `clip-${e.id}-rev` });
+  }
+  return slots;
+}
+
+/** その参照はアップロードが要るか (IDB / data URL か)。 */
+function needsUpload(ref: string | undefined): boolean {
+  return !!ref && (ref.startsWith(idb.IDB_REF_PREFIX) || ref.startsWith('data:'));
 }
 
 /**
@@ -213,6 +252,7 @@ export async function publishScene(
     for (const node of plan.walk?.nodes ?? []) {
       if (node.panorama?.startsWith(idb.IDB_REF_PREFIX) || node.panorama?.startsWith('data:')) total++;
     }
+    if (plan.video360) total += video360Slots(plan.video360).filter((s) => needsUpload(s.get())).length;
   }
   let current = 0;
   const tick = (message: string) => onProgress({ message, current: ++current, total });
@@ -297,6 +337,29 @@ export async function publishScene(
       tick(`ウォークスルー画像をアップロード: ${filename}`);
       await publishFile(sceneId, filename, blob);
       node.panorama = filename;
+    }
+
+    // 360°動画の素材。本編・反転・描き分けバリアント・エッジ専用クリップまで、
+    // まだ IDB / data URL のものを実ファイルにして参照を書き換える。
+    // ここが無いと、オーサリングでは映るのに配ると真っ黒、という壊れ方になる。
+    if (plan.video360) {
+      for (const slot of video360Slots(plan.video360)) {
+        const ref = slot.get();
+        if (!needsUpload(ref)) continue;
+        let blob: Blob | null = null;
+        if (ref!.startsWith(idb.IDB_REF_PREFIX)) blob = await idb.loadBlob(ref!.slice(idb.IDB_REF_PREFIX.length));
+        else blob = await dataUrlToBlob(ref!);
+        if (!blob) continue;
+        // 拡張子は中身から決める。webm を .mp4 で置くと、Range 取得で codec を
+        // 誤判定するブラウザがあって再生できなくなる。
+        const ext = blob.type.includes('webm') ? 'webm' : blob.type.includes('mp4') ? 'mp4' : 'bin';
+        const filename = plans.length > 1
+          ? `video360-${planId}-${slot.hint}.${ext}`
+          : `video360-${slot.hint}.${ext}`;
+        tick(`360°動画をアップロード: ${filename}`);
+        await publishFile(sceneId, filename, blob);
+        slot.set(filename);
+      }
     }
   }
 

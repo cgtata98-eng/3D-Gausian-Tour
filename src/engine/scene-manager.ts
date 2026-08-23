@@ -44,6 +44,8 @@ import type { FurnitureMode, LightingMode, ViewMode } from '../store/ui-store';
 import { isIdbRef, resolveBlobRef } from '../utils/idb';
 import { panoramaToThumbnail } from '../utils/panorama-thumbnail';
 import { resolveStartNode, WALKTHROUGH_AUTHORING_ONLY } from '../core/walk-graph';
+import { pickVariant, video360SourceSignature } from '../core/video360-variants';
+import type { Furniture, Lighting } from '../core/video360-variants';
 import type { WalkNode } from '../core/types';
 import { walkPlaceholderPanorama } from '../utils/walk-placeholder';
 
@@ -944,6 +946,21 @@ export class SceneManager {
   getVideo360(): Video360Walker | null { return this.video360; }
 
   /**
+   * 家具 / 照明トグルの値を 360°動画の描き分け素材に反映する。
+   *
+   * 素材が無い組み合わせでは **何もしない**。近い素材に落とすと「家具なしを選んだ
+   * のに家具が出ている」になり、切替が壊れているのか素材が無いのか見分けられない。
+   * 押せないようにするのは UI 側の仕事 (`canSelect`)、ここは最後の砦。
+   */
+  async setVideo360Variant(furniture: Furniture, lighting: Lighting): Promise<void> {
+    const walker = this.video360;
+    if (!walker) return;
+    const target = pickVariant(walker.variants, furniture, lighting);
+    if (!target) return;
+    await walker.setVariant(target.id);
+  }
+
+  /**
    * プランの動画データを実行中のウォークスルーに合わせる。
    *
    * `setViewMode` は同じモードなら即 return するので、モードに入ったあとで動画を
@@ -957,8 +974,9 @@ export class SceneManager {
       if (this.video360) this.teardownVideo360();
       return;
     }
-    const cur = this.video360?.sourceRefs;
-    if (!this.video360 || cur?.src !== data.src || cur?.reverse !== data.srcReverse) {
+    // 比べるのは持ち物全体。いま貼っている 1 本で比べると、バリアントを切り替えた
+    // あとの編集を「素材が変わった」と誤判定し、読み直したうえで既定へ戻ってしまう。
+    if (!this.video360 || this.video360.sourceSignature !== video360SourceSignature(data)) {
       // walker だけ作り直す。スカイのメッシュには触らない ―
       // ここで作り直すと描画に乗らなくなる (上の applyEquirectVideoSky のコメント)。
       this.video360?.destroy();
@@ -1010,6 +1028,12 @@ export class SceneManager {
     }
     // スカイはモード開始時に設置済み。ここでは貼る元を渡すだけ。
     this.video360Sky?.setSource(walker.videoElement);
+
+    // いまのトグルの値に合わせる。walker は既定のバリアントで起き上がるので、
+    // 家具なしを選んだ状態でモードに入り直すと、ここが無いと家具ありに戻る。
+    const ui = useUIStore.getState();
+    const wanted = pickVariant(walker.variants, ui.furniture, ui.lighting);
+    if (wanted && wanted.id !== walker.variantId) await walker.setVariant(wanted.id);
 
     if (data.nodes.length === 0) {
       // まだノードが無い。先頭のフレームを出して、打つ対象を見せる。
