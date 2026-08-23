@@ -110,11 +110,14 @@ export function Viewer({ sceneId }: ViewerProps) {
     };
   }, [sceneId]);
 
-  // Swap splat when furniture / lighting mode changes. No-op if manifest has no splatVariants.
+  // 家具 / 照明の切替を 3DGS と 360画像 に反映する。素材が無い組み合わせは
+  // SceneManager 側で無視されるので、ここで manifest を覗いて条件を書かない ―
+  // 以前は `splatVariants` (旧・シーン単位) がある場合だけ呼んでいたせいで、
+  // プラン単位で入れた素材が丸ごと無視されていた。
   useEffect(() => {
-    if (!ready || !manifest?.splatVariants) return;
-    sceneManagerRef.current?.setVariant(furniture, lighting);
-  }, [ready, manifest, furniture, lighting]);
+    if (!ready) return;
+    void sceneManagerRef.current?.setVariant(furniture, lighting);
+  }, [ready, manifest, viewMode, furniture, lighting]);
 
   // 同じトグルを 360°動画の描き分け素材にも効かせる。素材が無い組み合わせは
   // SceneManager 側で無視されるので、ここで条件を二重に書かない。

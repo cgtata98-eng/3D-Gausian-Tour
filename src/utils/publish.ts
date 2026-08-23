@@ -179,6 +179,12 @@ interface SceneLike {
       source?: string;
     };
     walk?: { nodes?: Array<{ id: string; panorama?: string; [k: string]: unknown }>; [k: string]: unknown };
+    assetVariants?: Array<{
+      id: string;
+      splat?: string; splatSpz?: string; splatSog?: string;
+      panoramas?: Record<string, string>;
+      [k: string]: unknown;
+    }>;
     video360?: {
       src?: string;
       srcReverse?: string;
@@ -218,6 +224,30 @@ function video360Slots(v360: NonNullable<NonNullable<SceneLike['plans']>[number]
   return slots;
 }
 
+/**
+ * 家具・情景バリアントで、まだアップロードが要る素材。
+ *
+ * オーサリング中は IDB 参照。そのまま配ると、お客さんの端末にその blob が無いので
+ * 切り替えた瞬間に何も出なくなる。360°動画と同じ扱いにする。
+ */
+function assetVariantSlots(list: NonNullable<NonNullable<SceneLike['plans']>[number]['assetVariants']>) {
+  const slots: { get: () => string | undefined; set: (name: string) => void; hint: string; ext: string }[] = [];
+  for (const v of list) {
+    slots.push({ get: () => v.splat, set: (n) => { v.splat = n; }, hint: `${v.id}`, ext: 'ply' });
+    slots.push({ get: () => v.splatSpz, set: (n) => { v.splatSpz = n; }, hint: `${v.id}`, ext: 'spz' });
+    slots.push({ get: () => v.splatSog, set: (n) => { v.splatSog = n; }, hint: `${v.id}`, ext: 'sog' });
+    for (const vpId of Object.keys(v.panoramas ?? {})) {
+      slots.push({
+        get: () => v.panoramas?.[vpId],
+        set: (n) => { if (v.panoramas) v.panoramas[vpId] = n; },
+        hint: `${v.id}-${vpId}`,
+        ext: 'jpg',
+      });
+    }
+  }
+  return slots;
+}
+
 /** その参照はアップロードが要るか (IDB / data URL か)。 */
 function needsUpload(ref: string | undefined): boolean {
   return !!ref && (ref.startsWith(idb.IDB_REF_PREFIX) || ref.startsWith('data:'));
@@ -253,6 +283,7 @@ export async function publishScene(
       if (node.panorama?.startsWith(idb.IDB_REF_PREFIX) || node.panorama?.startsWith('data:')) total++;
     }
     if (plan.video360) total += video360Slots(plan.video360).filter((s) => needsUpload(s.get())).length;
+    if (plan.assetVariants) total += assetVariantSlots(plan.assetVariants).filter((s) => needsUpload(s.get())).length;
   }
   let current = 0;
   const tick = (message: string) => onProgress({ message, current: ++current, total });
@@ -337,6 +368,24 @@ export async function publishScene(
       tick(`ウォークスルー画像をアップロード: ${filename}`);
       await publishFile(sceneId, filename, blob);
       node.panorama = filename;
+    }
+
+    // 家具・情景バリアントの素材 (3DGS / 360画像)。
+    if (plan.assetVariants) {
+      for (const slot of assetVariantSlots(plan.assetVariants)) {
+        const ref = slot.get();
+        if (!needsUpload(ref)) continue;
+        let blob: Blob | null = null;
+        if (ref!.startsWith(idb.IDB_REF_PREFIX)) blob = await idb.loadBlob(ref!.slice(idb.IDB_REF_PREFIX.length));
+        else blob = await dataUrlToBlob(ref!);
+        if (!blob) continue;
+        const filename = plans.length > 1
+          ? `variant-${planId}-${slot.hint}.${slot.ext}`
+          : `variant-${slot.hint}.${slot.ext}`;
+        tick(`バリアント素材をアップロード: ${filename}`);
+        await publishFile(sceneId, filename, blob);
+        slot.set(filename);
+      }
     }
 
     // 360°動画の素材。本編・反転・描き分けバリアント・エッジ専用クリップまで、

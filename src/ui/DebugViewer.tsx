@@ -24,6 +24,7 @@ import { DEFAULT_STUDIO_COLOR } from '../engine/studio';
 type AnySceneManager = ThreeSceneManager | SceneManager;
 import { useSceneStore } from '../store/scene-store';
 import { Video360Panel } from './Video360Panel';
+import { AssetVariantsPanel } from './AssetVariantsPanel';
 import { Video360Overlay } from './Video360Overlay';
 import { useCameraStore } from '../store/camera-store';
 import { useUIStore } from '../store/ui-store';
@@ -1202,6 +1203,19 @@ export function DebugViewer({ sceneId }: { sceneId: string }) {
                       <VisRow label="メモ" checked={vis.notes !== false} onChange={(c) => setVis('notes', c)} disabled={vis.overall === false} />
                     </div>
                   </div>
+                </Section>
+              );
+            })()}
+
+            {/* ===== 家具・情景バリアント — アクティブプランの assetVariants 編集 =====
+                 ツールバー表示の「家具切替を表示」はトグルを出すだけで、素材の置き場は
+                 長らくどこにも無かった。ここがその置き場。 */}
+            {debugTab === 'plan' && activePlanId && (() => {
+              const activePlan = manifest?.plans?.find((p) => p.id === activePlanId);
+              if (!activePlan) return null;
+              return (
+                <Section title="家具・情景バリアント" subtitle="FURNITURE / LIGHTING" defaultOpen={false}>
+                  <AssetVariantsPanel plan={activePlan} sceneId={sceneId} />
                 </Section>
               );
             })()}

@@ -44,8 +44,8 @@ import type { FurnitureMode, LightingMode, ViewMode } from '../store/ui-store';
 import { isIdbRef, resolveBlobRef } from '../utils/idb';
 import { panoramaToThumbnail } from '../utils/panorama-thumbnail';
 import { resolveStartNode, WALKTHROUGH_AUTHORING_ONLY } from '../core/walk-graph';
-import { pickVariant, video360SourceSignature } from '../core/video360-variants';
-import type { Furniture, Lighting } from '../core/video360-variants';
+import { pickAssetVariant, pickVariant, video360SourceSignature } from '../core/variants';
+import type { Furniture, Lighting } from '../core/variants';
 import type { WalkNode } from '../core/types';
 import { walkPlaceholderPanorama } from '../utils/walk-placeholder';
 
@@ -1214,7 +1214,15 @@ export class SceneManager {
     if (!this.manifest) return null;
     const planId = useSceneStore.getState().activePlanId;
     const plan = this.manifest.plans?.find((p) => p.id === planId);
-    const colorId = useUIStore.getState().activeColor;
+    const ui = useUIStore.getState();
+    // 家具 / 照明。その視点の絵を持っているときだけ効かせる ― 持っていない視点で
+    // 勝ち取ると、そこだけ絵が消えることになる。埋めた視点だけ差し替わればいい。
+    const av = pickAssetVariant(plan, ui.furniture, ui.lighting);
+    const avPath = av?.panoramas?.[activeId];
+    if (avPath) return avPath;
+    // カラーは別の軸。2 つを掛け合わせた絵は持てない (組み合わせの数だけ画像が要る)
+    // ので、家具 / 照明を先に見る ― 「夜を選んだのに昼が出る」を避ける側を優先する。
+    const colorId = ui.activeColor;
     if (colorId) {
       const variant = plan?.colorVariants?.find((v) => v.id === colorId);
       const variantPath = variant?.panoramas?.[activeId];
@@ -1611,21 +1619,38 @@ export class SceneManager {
   }
 
   /**
-   * Swap the splat to a furniture/lighting variant.
-   * Resolves `splatVariants[{furniture}_{lighting}]` from the manifest; no-op if not defined.
-   * Camera pose is preserved.
+   * 家具 / 照明の切替を 3DGS と 360画像 に反映する。
+   *
+   * 素材の置き場は `Plan.assetVariants`。旧 `SceneManifest.splatVariants` は
+   * シーン全体に 1 組しか持てず、パスも `/assets/scenes/...` 直書きで R2 も IDB も
+   * 通らなかった (= オーサリング UI から入れた素材が使えなかった)。読めるうちは
+   * 読むが、新しく書くのは `assetVariants` だけ。
+   *
+   * 素材が無い組み合わせでは **何もしない**。近い素材に落とすと「家具なしを選んだ
+   * のに家具が出ている」になり、切替が壊れているのか素材が無いのか見分けられない。
    */
   async setVariant(furniture: FurnitureMode, lighting: LightingMode): Promise<void> {
     const m = this.manifest;
-    if (!m || !m.splatVariants) return;
+    if (!m) return;
+    const planId = useSceneStore.getState().activePlanId;
+    const plan = m.plans?.find((p) => p.id === planId);
     const key = `${furniture}_${lighting}`;
-    const relPath = m.splatVariants[key];
-    if (!relPath) {
-      console.warn(`no splat variant defined for ${key}`);
+    const variant = pickAssetVariant(plan, furniture, lighting);
+
+    // 360 は絵そのものが素材なので、貼り直すだけで切替が終わる。
+    if (this.viewMode === '360') {
+      await this.applyActiveViewpointPanorama();
       return;
     }
+    if (this.viewMode !== 'splat') return;
 
-    const url = `/assets/scenes/${m.id}/${relPath}`;
+    // 旧 manifest からの読み取り。新規オーサリングでは書かれない。
+    const legacy = m.splatVariants?.[key];
+    const ref = variant?.splatSog ?? variant?.splatSpz ?? variant?.splat ?? legacy;
+    if (!ref) return;
+    if (ref === this.installedVariantSplat) return;
+
+    const url = await resolveAssetUrl(ref, m.id);
 
     // Preserve current camera pose
     const pos = this.camera.getPosition().clone();
@@ -1639,12 +1664,17 @@ export class SceneManager {
 
     try {
       this.splatEntity = await loadGSplat(this.app, url, `splat-${m.id}-${key}`);
+      applySplatTransform(this.splatEntity, plan?.splatTransform);
       this.camera.setPosition(pos);
       this.camera.setEulerAngles(rot.x, rot.y, rot.z);
+      this.installedVariantSplat = ref;
     } catch (err) {
       console.error(`variant splat load failed (${key}):`, err);
     }
   }
+
+  /** いま貼っているバリアント GS の参照。同じものを読み直さないため。 */
+  private installedVariantSplat: string | null = null;
 
   /** Load collision GLB from a data URL (drag & drop) */
   async loadCollisionFromDataUrl(dataUrl: string, type: 'walkable' | 'block'): Promise<boolean> {

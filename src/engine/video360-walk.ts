@@ -15,7 +15,7 @@
  * 持つだけで、絵を出すのは SceneManager、ポイントを描くのは React 側。
  */
 import type { Video360Clip, Video360Edge, Video360Variant, Video360Walk } from '../core/types';
-import { video360SourceSignature } from '../core/video360-variants';
+import { video360SourceSignature } from '../core/variants';
 
 export type Video360Mode = 'idle' | 'travel' | 'free' | 'scrub';
 

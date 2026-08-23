@@ -314,6 +314,31 @@ export interface ColorVariant {
 }
 
 /**
+ * 家具 x 照明 の 1 通りぶんの素材。
+ *
+ * `furniture` / `lighting` はビューアのトグルと同じ綴り。トグルの現在値から
+ * 引くので、対応表を別に持たない。素材が無い組み合わせ (例: 夜 x 家具なし) は
+ * 単に行が存在せず、トグル側がその選択肢を押せなくする。
+ *
+ * 動画版の `Video360Variant` と軸の持ち方を揃えてある ― 同じトグルが両方を
+ * 引くので、綴りが違うと 3DGS と動画で挙動が食い違う。
+ */
+export interface AssetVariant {
+  /** `${furniture}_${lighting}` (例: `on_night`)。プラン内で一意。 */
+  id: string;
+  /** 表示名 (例: 通常 / 家具なし / 夜)。 */
+  label: string;
+  furniture?: 'on' | 'off';
+  lighting?: 'day' | 'night';
+  /** このバリアントの 3DGS。未設定ならプランの `splat` に落ちる。 */
+  splat?: string;
+  splatSpz?: string;
+  splatSog?: string;
+  /** 視点 id → equirect のパス。未設定の視点はプランの `panoramas` に落ちる。 */
+  panoramas?: Record<string, string>;
+}
+
+/**
  * A "plan" is one design proposal for the property: its own 3DGS splat, per-viewpoint
  * 360° panoramas, viewpoints, floor plan, collision, and metadata. Switching plans
  * swaps everything visual at once so users can compare designs side-by-side.
@@ -376,6 +401,23 @@ export interface Plan {
   startViewpointId?: string;
   /** @deprecated No longer used for placement — the start is `startViewpointId`. Only `fov` is read as a slider seed. */
   fixedPosition?: FixedPosition;
+  /**
+   * 家具あり / なし・昼 / 夜 で差し替える素材一式。
+   *
+   * ビューアの家具・情景トグルはこれを引く。トグルのチェック
+   * (`SceneManifest.variants`) は「トグルを出すか」であって素材の置き場ではない ―
+   * そこを混同していたせいで、長らく「タグはあるのに設定する場所が無い」状態だった。
+   *
+   * 360°動画だけは `video360.variants` が別に持つ。動画はノード・エッジ・軌跡と
+   * 一体で、ここに混ぜると 1 本の素材に 2 つの持ち主ができるため。
+   *
+   * 埋めるのは差し替えたいものだけでよい。空のスロットはプラン既定
+   * (`splat` / `panoramas`) に落ちるので、「夜だけ別の GS」のような持ち方ができる。
+   */
+  assetVariants?: AssetVariant[];
+  /** 最初に見せるバリアント。未設定なら家具あり×昼、それも無ければ先頭。 */
+  defaultAssetVariantId?: string;
+
   /**
    * Optional color / material variants for this plan. When set and the user picks one
    * via the カラー UI, that variant's `panoramas` override `Plan.panoramas`.
