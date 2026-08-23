@@ -367,7 +367,16 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
    * 時刻はフレーム境界に丸める。丸めないと、シークが隣り合う 2 フレームの
    * どちらに着地するかが再生ごとに揺れて、停止中の絵がちらついて見える。
    */
-  const buildFromTimes = (times: number[], how: string) => {
+  const buildFromTimes = (
+    times: number[],
+    how: string,
+    extras?: {
+      /** ノード番号は 1 始まり (書き出し JSON と同じ数え方)。 */
+      doors?: { label?: string; range: [number, number]; yaw: number; pitch: number; node: number }[];
+      stills?: { start: number; end: number; rest: number }[];
+      calmTimes?: number[];
+    },
+  ) => {
     if (!data) return;
     const fps = data.fps > 0 ? data.fps : 30;
     const dur = data.duration;
@@ -411,7 +420,31 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
       });
     }
 
-    const next: Video360Walk = { ...data, nodes, edges };
+    // 扉は床のポイントにしない。壁の上にあるので、浮かぶマーカーとして別に貼る。
+    // 「そこから開ける」ものなので、どのノードに属すかを決める必要がある。
+    const doorEdges: Video360Edge[] = (extras?.doors ?? []).map((d, i) => {
+      const owner = nodes[Math.max(0, Math.min(nodes.length - 1, d.node - 1))];
+      return {
+        id: `door-plan-${i + 1}`,
+        from: owner.viewpointId,
+        to: owner.viewpointId,
+        range: [snap(d.range[0]), snap(d.range[1])] as [number, number],
+        label: d.label ?? `ドア ${i + 1}`,
+        kind: 'door' as const,
+        // 実座標はカメラ軌跡が無いと出せない。向きで持つ ― 立つ場所が変われば
+        // ずれるが、軌跡を読ませれば `loadTrack` が実座標に貼り替える。
+        doorYaw: d.yaw,
+        doorPitch: d.pitch,
+      };
+    });
+
+    const next: Video360Walk = {
+      ...data,
+      nodes,
+      edges: [...edges, ...doorEdges],
+      ...(extras?.stills ? { stills: extras.stills } : {}),
+      ...(extras?.calmTimes ? { calmTimes: extras.calmTimes } : {}),
+    };
     // 軌跡が入っているなら、作った直後に実座標を入れる。あとで手で押させると
     // 「打ったのに図面のドットが原点に固まっている」状態を経由することになる。
     let placed = 0;
@@ -432,10 +465,51 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
     setSelNode(nodes[0]?.viewpointId ?? null);
     setSelEdge(edges[0]?.id ?? null);
     alert([
-      `${how}でノード ${nodes.length} 個 / エッジ ${edges.length} 本を起こしました。`,
+      `${how}でノード ${nodes.length} 個 / エッジ ${edges.length} 本`
+        + (doorEdges.length ? ` / ドア ${doorEdges.length} 個` : '') + 'を起こしました。',
       `時刻: ${ts.map((t) => t.toFixed(2)).join(', ')}`,
       placed ? `カメラ軌跡から ${placed} 件の視点に実座標を入れました。` : 'カメラ軌跡が未設定なので、位置は仮のままです（図面で置くか、軌跡を読ませてください）。',
     ].join('\n'));
+  };
+
+  /**
+   * `scripts/video360/plan-walk.mjs` が出した案を取り込む。
+   *
+   * 手で打つのと違うのは、**止まるコマも扉の位置も実測から来る**こと。等分点は
+   * そのままだと歩行中のブレたコマに落ちるので、書き出し側が近くの静止コマへ
+   * 寄せてある。扉は「カメラが止まっているのに絵が変わり続ける区間」― この手の
+   * 物件動画で世界の中で動くものは扉しかない ― として拾い、動きが集中している
+   * equirect の列から向きに直してある。
+   */
+  const loadWalkPlan = async (file?: File) => {
+    setBusy('ウォークスルー案を読み込み中…');
+    try {
+      const json = file
+        ? JSON.parse(await file.text())
+        : await (async () => {
+          const url = resolveScenePath(sceneId, 'video360-walk-plan.json');
+          const res = await fetch(url, { cache: 'no-store' });
+          if (!res.ok) throw new Error(`${url} を取得できませんでした (${res.status})`);
+          return res.json();
+        })();
+
+      const ns = Array.isArray(json?.nodes) ? json.nodes : [];
+      if (ns.length === 0) throw new Error('nodes が入っていません');
+      const times = ns.map((n: { t: number }) => Number(n.t)).filter((t: number) => Number.isFinite(t));
+      if (times.length === 0) throw new Error('nodes の t が数値として読めません');
+
+      setBusy(null);
+      buildFromTimes(times, `取り込み (${json.mode ?? '案'})`, {
+        doors: Array.isArray(json.doors) ? json.doors : [],
+        stills: Array.isArray(json.stills) ? json.stills : undefined,
+        calmTimes: Array.isArray(json.calmTimes) ? json.calmTimes : undefined,
+      });
+    } catch (err) {
+      console.error('[video360] ウォークスルー案の取り込みに失敗', err);
+      alert(`案を読めませんでした: ${(err as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
   };
 
   /** 尺を N 等分する。両端を含むので **N+1 個**。最後の部屋にも立てるため。 */
@@ -837,6 +911,14 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
             className={BTN_PRIMARY}
             onClick={() => generateEvenly(Number(splitCount))}
           >等分して打つ</button>
+          <button
+            type="button"
+            className={BTN}
+            onClick={() => void loadWalkPlan()}
+            disabled={!!busy}
+            title="scripts/video360/plan-walk.mjs が出した案を読む"
+          >ウォークスルー案を取り込む</button>
+          <FilePick label="案 JSON を読む" accept="application/json,.json" onPick={loadWalkPlan} />
           <span className="ds-sub">
             {(() => {
               const n = Number(splitCount);
@@ -861,6 +943,9 @@ export function Video360Panel({ plan, sceneId, getManager }: Props) {
           <b>どちらも既存のノード・エッジを置き換えます</b>（視点は足りない分だけ作ります）。
           時刻はフレーム境界に丸めます — 丸めないと、シークが隣のフレームに着地するかが
           再生ごとに揺れて、止まっている絵がちらつきます。<br />
+          <b>「ウォークスルー案を取り込む」</b>は、動画の動き量を実測して作った案
+          (<code>node scripts/video360/plan-walk.mjs</code>) を読みます。止まるコマも扉の位置も
+          実測から来るので、等分点をそのまま使うより絵がブレません。<br />
           秒の並びは <code>93f</code> のように <code>f</code> を付けるとフレーム番号として読みます
           （この素材は {data.fps.toFixed(2)}fps / {Math.round(duration * data.fps)} フレーム）。
         </p>
